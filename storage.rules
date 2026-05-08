@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin()    { return isSignedIn() && request.auth.token.admin == true; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+
+    function isVideoUnder(maxBytes) {
+      return request.resource != null
+        && request.resource.size < maxBytes
+        && request.resource.contentType.matches('video/.*');
+    }
+
+    // User-recorded challenge submissions: 100 MB cap.
+    match /submissions/{uid}/{file=**} {
+      allow read:  if isSignedIn();
+      allow write: if isOwner(uid) && isVideoUnder(100 * 1024 * 1024);
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+
+    // Creator-recorded reference videos for proposed challenges: 200 MB cap.
+    match /creator_videos/{uid}/{file=**} {
+      allow read:  if isSignedIn();
+      allow write: if isOwner(uid) && isVideoUnder(200 * 1024 * 1024);
+      allow delete: if isOwner(uid) || isAdmin();
+    }
+  }
+}

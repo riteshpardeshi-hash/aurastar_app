@@ -1,0 +1,65 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin()    { return isSignedIn() && request.auth.token.admin == true; }
+    function isSelf(uid)  { return isSignedIn() && request.auth.uid == uid; }
+
+    // Block writes to fields the client must never set on itself.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      // On create, the client cannot self-elevate.
+      allow create: if isSelf(uid)
+        && request.resource.data.isAdmin == false
+        && request.resource.data.totalRewards == 0;
+
+      // Self can update profile fields, but never isAdmin or totalRewards.
+      // Admin can update anything.
+      allow update: if isAdmin() || (
+        isSelf(uid)
+        && !changedKeys().hasAny(['isAdmin', 'totalRewards'])
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Curated challenge catalog. Admin-managed.
+    match /challenges/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Creators submit a challenge proposal; admins approve/reject.
+    match /creator_requests/{id} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.creatorId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow update, delete: if isAdmin();
+    }
+
+    // User-recorded video submissions for a challenge. Admins award points.
+    match /submissions/{id} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.get('auraPoints', 0) == 0
+        && request.resource.data.keys().hasAll(['userId', 'challengeId', 'challengeTitle', 'videoUrl', 'status', 'createdAt']);
+
+      allow update, delete: if isAdmin();
+    }
+  }
+}

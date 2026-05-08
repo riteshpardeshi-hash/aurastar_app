@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Operator scripts
+/scripts/node_modules/
+/scripts/serviceAccount.json
+/scripts/package-lock.json
+
+# Firebase
+.firebase/
+firebase-debug.log

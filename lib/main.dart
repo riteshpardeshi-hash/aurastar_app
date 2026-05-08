@@ -7,13 +7,20 @@ import 'package:video_player/video_player.dart';
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
+import 'firebase_options.dart';
 
 List<CameraDescription> cameras = [];
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  cameras = await availableCameras();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  try {
+    cameras = await availableCameras();
+  } catch (_) {
+    cameras = [];
+  }
   runApp(const MyApp());
 }
 
@@ -28,9 +35,45 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: FirebaseAuth.instance.currentUser != null
-          ? Dashboard()
-          : const LoginScreen(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, authSnap) {
+          if (authSnap.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final user = authSnap.data;
+          if (user == null) return const LoginScreen();
+          return _ProfileGate(user: user);
+        },
+      ),
+    );
+  }
+}
+
+class _ProfileGate extends StatelessWidget {
+  final User user;
+  const _ProfileGate({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!snap.hasData || !snap.data!.exists) {
+          return const ProfileSetupScreen();
+        }
+        return Dashboard();
+      },
     );
   }
 }
@@ -76,39 +119,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
       debugPrint("User logged in: ${userCred.user?.uid}");
 
-      final user = userCred.user;
-
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .get();
-
-      debugPrint("User doc exists: ${doc.exists}");
-
+      // The auth-state stream at the app root handles navigation:
+      // signed-in + no profile  → ProfileSetupScreen
+      // signed-in + has profile → Dashboard
       if (!mounted) return;
-
       setState(() => isLoading = false);
-
-      if (!doc.exists) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-        );
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => Dashboard()),
-        );
-      }
     } catch (e) {
       if (!mounted) return;
 
       setState(() => isLoading = false);
 
-      debugPrint("ERROR: $e");
+      debugPrint("Auth error: $e");
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        const SnackBar(content: Text("Could not sign in. Check your details and try again.")),
       );
     }
   }
@@ -252,28 +276,32 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   Future<void> saveProfile() async {
     final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user!.uid)
-        .set({
-      'name': nameController.text,
-      'username': usernameController.text,
-      'dob': selectedDate,
-      'email': user.email,
-      'totalRewards': 0,
-      'isCreator': false,
-      'isAdmin': false,
-      'bio': '',
-      'profileImageUrl': '',
-      'pageName': '',
-      'createdAt': Timestamp.now(),
-    });
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => Dashboard()),
-    );
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'name': nameController.text,
+        'username': usernameController.text,
+        'dob': selectedDate,
+        'email': user.email,
+        'totalRewards': 0,
+        'isCreator': false,
+        'isAdmin': false,
+        'bio': '',
+        'profileImageUrl': '',
+        'pageName': '',
+        'createdAt': Timestamp.now(),
+      });
+      // Profile gate at app root reroutes to Dashboard once the doc exists.
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not save profile. Please try again.")),
+      );
+    }
   }
 
 
@@ -504,6 +532,7 @@ class Dashboard extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (_) => ChallengeDetail(
+                                challengeId: c.id,
                                 title: c['title'] ?? "",
                                 instructions:
                                 c['instructions'] ?? "No instructions",
@@ -774,12 +803,14 @@ class Dashboard extends StatelessWidget {
 //////////////////////////////////////////////////////
 
 class ChallengeDetail extends StatelessWidget {
+  final String challengeId;
   final String title;
   final String instructions;
   final String videoUrl;
 
   const ChallengeDetail({
     super.key,
+    required this.challengeId,
     required this.title,
     required this.instructions,
     required this.videoUrl,
@@ -831,6 +862,7 @@ class ChallengeDetail extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => CameraScreen(
+                        challengeId: challengeId,
                         challengeTitle: title,
                       ),
                     ),
@@ -892,10 +924,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 //////////////////////////////////////////////////////
 
 class CameraScreen extends StatefulWidget {
+  final String challengeId;
   final String challengeTitle;
 
   const CameraScreen({
     super.key,
+    required this.challengeId,
     required this.challengeTitle,
   });
 
@@ -969,7 +1003,8 @@ class _CameraScreenState extends State<CameraScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => PreviewScreen(
-                        videoPath: videoFile!.path, // ✅ FIXED
+                        challengeId: widget.challengeId,
+                        videoPath: videoFile!.path,
                         challengeTitle: widget.challengeTitle,
                       ),
                     ),
@@ -988,11 +1023,13 @@ class _CameraScreenState extends State<CameraScreen> {
 }
 
 class PreviewScreen extends StatefulWidget {
+  final String challengeId;
   final String videoPath;
   final String challengeTitle;
 
   const PreviewScreen({
     super.key,
+    required this.challengeId,
     required this.videoPath,
     required this.challengeTitle,
   });
@@ -1046,6 +1083,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       // 🔥 Save in Firestore
       await FirebaseFirestore.instance.collection('submissions').add({
         'userId': user.uid,
+        'challengeId': widget.challengeId,
         'challengeTitle': widget.challengeTitle,
         'videoUrl': videoUrl,
         'status': 'pending',
@@ -2077,28 +2115,40 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   Future<void> approveSubmission() async {
     final points = int.tryParse(pointsController.text) ?? 0;
-    final userId = widget.submission['userId'];
+    final userId = widget.submission['userId'] as String;
+    final fs = FirebaseFirestore.instance;
+    final submissionRef =
+        fs.collection('submissions').doc(widget.submission.id);
+    final userRef = fs.collection('users').doc(userId);
 
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submission.id)
-        .update({
-      'status': 'approved',
-      'auraPoints': points,
-      'reviewed': true,
-    });
+    try {
+      await fs.runTransaction((tx) async {
+        final snap = await tx.get(submissionRef);
+        if (!snap.exists) {
+          throw StateError('Submission no longer exists');
+        }
+        final data = snap.data() as Map<String, dynamic>;
+        if (data['status'] != 'pending') {
+          throw StateError('Already reviewed');
+        }
+        tx.update(submissionRef, {
+          'status': 'approved',
+          'auraPoints': points,
+          'reviewed': true,
+        });
+        tx.update(userRef, {
+          'totalRewards': FieldValue.increment(points),
+        });
+      });
 
-    final userRef =
-    FirebaseFirestore.instance.collection('users').doc(userId);
-
-    final userDoc = await userRef.get();
-    final currentPoints = userDoc['totalRewards'] ?? 0;
-
-    await userRef.update({
-      'totalRewards': currentPoints + points,
-    });
-
-    Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not approve: $e')),
+      );
+    }
   }
 
   @override
@@ -2385,6 +2435,7 @@ class CreatorProfileScreen extends StatelessWidget {
                                       context,
                                       MaterialPageRoute(
                                         builder: (_) => ChallengeDetail(
+                                          challengeId: c.id,
                                           title: c['title'] ?? "",
                                           instructions:
                                           c['instructions'] ?? "No instructions",
@@ -2654,16 +2705,7 @@ class MyAccountScreen extends StatelessWidget {
               if (shouldLogout != true) return;
 
               await FirebaseAuth.instance.signOut();
-
-              if (!context.mounted) return;
-
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const LoginScreen(),
-                ),
-                    (route) => false,
-              );
+              // Auth-state stream at the app root rebuilds into LoginScreen.
             },
           ),
         ],
@@ -3061,20 +3103,19 @@ class CreatorAdminScreen extends StatelessWidget {
           }
 
           final challenges = challengeSnapshot.data?.docs ?? [];
-          final challengeTitles = challenges
-              .map((doc) => (doc.data() as Map<String, dynamic>)['title']?.toString() ?? '')
-              .where((title) => title.isNotEmpty)
-              .toSet()
-              .toList();
+          final challengeIds = challenges.map((doc) => doc.id).toSet();
 
-          if (challengeTitles.isEmpty) {
+          if (challenges.isEmpty) {
             return const Center(
               child: Text("No approved creator challenges yet."),
             );
           }
 
           return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('submissions').snapshots(),
+            stream: FirebaseFirestore.instance
+                .collection('submissions')
+                .where('challengeId', whereIn: challengeIds.toList())
+                .snapshots(),
             builder: (context, submissionSnapshot) {
               if (submissionSnapshot.hasError) {
                 return Center(
@@ -3089,13 +3130,7 @@ class CreatorAdminScreen extends StatelessWidget {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              final allSubmissions = submissionSnapshot.data?.docs ?? [];
-
-              final creatorSubmissions = allSubmissions.where((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                final title = data['challengeTitle']?.toString() ?? '';
-                return challengeTitles.contains(title);
-              }).toList();
+              final creatorSubmissions = submissionSnapshot.data?.docs ?? [];
 
               final totalChallenges = challenges.length;
               final totalSubmissions = creatorSubmissions.length;
@@ -3242,7 +3277,7 @@ class CreatorAdminScreen extends StatelessWidget {
 
                         final challengeSubmissions = creatorSubmissions.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
-                          return data['challengeTitle'] == title;
+                          return data['challengeId'] == challengeDoc.id;
                         }).toList();
 
                         final attempts = challengeSubmissions.length;
