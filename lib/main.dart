@@ -30,10 +30,451 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: FirebaseAuth.instance.currentUser != null
           ? Dashboard()
-          : const LoginScreen(),
+          : const AuthChoiceScreen(),
     );
   }
 }
+
+class AuthChoiceScreen extends StatelessWidget {
+  const AuthChoiceScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/power-music-concept-portrait (2).jpg',
+            fit: BoxFit.cover,
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.20),
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.65),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Image.asset(
+                    'assets/images/logo_1stdraft_forapp (1).png',
+                    height: 100,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(height: 40),
+                  const Text(
+                    "Choose how you want to continue",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7B2CBF),
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF7B2CBF)
+                                .withValues(alpha: 0.45),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Continue with Email",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.deepPurple,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PhoneAuthScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        "Continue with Phone",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PhoneAuthScreen extends StatefulWidget {
+  const PhoneAuthScreen({super.key});
+
+  @override
+  State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
+}
+
+class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
+  final phoneController = TextEditingController();
+  final otpController = TextEditingController();
+
+  String verificationId = '';
+  bool otpSent = false;
+  bool isLoading = false;
+
+  @override
+  void dispose() {
+    phoneController.dispose();
+    otpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> sendOtp() async {
+    final phone = phoneController.text.trim();
+
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter phone number")),
+      );
+      return;
+    }
+
+    try {
+      setState(() => isLoading = true);
+
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phone,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+          if (!mounted) return;
+          await handlePostLogin();
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          if (!mounted) return;
+
+          setState(() => isLoading = false);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Verification failed: ${e.message}")),
+          );
+        },
+        codeSent: (String verId, int? resendToken) {
+          if (!mounted) return;
+
+          setState(() {
+            verificationId = verId;
+            otpSent = true;
+            isLoading = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("OTP sent successfully")),
+          );
+        },
+        codeAutoRetrievalTimeout: (String verId) {
+          verificationId = verId;
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    }
+  }
+
+  Future<void> verifyOtp() async {
+    final otp = otpController.text.trim();
+
+    if (otp.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter OTP")),
+      );
+      return;
+    }
+
+    try {
+      setState(() => isLoading = true);
+
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: otp,
+      );
+
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      if (!mounted) return;
+      await handlePostLogin();
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Invalid OTP or verification failed")),
+      );
+    }
+  }
+
+  Future<void> handlePostLogin() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!mounted) return;
+
+    setState(() => isLoading = false);
+
+    if (!doc.exists) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProfileSetupScreen(),
+        ),
+            (route) => false,
+      );
+    } else {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Dashboard(),
+        ),
+            (route) => false,
+      );
+    }
+  }
+
+  InputDecoration input(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(
+        color: Colors.black54,
+        fontSize: 16,
+      ),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 18,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: Colors.white,
+          width: 1.2,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/power-music-concept-portrait (2).jpg',
+            fit: BoxFit.cover,
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.20),
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.65),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 24),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height - 48,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text(
+                      "Continue with Phone",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: input("Phone Number (+91XXXXXXXXXX)"),
+                    ),
+                    const SizedBox(height: 16),
+                    if (otpSent)
+                      TextField(
+                        controller: otpController,
+                        keyboardType: TextInputType.number,
+                        decoration: input("Enter OTP"),
+                      ),
+                    const SizedBox(height: 26),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7B2CBF),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF7B2CBF)
+                                  .withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          onPressed: isLoading
+                              ? null
+                              : (otpSent ? verifyOtp : sendOtp),
+                          child: isLoading
+                              ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.4,
+                            ),
+                          )
+                              : Text(
+                            otpSent ? "Verify OTP" : "Send OTP",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        "Back",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    Image.asset(
+                      'assets/images/logo_1stdraft_forapp (1).png',
+                      height: 100,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 //////////////////////////////////////////////////////
 // LOGIN SCREEN
@@ -58,8 +499,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       setState(() => isLoading = true);
 
-      debugPrint("Login button clicked");
-
       UserCredential userCred;
 
       if (isLogin) {
@@ -74,16 +513,12 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      debugPrint("User logged in: ${userCred.user?.uid}");
-
       final user = userCred.user;
 
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .get();
-
-      debugPrint("User doc exists: ${doc.exists}");
 
       if (!mounted) return;
 
@@ -105,8 +540,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       setState(() => isLoading = false);
 
-      debugPrint("ERROR: $e");
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: $e")),
       );
@@ -120,105 +553,184 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.purple, Colors.deepPurple],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  "AURA",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                TextField(
-                  controller: emailController,
-                  decoration: input("Email"),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: input("Password"),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: keepMeLoggedIn,
-                      activeColor: Colors.white,
-                      checkColor: Colors.deepPurple,
-                      onChanged: (value) {
-                        setState(() {
-                          keepMeLoggedIn = value ?? true;
-                        });
-                      },
-                    ),
-                    const Expanded(
-                      child: Text(
-                        "Keep me logged in",
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : handleAuth,
-                    child: isLoading
-                        ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : Text(isLogin ? "Login" : "Sign Up"),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() => isLogin = !isLogin);
-                  },
-                  child: Text(
-                    isLogin
-                        ? "Don't have an account? Sign Up"
-                        : "Already have an account? Login",
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                )
-              ],
-            ),
-          ),
+  InputDecoration input(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(
+        color: Colors.black54,
+        fontSize: 16,
+      ),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 18,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(
+          color: Colors.white,
+          width: 1.2,
         ),
       ),
     );
   }
 
-  InputDecoration input(String hint) {
-    return InputDecoration(
-      filled: true,
-      fillColor: Colors.white,
-      hintText: hint,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/power-music-concept-portrait (2).jpg',
+            fit: BoxFit.cover,
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.15),
+                  Colors.black.withValues(alpha: 0.35),
+                  Colors.black.withValues(alpha: 0.55),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 24),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height - 48,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextField(
+                      controller: emailController,
+                      decoration: input("Email/Username"),
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: input("Password"),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: keepMeLoggedIn,
+                            activeColor: Colors.white,
+                            checkColor: const Color(0xFF7B2CBF),
+                            side: const BorderSide(color: Colors.white, width: 1.4),
+                            onChanged: (value) {
+                              setState(() {
+                                keepMeLoggedIn = value ?? true;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Text(
+                          "Keep me logged in",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 26),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7B2CBF),
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF7B2CBF).withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          onPressed: isLoading ? null : handleAuth,
+                          child: isLoading
+                              ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.4,
+                            ),
+                          )
+                              : Text(
+                            isLogin ? "Login" : "Sign Up",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => isLogin = !isLogin);
+                      },
+                      child: Text(
+                        isLogin
+                            ? "Don't have an account? Sign Up"
+                            : "Already have an account? Login",
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    Image.asset(
+                      'assets/images/logo_1stdraft_forapp (1).png',
+                      height: 100,
+                      fit: BoxFit.contain,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
 
 
 //////////////////////////////////////////////////////
@@ -313,7 +825,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 }
 
 //////////////////////////////////////////////////////
-// DASHBOARD (FIREBASE CONNECTED)
+// DASHBOARD (ROLE-BASED)
 //////////////////////////////////////////////////////
 
 class Dashboard extends StatelessWidget {
@@ -321,450 +833,426 @@ class Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: const Text("Dashboard"),
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            ////////////////////////////////
-            /// REWARD CARD (DYNAMIC)
-            ////////////////////////////////
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Colors.purple, Colors.deepPurple],
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    final userId = FirebaseAuth.instance.currentUser!.uid;
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, userSnapshot) {
+        if (!userSnapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final userData =
+            userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+        final isAdmin = userData['isAdmin'] ?? false;
+        final isBrand = userData['isCreator'] ?? false;
+        final points = userData['totalRewards'] ?? 0;
+
+        return Scaffold(
+          backgroundColor: Colors.grey[100],
+          appBar: AppBar(
+            title: const Text("Dashboard"),
+            elevation: 0,
+          ),
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                ////////////////////////////////
+                /// REWARD CARD
+                ////////////////////////////////
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Colors.purple, Colors.deepPurple],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        "Your Rewards",
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 5),
-                      StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(FirebaseAuth.instance.currentUser!.uid)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Text(
-                              "...",
-                              style: TextStyle(color: Colors.white),
-                            );
-                          }
-
-                          final data =
-                          snapshot.data!.data() as Map<String, dynamic>;
-                          final points = data['totalRewards'] ?? 0;
-
-                          return Text(
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Your Rewards",
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
                             "$points pts",
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
-                          );
-                        },
+                          ),
+                        ],
+                      ),
+                      const Icon(
+                        Icons.emoji_events,
+                        color: Colors.white,
+                        size: 40,
                       ),
                     ],
                   ),
-                  const Icon(
-                    Icons.emoji_events,
-                    color: Colors.white,
-                    size: 40,
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-            ////////////////////////////////
-            /// QUICK BUTTONS
-            ////////////////////////////////
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.deepPurple,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                ////////////////////////////////
+                /// COMMON QUICK BUTTONS
+                ////////////////////////////////
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.deepPurple,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LeaderboardScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.emoji_events),
+                          label: const Text(
+                            "Leaderboard",
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const LeaderboardScreen(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.deepPurple,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.emoji_events),
-                      label: const Text(
-                        "Leaderboard",
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.deepPurple,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const MyAccountScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.person),
+                          label: const Text(
+                            "My Account",
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const MyAccountScreen(),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                ////////////////////////////////
+                /// GENERAL USER + ADMIN
+                ////////////////////////////////
+                if (!isBrand || isAdmin) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('challenges')
+                          .where('status', isEqualTo: 'approved')
+                          .where('creatorId', isEqualTo: 'system')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        final challenges = snapshot.data!.docs;
+
+                        if (challenges.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text("No challenges yet"),
+                          );
+                        }
+
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: challenges.length,
+                          gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 1,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
                           ),
+                          itemBuilder: (context, index) {
+                            final c = challenges[index];
+
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ChallengeDetail(
+                                      title: c['title'] ?? "",
+                                      instructions:
+                                      c['instructions'] ?? "No instructions",
+                                      videoUrl: c['videoUrl'] ?? "",
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.blue.shade400,
+                                      Colors.blue.shade700,
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.flash_on,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      c['title'] ?? "No Title",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      c['description'] ?? "",
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
-                      icon: const Icon(Icons.person),
-                      label: const Text(
-                        "My Account",
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            ////////////////////////////////
-            /// FIREBASE CHALLENGES
-            ////////////////////////////////
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('challenges')
-                    .where('status', isEqualTo: 'approved')
-                    .where('creatorId', isEqualTo: 'system')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  }
-
-                  final challenges = snapshot.data!.docs;
-
-                  if (challenges.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text("No challenges yet 😢"),
-                    );
-                  }
-
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: challenges.length,
-                    gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 1,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemBuilder: (context, index) {
-                      final c = challenges[index];
-
-                      return GestureDetector(
-                        onTap: () {
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      width: double.infinity,
+                      height: 55,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF6A00), Color(0xFFFF3D00)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.orange.withValues(alpha: 0.4),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ChallengeDetail(
-                                title: c['title'] ?? "",
-                                instructions:
-                                c['instructions'] ?? "No instructions",
-                                videoUrl: c['videoUrl'] ?? "",
-                              ),
+                              builder: (_) => const ExploreCreatorsScreen(),
                             ),
                           );
                         },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.blue.shade400,
-                                Colors.blue.shade700,
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
+                        child: const Text(
+                          "Explore Brands 🔥",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.flash_on,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                c['title'] ?? "No Title",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 5),
-                              Text(
-                                c['description'] ?? "",
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            ////////////////////////////////
-            /// ACTION BUTTONS
-            ////////////////////////////////
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Container(
-                    width: double.infinity,
-                    height: 55,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFF6A00), Color(0xFFFF3D00)],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.orange.withValues(alpha: 0.4),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ExploreCreatorsScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        "Explore Creators 🔥",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    height: 55,
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade300,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                ],
+
+                ////////////////////////////////
+                /// BRAND + ADMIN
+                ////////////////////////////////
+                if (isBrand || isAdmin) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      width: double.infinity,
+                      height: 55,
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade300,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () async {
+                          final doc = await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(userId)
+                              .get();
+
+                          final data = doc.data() ?? {};
+                          final alreadyBrand = data['isCreator'] ?? false;
+
+                          if (!context.mounted) return;
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => alreadyBrand
+                                  ? const CreatorHomeScreen()
+                                  : const CreateCreatorProfileScreen(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          isBrand ? "Brand Home" : "Start Brand Page",
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
                         ),
                       ),
-                      onPressed: () async {
-                        final user = FirebaseAuth.instance.currentUser;
-                        if (user == null) return;
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      width: double.infinity,
+                      height: 55,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF5B2EFF), Color(0xFF9B4DFF)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.deepPurple.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CreatorAdminScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Brand Admin Panel",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
-                        final doc = await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user.uid)
-                            .get();
-
-                        final data = doc.data() ?? {};
-                        final isCreator = data['isCreator'] ?? false;
-
-                        if (!context.mounted) return;
-
+                ////////////////////////////////
+                /// ADMIN ONLY
+                ////////////////////////////////
+                if (isAdmin)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        minimumSize: const Size(double.infinity, 50),
+                      ),
+                      onPressed: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => isCreator
-                                ? const CreatorHomeScreen()
-                                : const CreateCreatorProfileScreen(),
+                            builder: (_) => const AdminScreen(),
                           ),
                         );
                       },
-                      child: const Text(
-                        "Become a Creator",
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      child: const Text("Admin Panel"),
                     ),
                   ),
-                ],
-              ),
+
+                const SizedBox(height: 24),
+              ],
             ),
-
-            const SizedBox(height: 12),
-
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                final isCreator = data['isCreator'] ?? false;
-
-                if (!isCreator) return const SizedBox.shrink();
-
-                return Container(
-                  width: double.infinity,
-                  height: 55,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF5B2EFF), Color(0xFF9B4DFF)],
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.deepPurple.withValues(alpha: 0.25),
-                        blurRadius: 12,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CreatorAdminScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "Creator Admin Panel",
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-
-
-            ////////////////////////////////
-            /// ADMIN BUTTON ONLY
-            ////////////////////////////////
-            StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(FirebaseAuth.instance.currentUser!.uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox.shrink();
-
-                final data = snapshot.data!.data() as Map<String, dynamic>;
-                final isAdmin = data['isAdmin'] ?? false;
-
-                if (!isAdmin) return const SizedBox.shrink();
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AdminScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text("Admin Panel"),
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
+
 
 
 
@@ -907,14 +1395,38 @@ class _CameraScreenState extends State<CameraScreen> {
   CameraController? controller;
   bool recording = false;
   XFile? videoFile;
+  int selectedCameraIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    controller = CameraController(cameras[0], ResolutionPreset.medium);
-    controller!.initialize().then((_) {
-      setState(() {});
-    });
+    initCamera(selectedCameraIndex);
+  }
+
+  Future<void> initCamera(int cameraIndex) async {
+    if (cameras.isEmpty) return;
+
+    controller?.dispose();
+
+    controller = CameraController(
+      cameras[cameraIndex],
+      ResolutionPreset.medium,
+    );
+
+    await controller!.initialize();
+
+    if (mounted) {
+      setState(() {
+        selectedCameraIndex = cameraIndex;
+      });
+    }
+  }
+
+  Future<void> switchCamera() async {
+    if (cameras.length < 2 || recording) return;
+
+    final nextIndex = selectedCameraIndex == 0 ? 1 : 0;
+    await initCamera(nextIndex);
   }
 
   @override
@@ -924,6 +1436,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> recordVideo() async {
+    if (controller == null || !controller!.value.isInitialized) return;
+
     if (!recording) {
       await controller!.startVideoRecording();
       setState(() => recording = true);
@@ -935,57 +1449,67 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!controller!.value.isInitialized) {
+    if (controller == null || !controller!.value.isInitialized) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Record")),
+      appBar: AppBar(
+        title: const Text("Record"),
+        actions: [
+          IconButton(
+            onPressed: switchCamera,
+            icon: const Icon(Icons.flip_camera_android),
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          Expanded(child: CameraPreview(controller!)),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              /////////////////////////////
-              /// RECORD BUTTON
-              /////////////////////////////
-              ElevatedButton(
-                onPressed: recordVideo,
-                child: Text(recording ? "Stop" : "Record"),
-              ),
-
-              /////////////////////////////
-              /// PREVIEW BUTTON
-              /////////////////////////////
-              ElevatedButton(
-                onPressed: videoFile == null
-                    ? null
-                    : () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PreviewScreen(
-                        videoPath: videoFile!.path, // ✅ FIXED
-                        challengeTitle: widget.challengeTitle,
-                      ),
-                    ),
-                  );
-                },
-                child: const Text("Preview"),
-              ),
-            ],
+          Expanded(
+            child: CameraPreview(controller!),
           ),
-
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: recordVideo,
+                    child: Text(recording ? "Stop" : "Record"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: videoFile == null
+                        ? null
+                        : () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => PreviewScreen(
+                            videoPath: videoFile!.path,
+                            challengeTitle: widget.challengeTitle,
+                          ),
+                        ),
+                      );
+                    },
+                    child: const Text("Preview"),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
         ],
       ),
     );
   }
 }
+
 
 class PreviewScreen extends StatefulWidget {
   final String videoPath;
@@ -1049,8 +1573,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
         'challengeTitle': widget.challengeTitle,
         'videoUrl': videoUrl,
         'status': 'pending',
+        'auraPoints': 0,
+        'views': 0,
+        'reach': 0,
         'createdAt': Timestamp.now(),
       });
+
 
       setState(() => isUploading = false);
 
@@ -1163,7 +1691,7 @@ class _CreateCreatorProfileScreenState
       setState(() => isSaving = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Creator profile created successfully")),
+        const SnackBar(content: Text("Brand profile created successfully")),
       );
 
       Navigator.pushReplacement(
@@ -1185,7 +1713,7 @@ class _CreateCreatorProfileScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Creator Profile")),
+      appBar: AppBar(title: const Text("Create Brand Profile")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1207,7 +1735,7 @@ class _CreateCreatorProfileScreenState
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: saveCreatorProfile,
-                child: const Text("Create Creator Profile"),
+                child: const Text("Create Brand Profile"),
               ),
             ),
           ],
@@ -1225,7 +1753,7 @@ class CreatorHomeScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Creator Home")),
+      appBar: AppBar(title: const Text("Brand Home")),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -1322,7 +1850,7 @@ class CreatorHomeScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    child: const Text("View My Creator Profile"),
+                    child: const Text("View My Brand Profile"),
                   ),
                 ),
 
@@ -1409,9 +1937,6 @@ class _CreateChallengeState extends State<CreateChallenge> {
   final descController = TextEditingController();
   final instructionController = TextEditingController();
 
-  XFile? videoFile;
-  bool isSubmitting = false;
-
   @override
   void dispose() {
     titleController.dispose();
@@ -1420,95 +1945,34 @@ class _CreateChallengeState extends State<CreateChallenge> {
     super.dispose();
   }
 
-  Future<void> openRecorder() async {
-    final recordedVideo = await Navigator.push<XFile>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CreatorVideoRecorderScreen(),
-      ),
-    );
-
-    if (recordedVideo != null) {
-      setState(() {
-        videoFile = recordedVideo;
-      });
-    }
-  }
-
-  Future<void> submitChallenge() async {
-    if (videoFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please record video first")),
-      );
-      return;
-    }
-
-    if (titleController.text.isEmpty ||
-        descController.text.isEmpty ||
-        instructionController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Fill all fields")),
-      );
-      return;
-    }
-
-    try {
-      setState(() => isSubmitting = true);
-
-      final user = FirebaseAuth.instance.currentUser;
-      final file = File(videoFile!.path);
-
-      final fileName =
-          "${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}";
-
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('creator_videos')
-          .child(user!.uid)
-          .child(fileName);
-
-      await ref.putFile(file);
-
-      final videoUrl = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance.collection('creator_requests').add({
-        'title': titleController.text.trim(),
-        'description': descController.text.trim(),
-        'instructions': instructionController.text.trim(),
-        'videoUrl': videoUrl,
-        'creatorId': user.uid,
-        'status': 'pending',
-        'rejectionReason': '',
-        'createdAt': Timestamp.now(),
-      });
-
-      if (!mounted) return;
-
-      setState(() => isSubmitting = false);
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const CreatorChallengeSubmittedScreen(),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() => isSubmitting = false);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
-    }
-  }
-
   InputDecoration input(String hint) {
     return InputDecoration(
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
       ),
       hintText: hint,
+    );
+  }
+
+  void openRecorder() {
+    if (titleController.text.trim().isEmpty ||
+        descController.text.trim().isEmpty ||
+        instructionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Fill all fields first")),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BrandCameraScreen(
+          challengeTitle: titleController.text.trim(),
+          description: descController.text.trim(),
+          instructions: instructionController.text.trim(),
+        ),
+      ),
     );
   }
 
@@ -1535,105 +1999,15 @@ class _CreateChallengeState extends State<CreateChallenge> {
               maxLines: 4,
               decoration: input("Detailed Instructions"),
             ),
-            const SizedBox(height: 20),
-            Container(
-              height: 200,
+            const SizedBox(height: 24),
+            SizedBox(
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black12,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  videoFile == null ? "No video recorded yet" : "Video Recorded ✅",
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: openRecorder,
-                    child: const Text("Record Video"),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: videoFile == null
-                        ? null
-                        : () {
-                      setState(() {
-                        videoFile = null;
-                      });
-                    },
-                    child: const Text("Delete"),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              height: 56,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.28),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
+              height: 52,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-                onPressed: isSubmitting ? null : submitChallenge,
-                child: isSubmitting
-                    ? const SizedBox(
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2.4,
-                  ),
-                )
-                    : const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.send_rounded, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text(
-                      "Send for Approval",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
+                onPressed: openRecorder,
+                child: const Text("Record Video"),
               ),
-            )
-
+            ),
           ],
         ),
       ),
@@ -1641,48 +2015,77 @@ class _CreateChallengeState extends State<CreateChallenge> {
   }
 }
 
-class CreatorVideoRecorderScreen extends StatefulWidget {
-  const CreatorVideoRecorderScreen({super.key});
+
+class BrandCameraScreen extends StatefulWidget {
+  final String challengeTitle;
+  final String description;
+  final String instructions;
+
+  const BrandCameraScreen({
+    super.key,
+    required this.challengeTitle,
+    required this.description,
+    required this.instructions,
+  });
 
   @override
-  State<CreatorVideoRecorderScreen> createState() =>
-      _CreatorVideoRecorderScreenState();
+  State<BrandCameraScreen> createState() => _BrandCameraScreenState();
 }
 
-class _CreatorVideoRecorderScreenState
-    extends State<CreatorVideoRecorderScreen> {
+class _BrandCameraScreenState extends State<BrandCameraScreen> {
   CameraController? controller;
-  bool isRecording = false;
-  XFile? recordedVideo;
+  bool recording = false;
+  XFile? videoFile;
+  int selectedCameraIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    initCamera();
+    initCamera(selectedCameraIndex);
   }
 
-  Future<void> initCamera() async {
-    controller = CameraController(cameras[0], ResolutionPreset.medium);
+  Future<void> initCamera(int cameraIndex) async {
+    if (cameras.isEmpty) return;
+
+    controller?.dispose();
+
+    controller = CameraController(
+      cameras[cameraIndex],
+      ResolutionPreset.medium,
+    );
+
     await controller!.initialize();
-    if (mounted) setState(() {});
+
+    if (mounted) {
+      setState(() {
+        selectedCameraIndex = cameraIndex;
+      });
+    }
+  }
+
+  Future<void> switchCamera() async {
+    if (cameras.length < 2 || recording) return;
+
+    final nextIndex = selectedCameraIndex == 0 ? 1 : 0;
+    await initCamera(nextIndex);
+  }
+
+  Future<void> recordVideo() async {
+    if (controller == null || !controller!.value.isInitialized) return;
+
+    if (!recording) {
+      await controller!.startVideoRecording();
+      setState(() => recording = true);
+    } else {
+      videoFile = await controller!.stopVideoRecording();
+      setState(() => recording = false);
+    }
   }
 
   @override
   void dispose() {
     controller?.dispose();
     super.dispose();
-  }
-
-  Future<void> toggleRecording() async {
-    if (controller == null || !controller!.value.isInitialized) return;
-
-    if (!isRecording) {
-      await controller!.startVideoRecording();
-      setState(() => isRecording = true);
-    } else {
-      recordedVideo = await controller!.stopVideoRecording();
-      setState(() => isRecording = false);
-    }
   }
 
   @override
@@ -1694,35 +2097,64 @@ class _CreatorVideoRecorderScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Record Challenge Video")),
+      appBar: AppBar(
+        title: const Text("Record Challenge Video"),
+        actions: [
+          IconButton(
+            onPressed: switchCamera,
+            icon: const Icon(Icons.flip_camera_android),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
             child: CameraPreview(controller!),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: toggleRecording,
-                    child: Text(
-                      isRecording ? "Stop Recording" : "Start Recording",
-                    ),
+                    onPressed: recordVideo,
+                    child: Text(recording ? "Stop Recording" : "Record Video"),
                   ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: recordedVideo == null
+                    onPressed: videoFile == null
                         ? null
                         : () {
-                      Navigator.pop(context, recordedVideo);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BrandPreviewScreen(
+                            videoPath: videoFile!.path,
+                            challengeTitle: widget.challengeTitle,
+                            description: widget.description,
+                            instructions: widget.instructions,
+                          ),
+                        ),
+                      );
                     },
-                    child: const Text("Use This Video"),
+                    child: const Text("Preview Video"),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        videoFile = null;
+                        recording = false;
+                      });
+                    },
+                    child: const Text("Record Again"),
                   ),
                 ),
               ],
@@ -1733,6 +2165,149 @@ class _CreatorVideoRecorderScreenState
     );
   }
 }
+
+
+class BrandPreviewScreen extends StatefulWidget {
+  final String videoPath;
+  final String challengeTitle;
+  final String description;
+  final String instructions;
+
+  const BrandPreviewScreen({
+    super.key,
+    required this.videoPath,
+    required this.challengeTitle,
+    required this.description,
+    required this.instructions,
+  });
+
+  @override
+  State<BrandPreviewScreen> createState() => _BrandPreviewScreenState();
+}
+
+class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
+  late VideoPlayerController _controller;
+  bool isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = VideoPlayerController.file(
+      File(widget.videoPath),
+    )..initialize().then((_) {
+      setState(() {});
+      _controller.play();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> submitChallenge() async {
+    try {
+      setState(() => isUploading = true);
+
+      final user = FirebaseAuth.instance.currentUser;
+      final file = File(widget.videoPath);
+
+      final fileName =
+          "${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}";
+
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('creator_videos')
+          .child(user!.uid)
+          .child(fileName);
+
+      await ref.putFile(file);
+
+      final videoUrl = await ref.getDownloadURL();
+
+      await FirebaseFirestore.instance.collection('creator_requests').add({
+        'title': widget.challengeTitle,
+        'description': widget.description,
+        'instructions': widget.instructions,
+        'videoUrl': videoUrl,
+        'creatorId': user.uid,
+        'status': 'pending',
+        'rejectionReason': '',
+        'createdAt': Timestamp.now(),
+      });
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const CreatorChallengeSubmittedScreen(),
+        ),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isUploading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    }
+  }
+
+  void recordAgain() {
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Preview Video")),
+      body: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: _controller.value.isInitialized
+                  ? AspectRatio(
+                aspectRatio: _controller.value.aspectRatio,
+                child: VideoPlayer(_controller),
+              )
+                  : const CircularProgressIndicator(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isUploading ? null : submitChallenge,
+                    child: isUploading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text("Submit"),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: isUploading ? null : recordAgain,
+                    child: const Text("Record Again"),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 class CreatorChallengeSubmittedScreen extends StatelessWidget {
   const CreatorChallengeSubmittedScreen({super.key});
@@ -1817,7 +2392,7 @@ class AdminScreen extends StatelessWidget {
           bottom: const TabBar(
             tabs: [
               Tab(text: "Submissions"),
-              Tab(text: "Creator Requests"),
+              Tab(text: "Brand Requests"),
             ],
           ),
         ),
@@ -1900,7 +2475,7 @@ class CreatorRequestTab extends StatelessWidget {
         final requests = snapshot.data!.docs;
 
         if (requests.isEmpty) {
-          return const Center(child: Text("No creator requests"));
+          return const Center(child: Text("No brand requests"));
         }
 
         return ListView.builder(
@@ -2076,30 +2651,45 @@ class _ReviewScreenState extends State<ReviewScreen> {
   final pointsController = TextEditingController();
 
   Future<void> approveSubmission() async {
-    final points = int.tryParse(pointsController.text) ?? 0;
-    final userId = widget.submission['userId'];
+    try {
+      final points = int.tryParse(pointsController.text) ?? 0;
+      final userId = widget.submission['userId'];
 
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submission.id)
-        .update({
-      'status': 'approved',
-      'auraPoints': points,
-      'reviewed': true,
-    });
+      await FirebaseFirestore.instance
+          .collection('submissions')
+          .doc(widget.submission.id)
+          .update({
+        'status': 'approved',
+        'auraPoints': points,
+        'reviewed': true,
+      });
 
-    final userRef =
-    FirebaseFirestore.instance.collection('users').doc(userId);
+      final userRef =
+      FirebaseFirestore.instance.collection('users').doc(userId);
 
-    final userDoc = await userRef.get();
-    final currentPoints = userDoc['totalRewards'] ?? 0;
+      final userDoc = await userRef.get();
+      final currentPoints = userDoc['totalRewards'] ?? 0;
 
-    await userRef.update({
-      'totalRewards': currentPoints + points,
-    });
+      await userRef.update({
+        'totalRewards': currentPoints + points,
+      });
 
-    Navigator.pop(context);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Submission approved successfully")),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Approve failed: $e")),
+      );
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -2289,7 +2879,7 @@ class CreatorProfileScreen extends StatelessWidget {
                             Text(
                               bio.isNotEmpty
                                   ? bio
-                                  : "This creator has not added a bio yet.",
+                                  : "This brand has not added a bio yet.",
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: Colors.white,
@@ -2521,7 +3111,7 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Explore Creators")),
+      appBar: AppBar(title: const Text("Explore Brands")),
       body: Column(
         children: [
           /// SEARCH BAR
@@ -2529,7 +3119,7 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
             padding: const EdgeInsets.all(12),
             child: TextField(
               decoration: InputDecoration(
-                hintText: "Search creators...",
+                hintText: "Search brands...",
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -3038,7 +3628,7 @@ class CreatorAdminScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
-        title: const Text("Creator Admin Panel"),
+        title: const Text("Brand Admin Panel"),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -3049,10 +3639,7 @@ class CreatorAdminScreen extends StatelessWidget {
         builder: (context, challengeSnapshot) {
           if (challengeSnapshot.hasError) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text("Error: ${challengeSnapshot.error}"),
-              ),
+              child: Text("Error: ${challengeSnapshot.error}"),
             );
           }
 
@@ -3061,15 +3648,17 @@ class CreatorAdminScreen extends StatelessWidget {
           }
 
           final challenges = challengeSnapshot.data?.docs ?? [];
+
           final challengeTitles = challenges
-              .map((doc) => (doc.data() as Map<String, dynamic>)['title']?.toString() ?? '')
+              .map((doc) =>
+          (doc.data() as Map<String, dynamic>)['title']?.toString() ?? '')
               .where((title) => title.isNotEmpty)
               .toSet()
               .toList();
 
           if (challengeTitles.isEmpty) {
             return const Center(
-              child: Text("No approved creator challenges yet."),
+              child: Text("No approved brand challenges yet."),
             );
           }
 
@@ -3078,14 +3667,12 @@ class CreatorAdminScreen extends StatelessWidget {
             builder: (context, submissionSnapshot) {
               if (submissionSnapshot.hasError) {
                 return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text("Error: ${submissionSnapshot.error}"),
-                  ),
+                  child: Text("Error: ${submissionSnapshot.error}"),
                 );
               }
 
-              if (submissionSnapshot.connectionState == ConnectionState.waiting) {
+              if (submissionSnapshot.connectionState ==
+                  ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
 
@@ -3099,36 +3686,21 @@ class CreatorAdminScreen extends StatelessWidget {
 
               final totalChallenges = challenges.length;
               final totalSubmissions = creatorSubmissions.length;
-              final uniqueUsers = creatorSubmissions
-                  .map((doc) => (doc.data() as Map<String, dynamic>)['userId']?.toString() ?? '')
+
+              final uniqueUserIds = creatorSubmissions
+                  .map((doc) =>
+              (doc.data() as Map<String, dynamic>)['userId']?.toString() ?? '')
                   .where((id) => id.isNotEmpty)
                   .toSet()
-                  .length;
-              final videosCreated = totalSubmissions;
+                  .toList();
 
-              int totalAuraPoints = 0;
-              for (final doc in creatorSubmissions) {
-                final data = doc.data() as Map<String, dynamic>;
-                totalAuraPoints += (data['auraPoints'] ?? 0) as int;
-              }
+              final uniqueUsers = uniqueUserIds.length;
 
-              final avgAttemptsPerUser =
+              final averageVideosPerUser =
               uniqueUsers == 0 ? 0.0 : totalSubmissions / uniqueUsers;
 
-              int repeatUsers = 0;
-              final userSubmissionCount = <String, int>{};
-              for (final doc in creatorSubmissions) {
-                final data = doc.data() as Map<String, dynamic>;
-                final userId = data['userId']?.toString() ?? '';
-                if (userId.isEmpty) continue;
-                userSubmissionCount[userId] = (userSubmissionCount[userId] ?? 0) + 1;
-              }
-              for (final count in userSubmissionCount.values) {
-                if (count > 1) repeatUsers++;
-              }
-
-              final repeatRate =
-              uniqueUsers == 0 ? 0.0 : (repeatUsers / uniqueUsers) * 100;
+              // Frontend-only placeholder for now
+              const costPerUser = "₹0";
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -3156,11 +3728,26 @@ class CreatorAdminScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _reportCard(
-                            title: "Total Submissions",
-                            value: "$totalSubmissions",
-                            icon: Icons.video_collection,
-                            color: Colors.blue,
+                          child: GestureDetector(
+                            onTap: uniqueUserIds.isEmpty
+                                ? null
+                                : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => BrandParticipantsScreen(
+                                    userIds: uniqueUserIds,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: _reportCard(
+                              title: "Unique Users",
+                              value: "$uniqueUsers",
+                              icon: Icons.people,
+                              color: Colors.orange,
+                              subtitle: "Tap to view",
+                            ),
                           ),
                         ),
                       ],
@@ -3172,18 +3759,18 @@ class CreatorAdminScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _reportCard(
-                            title: "Unique Users",
-                            value: "$uniqueUsers",
-                            icon: Icons.people,
-                            color: Colors.orange,
+                            title: "Total Submissions",
+                            value: "$totalSubmissions",
+                            icon: Icons.video_collection,
+                            color: Colors.blue,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: _reportCard(
-                            title: "Videos Created",
-                            value: "$videosCreated",
-                            icon: Icons.smart_display,
+                            title: "Average Videos/User",
+                            value: averageVideosPerUser.toStringAsFixed(1),
+                            icon: Icons.analytics,
                             color: Colors.green,
                           ),
                         ),
@@ -3196,31 +3783,18 @@ class CreatorAdminScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _reportCard(
-                            title: "Avg Attempts/User",
-                            value: avgAttemptsPerUser.toStringAsFixed(1),
-                            icon: Icons.analytics,
+                            title: "Cost Per User",
+                            value: costPerUser,
+                            icon: Icons.currency_rupee,
                             color: Colors.pink,
+                            subtitle: "Frontend only",
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: _reportCard(
-                            title: "Repeat Rate",
-                            value: "${repeatRate.toStringAsFixed(0)}%",
-                            icon: Icons.repeat,
-                            color: Colors.teal,
-                          ),
+                        const Expanded(
+                          child: SizedBox(),
                         ),
                       ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _wideReportCard(
-                      title: "Total Aura Awarded",
-                      value: "$totalAuraPoints pts",
-                      icon: Icons.auto_awesome,
-                      color: Colors.indigo,
                     ),
 
                     const SizedBox(height: 24),
@@ -3240,24 +3814,26 @@ class CreatorAdminScreen extends StatelessWidget {
                         challengeDoc.data() as Map<String, dynamic>;
                         final title = challengeData['title'] ?? 'No Title';
 
-                        final challengeSubmissions = creatorSubmissions.where((doc) {
+                        final challengeSubmissions =
+                        creatorSubmissions.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           return data['challengeTitle'] == title;
                         }).toList();
 
-                        final attempts = challengeSubmissions.length;
-                        final uniqueChallengeUsers = challengeSubmissions
-                            .map((doc) =>
-                        (doc.data() as Map<String, dynamic>)['userId']?.toString() ?? '')
+                        final totalChallengeSubmissions = challengeSubmissions.length;
+                        final challengeUserIds = challengeSubmissions
+                            .map((doc) => (doc.data()
+                        as Map<String, dynamic>)['userId']
+                            ?.toString() ??
+                            '')
                             .where((id) => id.isNotEmpty)
                             .toSet()
-                            .length;
+                            .toList();
 
-                        int auraForChallenge = 0;
-                        for (final doc in challengeSubmissions) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          auraForChallenge += (data['auraPoints'] ?? 0) as int;
-                        }
+                        final challengeUniqueUsers = challengeUserIds.length;
+                        final avgVideosPerUser = challengeUniqueUsers == 0
+                            ? 0.0
+                            : totalChallengeSubmissions / challengeUniqueUsers;
 
                         return Container(
                           width: double.infinity,
@@ -3285,10 +3861,12 @@ class CreatorAdminScreen extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              Text("Total Attempts: $attempts"),
-                              Text("Unique Submissions: $uniqueChallengeUsers"),
-                              Text("Videos Created: $attempts"),
-                              Text("Aura Awarded: $auraForChallenge pts"),
+                              Text("Total Submissions: $totalChallengeSubmissions"),
+                              Text("Unique Users: $challengeUniqueUsers"),
+                              Text(
+                                "Average Videos/User: ${avgVideosPerUser.toStringAsFixed(1)}",
+                              ),
+                              const Text("Cost Per User: ₹0"),
                             ],
                           ),
                         );
@@ -3309,6 +3887,7 @@ class CreatorAdminScreen extends StatelessWidget {
     required String value,
     required IconData icon,
     required Color color,
+    String? subtitle,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -3344,57 +3923,178 @@ class CreatorAdminScreen extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.black54),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _wideReportCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: color.withValues(alpha: 0.12),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.deepPurple,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
-              Text(
-                title,
-                style: const TextStyle(color: Colors.black54),
-              ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
+
+class BrandParticipantsScreen extends StatelessWidget {
+  final List<String> userIds;
+
+  const BrandParticipantsScreen({
+    super.key,
+    required this.userIds,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Participants"),
+      ),
+      body: userIds.isEmpty
+          ? const Center(child: Text("No participants yet"))
+          : ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: userIds.length,
+        itemBuilder: (context, index) {
+          final userId = userIds[index];
+
+          return FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(userId)
+                .get(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Card(
+                  child: ListTile(
+                    title: Text("Loading..."),
+                  ),
+                );
+              }
+
+              final data =
+                  snapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+              final name = data['name'] ?? 'User';
+              final username = data['username'] ?? '';
+              final totalRewards = data['totalRewards'] ?? 0;
+
+              return Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.person),
+                  ),
+                  title: Text(name),
+                  subtitle: Text("@$username"),
+                  trailing: Text("$totalRewards pts"),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ParticipantProfileScreen(
+                          userId: userId,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class ParticipantProfileScreen extends StatelessWidget {
+  final String userId;
+
+  const ParticipantProfileScreen({
+    super.key,
+    required this.userId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Participant Profile"),
+      ),
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('users').doc(userId).get(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+          final name = data['name'] ?? 'User';
+          final username = data['username'] ?? '';
+          final email = data['email'] ?? '';
+          final totalRewards = data['totalRewards'] ?? 0;
+          final bio = data['bio'] ?? '';
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                const CircleAvatar(
+                  radius: 40,
+                  child: Icon(Icons.person, size: 40),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "@$username",
+                  style: const TextStyle(
+                    color: Colors.black54,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  email,
+                  style: const TextStyle(
+                    color: Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.auto_awesome),
+                    title: const Text("Total Aura Points"),
+                    trailing: Text("$totalRewards"),
+                  ),
+                ),
+                if (bio.toString().isNotEmpty)
+                  Card(
+                    child: ListTile(
+                      title: const Text("Bio"),
+                      subtitle: Text(bio),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+
