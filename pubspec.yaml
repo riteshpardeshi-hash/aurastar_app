@@ -1,7 +1,7 @@
 name: aura_app
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ^3.7.0
@@ -12,12 +12,15 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   camera: ^0.10.5+9
-  firebase_core: ^2.24.0
-  cloud_firestore: ^4.13.0
-  firebase_auth: ^4.17.0
+  firebase_core: ^3.13.0
+  cloud_firestore: ^5.6.0
+  firebase_auth: ^5.5.0
   video_player: ^2.8.2
-  firebase_storage: ^11.6.6
+  firebase_storage: ^12.4.0
   path: ^1.9.0
+  video_thumbnail: ^0.5.3
+  image_picker: ^1.1.2
+  share_plus: ^10.0.0
 
 dev_dependencies:
   flutter_test:
@@ -31,3 +34,22 @@ flutter:
   assets:
     - assets/images/power-music-concept-portrait (2).jpg
     - assets/images/logo_1stdraft_forapp (1).png
+    - assets/images/aura star logo.png
+    - assets/images/Aura star level container.png
+    - assets/images/level analysis banner.png
+    - assets/images/bar.png
+    - assets/images/live.png
+    - assets/images/bottle.png
+    - assets/images/Flip a coin image.png
+    - assets/images/pepsi.png
+    - assets/images/Nike.png
+    - assets/images/H&M.png
+    - assets/images/Explore brand(clickable button).png
+    - assets/images/creator image.png
+    - assets/images/menu container.png
+    - assets/images/A.png
+    - assets/images/Home.png
+    - assets/images/challenge.png
+    - assets/images/Leaderboard.png
+    - assets/images/user.png
+    - assets/images/Live challenge Image container.png
