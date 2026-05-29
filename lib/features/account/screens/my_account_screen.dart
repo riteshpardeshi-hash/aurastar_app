@@ -1,9 +1,185 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
+
+// ── Achievement Cards Section ──────────────────────────────────────────────────
+
+class _AchievementCardsSection extends StatelessWidget {
+  final String uid;
+  const _AchievementCardsSection({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('achievement_cards')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData || snap.data!.docs.isEmpty) return const SizedBox.shrink();
+
+        final cards = snap.data!.docs;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'My Achievement Cards',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Tap a card to share it',
+              style: TextStyle(fontSize: 12, color: Colors.black45),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 220,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: cards.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) {
+                  final data = cards[i].data() as Map<String, dynamic>;
+                  return _AchievementCardTile(cardData: data);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AchievementCardTile extends StatefulWidget {
+  final Map<String, dynamic> cardData;
+  const _AchievementCardTile({required this.cardData});
+
+  @override
+  State<_AchievementCardTile> createState() => _AchievementCardTileState();
+}
+
+class _AchievementCardTileState extends State<_AchievementCardTile> {
+  final _cardKey = GlobalKey();
+  bool _sharing = false;
+
+  Future<void> _shareCard() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      Uint8List? bytes;
+      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        bytes = byteData?.buffer.asUint8List();
+      }
+
+      final challengeId = widget.cardData['challengeId'] as String? ?? '';
+      final challengeTitle = widget.cardData['challengeTitle'] as String? ?? '';
+      final auraPoints = (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
+      final link = '$kChallengeBaseUrl/$challengeId';
+      final message =
+          'I completed "$challengeTitle" on Aura and earned $auraPoints Aura Points! 🏆\n\n'
+          'Think you can beat me? Now it\'s your turn! 💪\n\n'
+          '👉 $link';
+
+      if (bytes != null) {
+        await Share.shareXFiles(
+          [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
+          text: message,
+        );
+      } else {
+        await Share.share(message);
+      }
+    } catch (_) {
+      // share cancelled or failed — ignore
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final challengeTitle = widget.cardData['challengeTitle'] as String? ?? '';
+    final challengeId = widget.cardData['challengeId'] as String? ?? '';
+    final auraPoints = (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
+    final username = widget.cardData['username'] as String? ?? '';
+
+    return GestureDetector(
+      onTap: _shareCard,
+      child: Stack(
+        children: [
+          // FittedBox scales the full-size card to fit the tile area.
+          // RepaintBoundary wraps the full-size card so the captured
+          // screenshot is at full resolution (288×~380 logical px at 3x).
+          SizedBox(
+            width: 196,
+            height: 220,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              alignment: Alignment.topLeft,
+              child: RepaintBoundary(
+                key: _cardKey,
+                child: AchievementCardView(
+                  challengeTitle: challengeTitle,
+                  challengeId: challengeId,
+                  auraPoints: auraPoints,
+                  username: username,
+                ),
+              ),
+            ),
+          ),
+          if (_sharing)
+            Positioned(
+              width: 196,
+              height: 220,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF7B2CBF), strokeWidth: 2),
+                ),
+              ),
+            ),
+          Positioned(
+            bottom: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7B2CBF).withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.share_rounded, color: Colors.white, size: 11),
+                  SizedBox(width: 4),
+                  Text('Share', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── MyAccountScreen ────────────────────────────────────────────────────────────
 
 class MyAccountScreen extends StatelessWidget {
   const MyAccountScreen({super.key});
@@ -354,6 +530,8 @@ class MyAccountScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    _AchievementCardsSection(uid: user.uid),
                     const SizedBox(height: 24),
                     const Text(
                       "My Videos",

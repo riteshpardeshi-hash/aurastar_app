@@ -1,4 +1,23 @@
 {
+  "hosting": {
+    "site": "aura-app-efae1",
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          { "key": "Content-Type", "value": "application/json" }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/challenge/**",
+        "destination": "/challenge/index.html"
+      }
+    ]
+  },
   "functions": {
     "source": "functions",
     "runtime": "nodejs20"

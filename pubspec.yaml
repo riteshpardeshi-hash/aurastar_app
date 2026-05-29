@@ -21,6 +21,7 @@ dependencies:
   video_thumbnail: ^0.5.3
   image_picker: ^1.1.2
   share_plus: ^10.0.0
+  app_links: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -53,3 +54,27 @@ flutter:
     - assets/images/Leaderboard.png
     - assets/images/user.png
     - assets/images/Live challenge Image container.png
+    - assets/images/Splash screen/BG.png
+    - assets/images/Splash screen/bg 2.png
+    - assets/images/Splash screen/Aura arena.png
+    - assets/images/Splash screen/logo.png
+    - assets/images/Splash screen/Play score flex.png
+    - assets/images/Splash screen/Star icon.png
+    - assets/images/Splash screen/Orb.png
+    - assets/images/Splash screen/Charging your aura.png
+    - assets/images/Splash screen/See It. Copy It. Slay It.png
+    - assets/images/Splash screen/Copy the challenge as close as you can.png
+    - assets/images/Splash screen/ICON.png
+    - assets/images/Splash screen/On page scroll icon.png
+    - assets/images/Splash screen/Grey scroll icon.png
+    - assets/images/Splash screen/BG 3.png
+    - assets/images/Splash screen/bg 4.png
+    - assets/images/Splash screen/Crown.png
+    - assets/images/Splash screen/Star icon 2.png
+    - assets/images/Splash screen/headline.png
+    - assets/images/Splash screen/headline 2.png
+    - assets/images/Splash screen/Subhead.png
+    - assets/images/Splash screen/subtext.png
+    - assets/images/Splash screen/button.png
+    - assets/images/Splash screen/start text.png
+    - assets/images/Splash screen/Double lines.png

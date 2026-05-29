@@ -153,7 +153,7 @@ exports.generateScoringRubric = onDocumentCreated('challenges/{challengeId}', as
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const result = await model.generateContent({
+    const checklistResult = await model.generateContent({
       contents: [{
         role: 'user',
         parts: [
@@ -184,18 +184,53 @@ Output ONLY a JSON array of exactly 15 strings — no explanation, no title, not
       generationConfig: { responseMimeType: 'application/json' },
     });
 
-    const checklist = JSON.parse(result.response.text().trim());
+    const checklist = JSON.parse(checklistResult.response.text().trim());
 
     if (!Array.isArray(checklist) || checklist.length === 0) {
       throw new Error('Gemini did not return a valid checklist array.');
     }
 
+    const promptResult = await model.generateContent({
+      contents: [{
+        role: 'user',
+        parts: [
+          { fileData: { mimeType: 'video/mp4', fileUri: refFile.uri } },
+          {
+            text: `Watch this reference video for the challenge: "${challenge.title}"
+${challenge.description ? `Description: ${challenge.description}` : ''}
+${challenge.instructions ? `Instructions: ${challenge.instructions}` : ''}
+
+Your job: Write a scoring prompt that will be used by an AI judge to evaluate user-submitted videos for this challenge.
+
+The prompt you write will be appended after two videos (the reference video and the user's submission video) and sent to an AI. It must:
+1. Tell the AI what specific actions, steps, and quality standards to look for (derived from what you see in the reference video)
+2. Describe a strict 0–100 scoring rubric with clear thresholds
+3. End with an instruction to respond with ONLY this JSON: {"score": <integer 0-100>, "short_feedback": "<one sentence what was done well> <one sentence what was missing or wrong>"}
+
+Rules for the prompt:
+- Be specific about observable actions (body positions, object use, sequence, counts, timing)
+- Be strict: partial completion should score below 50
+- Reference "the REFERENCE video" and "the USER SUBMISSION" by those exact names
+- Do NOT wrap the prompt in JSON — output plain text only
+- Do NOT include any preamble or explanation — output only the prompt text itself`,
+          },
+        ],
+      }],
+    });
+
+    const aiScoringPrompt = promptResult.response.text().trim();
+
+    if (!aiScoringPrompt) {
+      throw new Error('Gemini did not return a valid scoring prompt.');
+    }
+
     await challengeRef.update({
       aiScoringChecklist: checklist,
+      aiScoringPrompt,
       aiRubricGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    console.log(`[generateScoringRubric] Checklist saved for ${challengeId} (${checklist.length} questions).`);
+    console.log(`[generateScoringRubric] Checklist and scoring prompt saved for ${challengeId} (${checklist.length} questions).`);
 
   } catch (err) {
     console.error(`[generateScoringRubric] Error for ${challengeId}:`, err.message);

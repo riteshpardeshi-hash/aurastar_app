@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import '../widgets/achievement_card.dart';
 import 'package:video_player/video_player.dart';
 import '../../video/screens/preview_screen.dart';
 import 'camera_screen.dart';
@@ -94,7 +95,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   }
 
   void _share() {
-    Share.share('Check out this challenge on Aura: "${widget.title}" 🌟\n${widget.videoUrl}');
+    final link = '$kChallengeBaseUrl/${widget.challengeId}';
+    Share.share(
+      'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
+      'Think you can complete it? 💪\n\n'
+      '👉 Join here: $link',
+    );
   }
 
   void _enterFullscreen() {
@@ -248,7 +254,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         child: Align(
                           alignment: Alignment.topRight,
                           child: IconButton(
-                            icon: const Icon(Icons.fullscreen_exit, color: Colors.white, size: 32),
+                            icon: const Icon(Icons.close, color: Colors.white, size: 32),
                             onPressed: _exitFullscreen,
                           ),
                         ),

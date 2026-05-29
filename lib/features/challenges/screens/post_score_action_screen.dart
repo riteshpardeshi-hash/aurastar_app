@@ -175,6 +175,10 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
         foregroundColor: Colors.white,
         title: const Text('Your Result'),
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: _navigateToDashboard,
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(

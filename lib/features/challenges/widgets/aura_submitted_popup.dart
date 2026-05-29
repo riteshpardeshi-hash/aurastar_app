@@ -1,10 +1,24 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:share_plus/share_plus.dart';
+import 'achievement_card.dart';
 
 class AuraSubmittedPopup extends StatefulWidget {
   final String submissionId;
-  const AuraSubmittedPopup({super.key, required this.submissionId});
+  final String challengeTitle;
+  final String challengeId;
+
+  const AuraSubmittedPopup({
+    super.key,
+    required this.submissionId,
+    required this.challengeTitle,
+    required this.challengeId,
+  });
 
   @override
   State<AuraSubmittedPopup> createState() => _AuraSubmittedPopupState();
@@ -19,6 +33,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   bool _timedOut = false;
   Timer? _timeoutTimer;
   StreamSubscription<DocumentSnapshot>? _sub;
+
+  String _username = '';
+  bool _isSharingCard = false;
+  bool _cardSaved = false;
+  final _cardKey = GlobalKey();
 
   late AnimationController _enterCtrl;
   late AnimationController _scanCtrl;
@@ -35,7 +54,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   late Animation<double> _pulseAnim;
   late Animation<double> _resultScale;
   late Animation<double> _resultFade;
-  late Animation<double> _countAnim;
 
   @override
   void initState() {
@@ -58,7 +76,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
     _resultScale = CurvedAnimation(parent: _resultEnterCtrl, curve: Curves.elasticOut);
     _resultFade = CurvedAnimation(parent: _resultEnterCtrl, curve: Curves.easeIn);
-    _countAnim = CurvedAnimation(parent: _countCtrl, curve: Curves.easeOut);
 
     _enterCtrl.forward();
 
@@ -80,23 +97,82 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
         final counted = data['isCountedForDailyAuras'] as bool? ?? false;
         final reason = data['aiReason'] as String? ?? '';
+        final uname = data['username'] as String? ?? 'User';
         _timeoutTimer?.cancel();
         setState(() {
           _resultStatus = status;
           _netAurasAwarded = netAwarded;
           _isCountedForDailyAuras = counted;
           _aiReason = reason;
+          _username = uname;
         });
         _resultEnterCtrl.forward();
         if (status == 'approved') {
           _countCtrl.forward();
           _particleCtrl.forward();
+          _saveCardToProfile();
+        } else {
+          // auto-close rejected/error after 8 seconds
+          Future.delayed(const Duration(seconds: 8), () {
+            if (mounted) Navigator.of(context).pop(true);
+          });
         }
-        Future.delayed(const Duration(seconds: 6), () {
-          if (mounted) Navigator.of(context).pop(true);
-        });
       }
     });
+  }
+
+  Future<void> _saveCardToProfile() async {
+    if (_cardSaved) return;
+    _cardSaved = true;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('achievement_cards')
+        .doc(widget.submissionId)
+        .set({
+      'submissionId': widget.submissionId,
+      'challengeId': widget.challengeId,
+      'challengeTitle': widget.challengeTitle,
+      'auraPoints': _netAurasAwarded,
+      'username': _username,
+      'createdAt': Timestamp.now(),
+    });
+  }
+
+  Future<void> _shareCard() async {
+    if (_isSharingCard) return;
+    setState(() => _isSharingCard = true);
+
+    try {
+      Uint8List? bytes;
+      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        bytes = byteData?.buffer.asUint8List();
+      }
+
+      final challengeLink = '$kChallengeBaseUrl/${widget.challengeId}';
+      final message =
+          'I just completed "${widget.challengeTitle}" on Aura and earned $_netAurasAwarded Aura Points! 🏆\n\n'
+          'Think you can beat me? Now it\'s your turn! 💪\n\n'
+          '👉 Join the challenge:\n$challengeLink';
+
+      if (bytes != null) {
+        await Share.shareXFiles(
+          [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
+          text: message,
+        );
+      } else {
+        await Share.share(message);
+      }
+    } catch (_) {
+      // share cancelled or failed — ignore
+    } finally {
+      if (mounted) setState(() => _isSharingCard = false);
+    }
   }
 
   @override
@@ -114,20 +190,22 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     super.dispose();
   }
 
+  // ── Particles (approved state only) ──────────────────────────────────────────
+
   List<Widget> _buildParticles() {
     const particles = <List<double>>[
       [18.0, 60.0, 14.0],
-      [255.0, 45.0, 10.0],
+      [295.0, 45.0, 10.0],
       [4.0, 160.0, 12.0],
-      [268.0, 170.0, 9.0],
+      [308.0, 170.0, 9.0],
       [95.0, 12.0, 16.0],
-      [182.0, 18.0, 10.0],
-      [145.0, 350.0, 12.0],
-      [48.0, 320.0, 8.0],
-      [238.0, 305.0, 14.0],
-      [125.0, 370.0, 10.0],
-      [28.0, 260.0, 8.0],
-      [262.0, 230.0, 11.0],
+      [220.0, 18.0, 10.0],
+      [145.0, 490.0, 12.0],
+      [48.0, 460.0, 8.0],
+      [270.0, 445.0, 14.0],
+      [155.0, 510.0, 10.0],
+      [28.0, 360.0, 8.0],
+      [298.0, 330.0, 11.0],
     ];
     return particles.asMap().entries.map((entry) {
       final idx = entry.key;
@@ -161,6 +239,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       );
     }).toList();
   }
+
+  // ── Reviewing phase ───────────────────────────────────────────────────────────
 
   Widget _buildReviewingPhase() {
     return Column(
@@ -289,6 +369,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
   }
 
+  // ── Result phase ──────────────────────────────────────────────────────────────
+
   Widget _buildResultPhase() {
     return ScaleTransition(
       scale: _resultScale,
@@ -303,7 +385,133 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
   }
 
+  // ── Approved: achievement card ────────────────────────────────────────────────
+
   Widget _buildApprovedContent() {
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          RepaintBoundary(
+            key: _cardKey,
+            child: AchievementCardView(
+              challengeTitle: widget.challengeTitle,
+              challengeId: widget.challengeId,
+              auraPoints: _netAurasAwarded,
+              username: _username,
+            ),
+          ),
+          if (_aiReason.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                _aiReason,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isCountedForDailyAuras
+                  ? Colors.greenAccent.withValues(alpha: 0.12)
+                  : Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _isCountedForDailyAuras
+                    ? Colors.greenAccent.withValues(alpha: 0.35)
+                    : Colors.orange.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Text(
+              _isCountedForDailyAuras
+                  ? '✓  Counted in your top scores today'
+                  : "Flex score — didn't enter your top scores today",
+              style: TextStyle(
+                color: _isCountedForDailyAuras ? Colors.greenAccent : Colors.orange,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildShareButton(),
+              const SizedBox(width: 10),
+              _buildContinueButton(),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShareButton() {
+    return GestureDetector(
+      onTap: _isSharingCard ? null : _shareCard,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
+          ),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF7B2CBF).withValues(alpha: 0.45),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+          ],
+        ),
+        child: _isSharingCard
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              )
+            : const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.share_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Share Card',
+                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildContinueButton() {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(true),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: const Text(
+          'Continue',
+          style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  // ── Rejected ──────────────────────────────────────────────────────────────────
+
+  Widget _buildRejectedContent() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -312,78 +520,44 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           height: 104,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFE066), Color(0xFFFF9500)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(color: const Color(0xFFFFD700).withValues(alpha: 0.65), blurRadius: 28, spreadRadius: 6),
-            ],
+            color: const Color(0xFF1A0000),
+            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 2),
+            boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 24, spreadRadius: 4)],
           ),
-          child: const Icon(Icons.star_rounded, color: Colors.white, size: 58),
+          child: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 56),
         ),
-        const SizedBox(height: 14),
-        const Text('Video Approved!', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        AnimatedBuilder(
-          animation: _countAnim,
-          builder: (_, __) {
-            final displayed = (_netAurasAwarded * _countAnim.value).round();
-            return Text(
-              '+$displayed',
-              style: const TextStyle(
-                color: Color(0xFFFFD700),
-                fontSize: 60,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-              ),
-            );
-          },
-        ),
-        const Text(
-          'AURA POINTS',
-          style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2.5),
-        ),
-        if (_aiReason.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              _aiReason,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: _isCountedForDailyAuras
-                ? Colors.greenAccent.withValues(alpha: 0.12)
-                : Colors.orange.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _isCountedForDailyAuras
-                  ? Colors.greenAccent.withValues(alpha: 0.35)
-                  : Colors.orange.withValues(alpha: 0.35),
-            ),
-          ),
+        const SizedBox(height: 18),
+        const Text('Video Rejected', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            _isCountedForDailyAuras
-                ? '✓  Counted in your top scores today'
-                : "Flex score — didn't enter your top scores today",
-            style: TextStyle(
-              color: _isCountedForDailyAuras ? Colors.greenAccent : Colors.orange,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+            _aiReason.isNotEmpty ? _aiReason : 'This video didn\'t meet the challenge criteria.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
+          ),
+        ),
+        const SizedBox(height: 20),
+        GestureDetector(
+          onTap: () => Navigator.of(context).pop(true),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+            ),
+            child: const Text(
+              'Try again with a better video',
+              style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
         ),
       ],
     );
   }
+
+  // ── AI error ──────────────────────────────────────────────────────────────────
 
   Widget _buildErrorContent() {
     return Column(
@@ -428,53 +602,15 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
   }
 
-  Widget _buildRejectedContent() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 104,
-          height: 104,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF1A0000),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 2),
-            boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 24, spreadRadius: 4)],
-          ),
-          child: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 56),
-        ),
-        const SizedBox(height: 18),
-        const Text('Video Rejected', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _aiReason.isNotEmpty ? _aiReason : 'This video didn\'t meet the challenge criteria.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
-          ),
-          child: const Text(
-            'Try again with a better video',
-            style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
-          ),
-        ),
-      ],
-    );
-  }
+  // ── Build ──────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final isApproved = _resultStatus == 'approved';
+    final dialogH = isApproved ? 560.0 : 410.0;
+
     return GestureDetector(
-      onTap: () => Navigator.of(context).pop(true),
+      onTap: isApproved ? null : () => Navigator.of(context).pop(true),
       behavior: HitTestBehavior.opaque,
       child: Center(
         child: GestureDetector(
@@ -486,14 +622,15 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               child: Material(
                 color: Colors.transparent,
                 child: SizedBox(
-                  width: 300,
-                  height: 410,
+                  width: 320,
+                  height: dialogH,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Container(
-                        width: 300,
-                        height: 410,
+                        width: 320,
+                        height: dialogH,
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(28),
                           gradient: const LinearGradient(
