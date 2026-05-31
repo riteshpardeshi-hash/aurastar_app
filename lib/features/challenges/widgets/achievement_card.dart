@@ -43,7 +43,7 @@ class AchievementCardView extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('assets/images/aura star logo.png', width: 20, height: 20),
+              Image.asset('assets/images/Aura Arena Mono.png', width: 20, height: 20),
               const SizedBox(width: 7),
               const Text(
                 'AURA',

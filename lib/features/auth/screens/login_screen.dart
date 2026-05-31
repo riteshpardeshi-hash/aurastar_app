@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 40),
                     Image.asset(
-                      'assets/images/logo_1stdraft_forapp (1).png',
+                      'assets/images/Aura arena.png',
                       height: 100,
                       fit: BoxFit.contain,
                     ),

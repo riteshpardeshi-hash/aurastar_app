@@ -1,7 +1,7 @@
 name: aura_app
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.7.0
@@ -34,9 +34,8 @@ flutter:
 
   assets:
     - assets/images/power-music-concept-portrait (2).jpg
-    - assets/images/logo_1stdraft_forapp (1).png
-    - assets/images/aura star logo.png
-    - assets/images/Aura star level container.png
+    - assets/images/Aura arena.png
+    - assets/images/Aura Arena Mono.png
     - assets/images/level analysis banner.png
     - assets/images/bar.png
     - assets/images/live.png
@@ -48,7 +47,6 @@ flutter:
     - assets/images/Explore brand(clickable button).png
     - assets/images/creator image.png
     - assets/images/menu container.png
-    - assets/images/A.png
     - assets/images/Home.png
     - assets/images/challenge.png
     - assets/images/Leaderboard.png

@@ -30,7 +30,27 @@ class LevelUpSheet extends StatelessWidget {
           Stack(
             alignment: Alignment.center,
             children: [
-              Image.asset('assets/images/Aura star level container.png', width: 110, height: 110),
+              Container(
+                width: 110,
+                height: 110,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      tier.color.withValues(alpha: 0.35),
+                      tier.color.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  border: Border.all(color: tier.color.withValues(alpha: 0.70), width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: tier.color.withValues(alpha: 0.40),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

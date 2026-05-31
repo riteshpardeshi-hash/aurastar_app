@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../explore/screens/participant_profile_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -47,6 +48,80 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
+  void _showReportSheet(BuildContext context, String submissionId) {
+    const reasons = [
+      'Bullying / harassment',
+      'Unsafe act',
+      'Nudity / sexual content',
+      'Spam / fake account',
+      'Other',
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0D0D1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Report Video',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            const Text('Why are you reporting this?',
+                style: TextStyle(color: Colors.white54, fontSize: 13)),
+            const SizedBox(height: 16),
+            ...reasons.map((r) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(r,
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 14)),
+                  trailing: const Icon(Icons.chevron_right_rounded,
+                      color: Colors.white24, size: 18),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await FirebaseFirestore.instance
+                        .collection('reports')
+                        .add({
+                      'submissionId': submissionId,
+                      'reportedBy': _uid,
+                      'reason': r,
+                      'createdAt': Timestamp.now(),
+                    });
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text(
+                                'Report submitted. Thank you.')),
+                      );
+                    }
+                  },
+                )),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,7 +132,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         titleSpacing: 0,
         title: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Image.asset('assets/images/aura star logo.png', height: 30),
+          child: Image.asset('assets/images/Aura Arena Mono.png', height: 30),
         ),
         centerTitle: false,
         bottom: TabBar(
@@ -130,6 +205,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   Widget _buildCard(String submissionId, Map<String, dynamic> data) {
     final username = data['username'] as String? ?? 'User';
+    final userId = data['userId'] as String? ?? '';
     final challengeTitle = data['challengeTitle'] as String? ?? 'Challenge';
     final challengeId = data['challengeId'] as String? ?? '';
     final videoUrl = data['videoUrl'] as String? ?? '';
@@ -153,15 +229,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: _accent.withValues(alpha: 0.3),
-                  child: Text(
-                    username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                // Tappable avatar → participant profile
+                GestureDetector(
+                  onTap: userId.isNotEmpty
+                      ? () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  ParticipantProfileScreen(userId: userId),
+                            ),
+                          )
+                      : null,
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: _accent.withValues(alpha: 0.3),
+                    child: Text(
+                      username.isNotEmpty ? username[0].toUpperCase() : 'U',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
                 ),
@@ -170,15 +258,44 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(username,
+                      // Tappable username → participant profile
+                      GestureDetector(
+                        onTap: userId.isNotEmpty
+                            ? () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ParticipantProfileScreen(
+                                        userId: userId),
+                                  ),
+                                )
+                            : null,
+                        child: Text(username,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14)),
+                      ),
+                      // Tappable challenge title → challenge detail
+                      GestureDetector(
+                        onTap: challengeId.isNotEmpty
+                            ? () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ChallengeDetail(
+                                      title: challengeTitle,
+                                      instructions: '',
+                                      videoUrl: videoUrl,
+                                      challengeId: challengeId,
+                                    ),
+                                  ),
+                                )
+                            : null,
+                        child: Text(
+                          challengeTitle,
                           style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14)),
-                      Text(
-                        challengeTitle,
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
-                        overflow: TextOverflow.ellipsis,
+                              color: Color(0xFFBB6BD9), fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -200,6 +317,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                       ),
                     ),
                   ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => _showReportSheet(context, submissionId),
+                  child: const Icon(Icons.more_vert_rounded,
+                      color: Colors.white38, size: 20),
+                ),
               ],
             ),
           ),

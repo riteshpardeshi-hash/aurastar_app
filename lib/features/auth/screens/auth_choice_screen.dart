@@ -35,7 +35,7 @@ class AuthChoiceScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Image.asset(
-                    'assets/images/logo_1stdraft_forapp (1).png',
+                    'assets/images/Aura arena.png',
                     height: 100,
                     fit: BoxFit.contain,
                   ),

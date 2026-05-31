@@ -1,247 +1,732 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../../features/search/search_screen.dart';
+import '../../../features/leaderboard/leaderboard_screen.dart';
+import '../../../features/account/screens/my_account_screen.dart';
+import '../../../features/explore/screens/explore_creators_screen.dart';
+import '../../../features/home/screens/home_feed_screen.dart';
 import 'challenge_detail.dart';
 
-class AllGeneralChallengesScreen extends StatefulWidget {
+class AllGeneralChallengesScreen extends StatelessWidget {
   const AllGeneralChallengesScreen({super.key});
 
-  @override
-  State<AllGeneralChallengesScreen> createState() => _AllGeneralChallengesScreenState();
-}
-
-class _AllGeneralChallengesScreenState extends State<AllGeneralChallengesScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  final Set<String> _selectedCategories = {};
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
+  static const _bg = Color(0xFF000000);
+  static const _accent = Color(0xFF7B2CBF);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text('Live Challenges', style: TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+      backgroundColor: _bg,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search challenges...',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.white54),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF1A0533),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                // ── Search bar ──────────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: SafeArea(
+                    bottom: false,
+                    child: _buildSearchBar(context),
+                  ),
                 ),
-              ),
-              onChanged: (value) => setState(() => _searchQuery = value.trim().toLowerCase()),
+
+                // ── Top Picks For You ────────────────────────────────────────
+                SliverToBoxAdapter(
+                    child: _TopPicksSection()),
+
+                // ── Score More Aura (brand) ──────────────────────────────────
+                SliverToBoxAdapter(
+                    child: _ScoreMoreAuraSection()),
+
+                // ── Featured brand card ──────────────────────────────────────
+                SliverToBoxAdapter(
+                    child: _FeaturedCard()),
+
+                // ── All challenges grid ──────────────────────────────────────
+                SliverToBoxAdapter(
+                    child: _AllChallengesGrid()),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              ],
             ),
           ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('challenges')
-                  .where('creatorId', isEqualTo: 'system')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final allDocs = snapshot.data?.docs ?? [];
+          _buildBottomNav(context),
+        ],
+      ),
+    );
+  }
 
-                // Collect unique categories from the fetched docs
-                final categories = <String>{};
-                for (final doc in allDocs) {
-                  final cat = (doc.data() as Map<String, dynamic>)['category'] as String?;
-                  if (cat != null && cat.isNotEmpty) categories.add(cat);
-                }
-                final sortedCategories = categories.toList()..sort();
-
-                // Apply search + category filters
-                final docs = allDocs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  if (_searchQuery.isNotEmpty) {
-                    final title = (data['title'] ?? '').toString().toLowerCase();
-                    final description = (data['description'] ?? '').toString().toLowerCase();
-                    if (!title.contains(_searchQuery) && !description.contains(_searchQuery)) {
-                      return false;
-                    }
-                  }
-                  if (_selectedCategories.isNotEmpty) {
-                    final cat = (data['category'] as String?) ?? '';
-                    if (!_selectedCategories.contains(cat)) return false;
-                  }
-                  return true;
-                }).toList();
-
-                if (allDocs.isEmpty) {
-                  return const Center(
-                    child: Text('No challenges available.', style: TextStyle(color: Colors.white54)),
-                  );
-                }
-
-                return Column(
-                  children: [
-                    if (sortedCategories.isNotEmpty)
-                      SizedBox(
-                        height: 44,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          itemCount: sortedCategories.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, i) {
-                            final cat = sortedCategories[i];
-                            final selected = _selectedCategories.contains(cat);
-                            return GestureDetector(
-                              onTap: () => setState(() {
-                                if (selected) {
-                                  _selectedCategories.remove(cat);
-                                } else {
-                                  _selectedCategories.add(cat);
-                                }
-                              }),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: selected ? const Color(0xFF7B2CBF) : const Color(0xFF1A0533),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: selected ? const Color(0xFF7B2CBF) : const Color(0xFF4A1A7A),
-                                  ),
-                                ),
-                                child: Text(
-                                  cat,
-                                  style: TextStyle(
-                                    color: selected ? Colors.white : Colors.white60,
-                                    fontSize: 13,
-                                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    if (docs.isEmpty)
-                      Expanded(
-                        child: Center(
-                          child: Text(
-                            _selectedCategories.isNotEmpty || _searchQuery.isNotEmpty
-                                ? 'No challenges match your filters'
-                                : 'No challenges available.',
-                            style: const TextStyle(color: Colors.white54),
-                          ),
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.85,
-                          ),
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            final data = doc.data() as Map<String, dynamic>;
-                            final title = data['title'] ?? 'Challenge';
-                            return GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ChallengeDetail(
-                                    title: title,
-                                    instructions: data['instructions'] ?? 'No instructions',
-                                    videoUrl: data['videoUrl'] ?? '',
-                                    challengeId: doc.id,
-                                  ),
-                                ),
-                              ),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF1A0533), Color(0xFF3A1C71)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(14),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Image.asset('assets/images/live.png', height: 22),
-                                    const Spacer(),
-                                    Text(
-                                      title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        height: 1.2,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    if ((data['description'] ?? '').toString().isNotEmpty)
-                                      Text(
-                                        data['description'],
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.white60, fontSize: 12),
-                                      ),
-                                    const SizedBox(height: 8),
-                                    const Text(
-                                      'Tap to participate →',
-                                      style: TextStyle(
-                                        color: Color(0xFFBB6BD9),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                );
-              },
+  // ── Search bar ─────────────────────────────────────────────────────────────
+  Widget _buildSearchBar(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SearchScreen()),
+      ),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.search_rounded,
+                color: Colors.white.withValues(alpha: 0.40), size: 20),
+            const SizedBox(width: 10),
+            Text(
+              'Search challenges…',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.35), fontSize: 15),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Bottom nav ─────────────────────────────────────────────────────────────
+  Widget _buildBottomNav(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 68,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A0A),
+          border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItem(
+                  icon: Icons.sports_esports_outlined,
+                  label: 'Challenges',
+                  active: true,
+                  onTap: () {},
+                ),
+                _navItem(
+                  icon: Icons.store_outlined,
+                  label: 'Brand\nChallenges',
+                  onTap: () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const ExploreCreatorsScreen()),
+                  ),
+                ),
+                const SizedBox(width: 64),
+                _navItem(
+                  icon: Icons.emoji_events_outlined,
+                  label: 'Leaderboard',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const LeaderboardScreen()),
+                  ),
+                ),
+                _navItem(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Profile',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const MyAccountScreen()),
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              top: -22,
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HomeFeedScreen()),
+                ),
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                    border: Border.all(
+                        color: _accent.withValues(alpha: 0.55), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _accent.withValues(alpha: 0.45),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: ColorFiltered(
+                      colorFilter: const ColorFilter.mode(
+                          _accent, BlendMode.srcIn),
+                      child: Image.asset('assets/images/Aura Arena Mono.png',
+                          fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool active = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon,
+              color: active ? _accent : Colors.white54, size: 22),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: active ? _accent : Colors.white38, fontSize: 9),
           ),
         ],
       ),
     );
+  }
+}
+
+// ── Top Picks For You ──────────────────────────────────────────────────────────
+class _TopPicksSection extends StatelessWidget {
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Top Picks For You',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold)),
+              const Text('>>',
+                  style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 13,
+                      letterSpacing: 2)),
+            ],
+          ),
+        ),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('challenges')
+              .where('creatorId', isEqualTo: 'system')
+              .limit(6)
+              .snapshots(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox(height: 100);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 6,
+                  mainAxisSpacing: 6,
+                  childAspectRatio: 0.75,
+                ),
+                itemCount: docs.length,
+                itemBuilder: (context, i) {
+                  final doc = docs[i];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = data['title'] as String? ?? '';
+                  final videoUrl = data['videoUrl'] as String? ?? '';
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChallengeDetail(
+                          title: title,
+                          instructions:
+                              data['instructions'] as String? ?? '',
+                          videoUrl: videoUrl,
+                          challengeId: doc.id,
+                        ),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          VideoThumbnailWidget(
+                              videoUrl: videoUrl, fit: BoxFit.cover),
+                          Container(
+                            decoration: const BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                stops: [0.5, 1.0],
+                                colors: [Colors.transparent, Colors.black87],
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 6,
+                            left: 6,
+                            right: 6,
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+// ── Score More Aura ────────────────────────────────────────────────────────────
+class _ScoreMoreAuraSection extends StatelessWidget {
+  static const _accent = Color(0xFF7B2CBF);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Score More Aura',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold)),
+              const Text('>>',
+                  style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 13,
+                      letterSpacing: 2)),
+            ],
+          ),
+        ),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('challenges')
+              .where('creatorId', isNotEqualTo: 'system')
+              .limit(3)
+              .snapshots(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox(height: 8);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: List.generate(docs.length, (i) {
+                  final doc = docs[i];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = data['title'] as String? ?? '';
+                  final videoUrl = data['videoUrl'] as String? ?? '';
+                  final auraPoints =
+                      (data['auraPoints'] as num?)?.toInt() ?? 150;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                      child: GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChallengeDetail(
+                              title: title,
+                              instructions:
+                                  data['instructions'] as String? ?? '',
+                              videoUrl: videoUrl,
+                              challengeId: doc.id,
+                            ),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: SizedBox(
+                            height: 120,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                VideoThumbnailWidget(
+                                    videoUrl: videoUrl, fit: BoxFit.cover),
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      stops: [0.4, 1.0],
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 6,
+                                  left: 6,
+                                  right: 6,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.diamond,
+                                              color: _accent, size: 11),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            '$auraPoints',
+                                            style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+}
+
+// ── Featured brand card ────────────────────────────────────────────────────────
+class _FeaturedCard extends StatelessWidget {
+  static const _accent = Color(0xFF7B2CBF);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('challenges')
+          .where('creatorId', isNotEqualTo: 'system')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        // Fall back to system challenge if no brand challenges
+        if (docs.isEmpty) {
+          return _buildFallback(context);
+        }
+        final doc = docs.first;
+        final data = doc.data() as Map<String, dynamic>;
+        final title = data['title'] as String? ?? 'Challenge';
+        final instructions = data['instructions'] as String? ?? '';
+        final videoUrl = data['videoUrl'] as String? ?? '';
+        final auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 150;
+
+        return _buildCard(
+            context, doc.id, title, instructions, videoUrl, auraPoints);
+      },
+    );
+  }
+
+  Widget _buildFallback(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('challenges')
+          .where('creatorId', isEqualTo: 'system')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+        final doc = docs.first;
+        final data = doc.data() as Map<String, dynamic>;
+        return _buildCard(
+          context,
+          doc.id,
+          data['title'] as String? ?? '',
+          data['instructions'] as String? ?? '',
+          data['videoUrl'] as String? ?? '',
+          (data['auraPoints'] as num?)?.toInt() ?? 150,
+        );
+      },
+    );
+  }
+
+  Widget _buildCard(BuildContext context, String challengeId, String title,
+      String instructions, String videoUrl, int auraPoints) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChallengeDetail(
+            title: title,
+            instructions: instructions,
+            videoUrl: videoUrl,
+            challengeId: challengeId,
+          ),
+        ),
+      ),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+        height: 180,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: const Color(0xFF0D0020),
+          border: Border.all(color: _accent.withValues(alpha: 0.25)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Thumbnail on the right half
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 200,
+                child: VideoThumbnailWidget(
+                    videoUrl: videoUrl, fit: BoxFit.cover),
+              ),
+              // Gradient from left (dark) to transparent
+              Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    stops: [0.0, 0.55, 0.85, 1.0],
+                    colors: [
+                      Color(0xFF0D0020),
+                      Color(0xFF0D0020),
+                      Color(0x880D0020),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              // Text content on the left
+              Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.5,
+                        height: 1.1,
+                      ),
+                    ),
+                    if (instructions.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        instructions,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            height: 1.4),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        const Icon(Icons.diamond,
+                            color: _accent, size: 20),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$auraPoints',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── All challenges 3-column grid ───────────────────────────────────────────────
+class _AllChallengesGrid extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('challenges')
+          .limit(30)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 5,
+              mainAxisSpacing: 5,
+              childAspectRatio: 0.72,
+            ),
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final doc = docs[i];
+              final data = doc.data() as Map<String, dynamic>;
+              final title = data['title'] as String? ?? '';
+              final videoUrl = data['videoUrl'] as String? ?? '';
+              final likes = (data['likes'] as List?)?.length ?? 0;
+              final views = (data['views'] as num?)?.toInt() ?? likes;
+
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChallengeDetail(
+                      title: title,
+                      instructions:
+                          data['instructions'] as String? ?? '',
+                      videoUrl: videoUrl,
+                      challengeId: doc.id,
+                    ),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      VideoThumbnailWidget(
+                          videoUrl: videoUrl, fit: BoxFit.cover),
+                      // Bottom gradient for views overlay
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 40,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [Colors.black87, Colors.transparent],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Views count
+                      Positioned(
+                        bottom: 6,
+                        left: 6,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.remove_red_eye_outlined,
+                                color: Colors.white70, size: 12),
+                            const SizedBox(width: 3),
+                            Text(
+                              _fmt(views),
+                              style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
   }
 }

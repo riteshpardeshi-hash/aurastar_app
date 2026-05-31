@@ -59,10 +59,26 @@ class LevelRewardsScreen extends StatelessWidget {
                     Stack(
                       alignment: Alignment.center,
                       children: [
-                        Image.asset(
-                          'assets/images/Aura star level container.png',
+                        Container(
                           width: 80,
                           height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                currentTier.color.withValues(alpha: 0.35),
+                                currentTier.color.withValues(alpha: 0.08),
+                              ],
+                            ),
+                            border: Border.all(color: currentTier.color.withValues(alpha: 0.70), width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: currentTier.color.withValues(alpha: 0.35),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
                         ),
                         Column(
                           mainAxisSize: MainAxisSize.min,

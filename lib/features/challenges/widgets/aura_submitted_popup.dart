@@ -288,7 +288,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(20),
-                          child: Image.asset('assets/images/aura star logo.png'),
+                          child: Image.asset('assets/images/Aura Arena Mono.png'),
                         ),
                         AnimatedBuilder(
                           animation: _scanPos,

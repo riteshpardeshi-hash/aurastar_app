@@ -58,67 +58,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
     );
   }
 
-  Future<void> _showLimitDialog() {
-    return showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.lock_clock_rounded, color: Color(0xFF7B2CBF), size: 24),
-            SizedBox(width: 10),
-            Text(
-              "Daily Limit Reached",
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-        content: const Text(
-          "You've submitted 3 challenges today.\nYour limit resets at midnight. Come back tomorrow!",
-          style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              backgroundColor: const Color(0xFF7B2CBF),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-            ),
-            child: const Text("Got it", style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> uploadVideo() async {
     try {
       setState(() => isUploading = true);
 
-      final user = FirebaseAuth.instance.currentUser;
+      final user = FirebaseAuth.instance.currentUser!;
       final file = File(widget.videoPath);
-
-      // ── Daily submission limit check (max 3 per day) ──────────────────────
-      final now = DateTime.now();
-      final startOfDay = DateTime(now.year, now.month, now.day);
-      final todayCount = await FirebaseFirestore.instance
-          .collection('submissions')
-          .where('userId', isEqualTo: user!.uid)
-          .where('createdAt',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-          .count()
-          .get();
-
-      if ((todayCount.count ?? 0) >= 3) {
-        setState(() => isUploading = false);
-        if (!mounted) return;
-        await _showLimitDialog();
-        return;
-      }
-      // ─────────────────────────────────────────────────────────────────────
 
       // Fetch username for feed display
       String username = 'User';

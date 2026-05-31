@@ -6,9 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
-import '../../auth/screens/login_screen.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
+import 'settings_screen.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -205,10 +205,26 @@ class MyAccountScreen extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Image.asset(
-            'assets/images/Aura star level container.png',
+          Container(
             width: 100,
             height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  tier.color.withValues(alpha: 0.35),
+                  tier.color.withValues(alpha: 0.08),
+                ],
+              ),
+              border: Border.all(color: tier.color.withValues(alpha: 0.70), width: 2.5),
+              boxShadow: [
+                BoxShadow(
+                  color: tier.color.withValues(alpha: 0.35),
+                  blurRadius: 14,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
           ),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -347,40 +363,11 @@ class MyAccountScreen extends StatelessWidget {
         title: const Text("My Account"),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final shouldLogout = await showDialog<bool>(
-                context: context,
-                builder: (context) {
-                  return AlertDialog(
-                    title: const Text("Logout"),
-                    content: const Text("Are you sure you want to log out?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text("Cancel"),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text("Logout"),
-                      ),
-                    ],
-                  );
-                },
-              );
-
-              if (shouldLogout != true) return;
-
-              await FirebaseAuth.instance.signOut();
-
-              if (!context.mounted) return;
-
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (route) => false,
-              );
-            },
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
           ),
         ],
       ),
