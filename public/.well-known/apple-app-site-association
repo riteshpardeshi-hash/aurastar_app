@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["RMATK329X8.com.onadsgroup.auraapp"],
+        "components": [
+          {
+            "/": "/challenge/*",
+            "comment": "Opens challenge detail page in the Aura app"
+          }
+        ]
+      }
+    ]
+  }
+}
