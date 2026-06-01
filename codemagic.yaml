@@ -9,6 +9,7 @@ workflows:
         BUNDLE_ID: "com.onadsgroup.auraapp"
         XCODE_WORKSPACE: "ios/Runner.xcworkspace"
         XCODE_SCHEME: "Runner"
+        TEAM_ID: "RMATK329X8"
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -17,12 +18,12 @@ workflows:
         script: |
           echo $CM_CERTIFICATE | base64 --decode > /tmp/certificate.p12
           security create-keychain -p "" build.keychain
-          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          security import /tmp/certificate.p12 -k build.keychain -P "$CM_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import /tmp/certificate.p12 -k build.keychain -P "$CM_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/xcodebuild
           security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security find-identity -v -p codesigning build.keychain
 
       - name: Set up provisioning profile
         script: |
@@ -38,15 +39,57 @@ workflows:
       - name: Install CocoaPods
         script: find . -name "Podfile" -execdir pod install \;
 
-      - name: Build Flutter iOS release
+      - name: Flutter build iOS release
         script: flutter build ios --release --no-codesign
 
-      - name: Build IPA
+      - name: Build and export IPA
         script: |
-          xcode-project use-profiles
-          xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+          # Get installed provisioning profile UUID
+          PROFILE_PATH=$(ls "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision | head -1)
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
+          echo "Using profile UUID: $PROFILE_UUID"
+
+          # Create export options plist
+          cat > /tmp/export_options.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>RMATK329X8</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.onadsgroup.auraapp</key>
+                  <string>$PROFILE_UUID</string>
+              </dict>
+          </dict>
+          </plist>
+          PLIST
+
+          # Archive
+          xcodebuild \
+            -workspace "$XCODE_WORKSPACE" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -archivePath /tmp/Runner.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="RMATK329X8" \
+            archive
+
+          # Export IPA
+          mkdir -p build/ios/ipa
+          xcodebuild -exportArchive \
+            -archivePath /tmp/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist /tmp/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
