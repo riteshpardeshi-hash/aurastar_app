@@ -79,7 +79,6 @@ workflows:
             -configuration Release \
             -archivePath /tmp/Runner.xcarchive \
             CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="RMATK329X8" \
             archive
