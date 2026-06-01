@@ -39,17 +39,12 @@ workflows:
       - name: Install CocoaPods
         script: find . -name "Podfile" -execdir pod install \;
 
-      - name: Flutter build iOS release
-        script: flutter build ios --release --no-codesign
-
       - name: Build and export IPA
         script: |
-          # Get installed provisioning profile UUID
           PROFILE_PATH=$(ls "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision | head -1)
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
           echo "Using profile UUID: $PROFILE_UUID"
 
-          # Create export options plist
           cat > /tmp/export_options.plist << PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -72,23 +67,8 @@ workflows:
           </plist>
           PLIST
 
-          # Archive
-          xcodebuild \
-            -workspace "$XCODE_WORKSPACE" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Release \
-            -archivePath /tmp/Runner.xcarchive \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="RMATK329X8" \
-            archive
-
-          # Export IPA
-          mkdir -p build/ios/ipa
-          xcodebuild -exportArchive \
-            -archivePath /tmp/Runner.xcarchive \
-            -exportPath build/ios/ipa \
-            -exportOptionsPlist /tmp/export_options.plist
+          flutter build ipa --release \
+            --export-options-plist=/tmp/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
