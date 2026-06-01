@@ -80,8 +80,6 @@ workflows:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="RMATK329X8" \
-            PROVISIONING_PROFILE="$PROFILE_UUID" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             archive
 
