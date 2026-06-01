@@ -51,5 +51,3 @@ workflows:
       app_store_connect:
         apple_id: $APP_APPLE_ID
         password: $APP_SPECIFIC_PASSWORD
-        submit_to_testflight: true
-        expire_build_days: 30
