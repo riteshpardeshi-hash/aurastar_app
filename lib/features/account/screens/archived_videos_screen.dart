@@ -65,6 +65,10 @@ class ArchivedVideosScreen extends StatelessWidget {
                   (data['auraPoints'] as num?)?.toInt() ?? 0;
               final aiScore = (data['aiScore'] as num?)?.toInt();
               final status = data['status'] as String? ?? 'pending';
+              final archiveDeleteAt =
+                  data['archiveDeleteAt'] as Timestamp?;
+              final countdownText =
+                  _countdownText(archiveDeleteAt);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -126,6 +130,25 @@ class ArchivedVideosScreen extends StatelessWidget {
                                 ),
                             ],
                           ),
+                          if (countdownText != null) ...[
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                const Icon(Icons.timer_outlined,
+                                    size: 11,
+                                    color: Colors.orangeAccent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  countdownText,
+                                  style: const TextStyle(
+                                    color: Colors.orangeAccent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -155,6 +178,17 @@ class ArchivedVideosScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String? _countdownText(Timestamp? archiveDeleteAt) {
+    if (archiveDeleteAt == null) return null;
+    final diff =
+        archiveDeleteAt.toDate().difference(DateTime.now());
+    if (diff.isNegative) return 'Deletes soon';
+    final days = diff.inDays;
+    if (days == 0) return 'Deletes today';
+    if (days == 1) return 'Deletes tomorrow';
+    return 'Deletes in $days days';
   }
 
   Future<void> _confirmShare(

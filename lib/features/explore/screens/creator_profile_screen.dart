@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../shared/widgets/follow_button.dart';
 import '../../challenges/screens/challenge_detail.dart';
 
 class CreatorProfileScreen extends StatelessWidget {
@@ -33,6 +34,8 @@ class CreatorProfileScreen extends StatelessWidget {
           final bio = userData['bio'] ?? '';
           final profileImageUrl = userData['profileImageUrl'] ?? '';
           final totalRewards = userData['totalRewards'] ?? 0;
+          final followerCount =
+              (userData['followerCount'] as num?)?.toInt() ?? 0;
 
           return CustomScrollView(
             slivers: [
@@ -87,10 +90,12 @@ class CreatorProfileScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              bio.isNotEmpty ? bio : "This brand has not added a bio yet.",
+                              bio.isNotEmpty ? bio : "This creator has not added a bio yet.",
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
                             ),
+                            const SizedBox(height: 14),
+                            FollowButton(targetUserId: creatorId),
                           ],
                         ),
                       ),
@@ -116,6 +121,15 @@ class CreatorProfileScreen extends StatelessWidget {
                         children: [
                           Row(
                             children: [
+                              Expanded(
+                                child: _statCard(
+                                  title: "Followers",
+                                  value: "$followerCount",
+                                  icon: Icons.people_rounded,
+                                  color: Colors.purple,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: _statCard(
                                   title: "Challenges",

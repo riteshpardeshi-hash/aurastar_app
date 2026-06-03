@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -15,6 +18,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _bioCtrl = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+
+  File? _pickedImage;
+  String _currentPhotoUrl = '';
 
   static const _accent = Color(0xFF7B2CBF);
   static const _bg = Color(0xFF080810);
@@ -35,7 +41,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameCtrl.text = data['name'] as String? ?? '';
     _usernameCtrl.text = data['username'] as String? ?? '';
     _bioCtrl.text = data['bio'] as String? ?? '';
+    _currentPhotoUrl = data['profileImageUrl'] as String? ?? '';
     setState(() => _loading = false);
+  }
+
+  Future<void> _pickPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0E0E1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Change Photo',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            _photoOption(Icons.camera_alt_rounded, 'Camera', ImageSource.camera),
+            const SizedBox(height: 12),
+            _photoOption(Icons.photo_library_rounded, 'Gallery', ImageSource.gallery),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final picked = await ImagePicker().pickImage(source: source, imageQuality: 80, maxWidth: 512);
+    if (picked != null && mounted) setState(() => _pickedImage = File(picked.path));
+  }
+
+  Widget _photoOption(IconData icon, String label, ImageSource source) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(context, source),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: _accent, size: 22),
+            const SizedBox(width: 14),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 15)),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -47,10 +112,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
     setState(() => _saving = true);
     final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    String photoUrl = _currentPhotoUrl;
+    if (_pickedImage != null) {
+      final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
+      await ref.putFile(_pickedImage!);
+      photoUrl = await ref.getDownloadURL();
+    }
+
     await FirebaseFirestore.instance.collection('users').doc(uid).update({
       'name': _nameCtrl.text.trim(),
       'username': _usernameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim(),
+      'profileImageUrl': photoUrl,
     });
     if (!mounted) return;
     setState(() => _saving = false);
@@ -107,31 +181,69 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Avatar placeholder
+                  // Avatar
                   Center(
-                    child: Container(
-                      width: 86,
-                      height: 86,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent.withValues(alpha: 0.40),
-                            blurRadius: 20,
-                            spreadRadius: 2,
+                    child: GestureDetector(
+                      onTap: _pickPhoto,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _accent.withValues(alpha: 0.40),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: _pickedImage != null
+                                  ? Image.file(_pickedImage!, fit: BoxFit.cover)
+                                  : _currentPhotoUrl.isNotEmpty
+                                      ? Image.network(_currentPhotoUrl, fit: BoxFit.cover)
+                                      : const Icon(Icons.person_rounded,
+                                          color: Colors.white, size: 44),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: const BoxDecoration(
+                                color: _accent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.camera_alt_rounded,
+                                  color: Colors.white, size: 15),
+                            ),
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.person_rounded,
-                          color: Colors.white, size: 40),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Change Photo',
+                      style: TextStyle(
+                        color: _accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
                   _label('Full Name'),
                   const SizedBox(height: 8),

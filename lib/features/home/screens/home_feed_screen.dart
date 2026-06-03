@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../explore/screens/creator_profile_screen.dart';
 import '../../explore/screens/participant_profile_screen.dart';
+import '../../video/screens/public_video_screen.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -22,7 +24,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -31,19 +33,25 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     super.dispose();
   }
 
-  Future<void> _toggleStar(String submissionId, List starredBy) async {
+  Future<void> _toggleStar(
+      String submissionId, List starredBy, String ownerId) async {
     if (_uid == null) return;
-    final ref = FirebaseFirestore.instance.collection('submissions').doc(submissionId);
     final isStarred = starredBy.contains(_uid);
-    if (isStarred) {
-      await ref.update({
-        'starredBy': FieldValue.arrayRemove([_uid]),
-        'starsCount': FieldValue.increment(-1),
-      });
-    } else {
-      await ref.update({
-        'starredBy': FieldValue.arrayUnion([_uid]),
-        'starsCount': FieldValue.increment(1),
+    final submissionRef =
+        FirebaseFirestore.instance.collection('submissions').doc(submissionId);
+    final delta = isStarred ? -1 : 1;
+
+    await submissionRef.update({
+      'starredBy': isStarred
+          ? FieldValue.arrayRemove([_uid])
+          : FieldValue.arrayUnion([_uid]),
+      'starsCount': FieldValue.increment(delta),
+    });
+
+    // Keep owner's starsReceived in sync (skip own videos)
+    if (ownerId.isNotEmpty && ownerId != _uid) {
+      FirebaseFirestore.instance.collection('users').doc(ownerId).update({
+        'starsReceived': FieldValue.increment(delta),
       });
     }
   }
@@ -142,16 +150,127 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          tabs: const [Tab(text: 'For You'), Tab(text: 'Trending')],
+          tabs: const [
+            Tab(text: 'For You'),
+            Tab(text: 'Following'),
+            Tab(text: 'Trending'),
+          ],
         ),
       ),
       body: TabBarView(
         controller: _tabs,
         children: [
           _buildFeed('createdAt'),
+          _buildFollowingFeed(),
           _buildFeed('starsCount'),
         ],
       ),
+    );
+  }
+
+  Widget _buildFollowingFeed() {
+    if (_uid == null) {
+      return const Center(
+        child: Text('Log in to see your following feed',
+            style: TextStyle(color: Colors.white38)),
+      );
+    }
+
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('follows')
+          .where('followerUserId', isEqualTo: _uid)
+          .limit(30)
+          .get(),
+      builder: (context, followSnap) {
+        if (followSnap.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: _accent));
+        }
+
+        final followedIds = (followSnap.data?.docs ?? [])
+            .map((d) =>
+                (d.data() as Map<String, dynamic>)['followedUserId']
+                    as String? ??
+                '')
+            .where((id) => id.isNotEmpty)
+            .toList();
+
+        if (followedIds.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.people_outline_rounded,
+                      color: Colors.white24, size: 52),
+                  SizedBox(height: 14),
+                  Text(
+                    "You're not following anyone yet",
+                    style:
+                        TextStyle(color: Colors.white38, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    'Follow players and creators to see their videos here',
+                    style:
+                        TextStyle(color: Colors.white24, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('submissions')
+              .where('userId', whereIn: followedIds)
+              .where('isPublic', isEqualTo: true)
+              .orderBy('createdAt', descending: true)
+              .limit(30)
+              .snapshots(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(
+                  child: CircularProgressIndicator(color: _accent));
+            }
+
+            final docs = snap.data?.docs ?? [];
+
+            if (docs.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.video_library_outlined,
+                        color: Colors.white24, size: 52),
+                    SizedBox(height: 14),
+                    Text(
+                      'No videos yet from people you follow',
+                      style: TextStyle(
+                          color: Colors.white38, fontSize: 16),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              itemCount: docs.length,
+              itemBuilder: (context, i) {
+                final doc = docs[i];
+                return _buildCard(
+                    doc.id, doc.data() as Map<String, dynamic>);
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -297,6 +416,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      if (challengeId.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        _SourceChip(challengeId: challengeId),
+                      ],
                     ],
                   ),
                 ),
@@ -327,23 +450,42 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             ),
           ),
 
-          // ── Video placeholder ────────────────────────────────────────────
-          Container(
-            height: 210,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  _accent.withValues(alpha: 0.14),
-                  Colors.black.withValues(alpha: 0.6),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+          // ── Video placeholder (tap to open full-screen player) ───────────
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PublicVideoScreen(
+                  submissionId: submissionId,
+                  videoUrl: videoUrl,
+                  username: username,
+                  userId: userId,
+                  challengeTitle: challengeTitle,
+                  challengeId: challengeId,
+                  challengeVideoUrl: videoUrl,
+                  initialStars: starsCount,
+                  initiallyStarred: isStarred,
+                  auraScore: aiScore,
+                ),
               ),
             ),
-            child: const Center(
-              child: Icon(Icons.play_circle_outline_rounded,
-                  color: Colors.white38, size: 60),
+            child: Container(
+              height: 210,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    _accent.withValues(alpha: 0.14),
+                    Colors.black.withValues(alpha: 0.6),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              child: const Center(
+                child: Icon(Icons.play_circle_outline_rounded,
+                    color: Colors.white60, size: 64),
+              ),
             ),
           ),
 
@@ -354,7 +496,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
               children: [
                 // Star button
                 GestureDetector(
-                  onTap: () => _toggleStar(submissionId, starredBy),
+                  onTap: () => _toggleStar(submissionId, starredBy, userId),
                   child: Row(
                     children: [
                       AnimatedSwitcher(
@@ -412,6 +554,112 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Source attribution chip ────────────────────────────────────────────────────
+
+class _SourceInfo {
+  final String label;
+  final String? creatorId; // null = official AURA ARENA challenge
+  const _SourceInfo(this.label, this.creatorId);
+}
+
+class _SourceChip extends StatelessWidget {
+  static final Map<String, Future<_SourceInfo>> _cache = {};
+
+  final String challengeId;
+  const _SourceChip({required this.challengeId});
+
+  static Future<_SourceInfo> _resolve(String id) {
+    return _cache.putIfAbsent(id, () async {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('challenges')
+            .doc(id)
+            .get();
+        if (!doc.exists) return const _SourceInfo('AURA ARENA', null);
+
+        final creatorId =
+            (doc.data()!['creatorId'] as String? ?? '').trim();
+
+        if (creatorId.isEmpty || creatorId == 'system') {
+          return const _SourceInfo('AURA ARENA', null);
+        }
+
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(creatorId)
+            .get();
+        final username =
+            ((userDoc.data() ?? {})['username'] as String? ?? '').trim();
+        return _SourceInfo(
+          username.isNotEmpty ? '@$username' : '@creator',
+          creatorId,
+        );
+      } catch (_) {
+        return const _SourceInfo('AURA ARENA', null);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_SourceInfo>(
+      future: _resolve(challengeId),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+
+        final info = snap.data!;
+        final isOfficial = info.creatorId == null;
+        final chipColor =
+            isOfficial ? const Color(0xFF7B2CBF) : const Color(0xFF4B6EF6);
+        final textColor =
+            isOfficial ? const Color(0xFFD4A8FF) : const Color(0xFF93B4FF);
+
+        return GestureDetector(
+          onTap: info.creatorId != null
+              ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CreatorProfileScreen(creatorId: info.creatorId!),
+                    ),
+                  )
+              : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: chipColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: chipColor.withValues(alpha: 0.40)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isOfficial
+                      ? Icons.auto_awesome_rounded
+                      : Icons.person_rounded,
+                  color: textColor,
+                  size: 9,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  info.label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

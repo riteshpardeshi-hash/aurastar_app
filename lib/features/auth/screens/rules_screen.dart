@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../dashboard/dashboard.dart';
+import 'setup_screen.dart';
 
 class RulesScreen extends StatelessWidget {
   const RulesScreen({super.key});
@@ -88,7 +88,7 @@ class RulesScreen extends StatelessWidget {
               GestureDetector(
                 onTap: () => Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (_) => const Dashboard()),
+                  MaterialPageRoute(builder: (_) => const SetupScreen()),
                 ),
                 child: Container(
                   width: double.infinity,

@@ -33,47 +33,63 @@ class UserVideoDetailScreen extends StatefulWidget {
 class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   final _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  bool _liked = false;
-  int _likeCount = 0;
-  bool _likeLoading = false;
+  bool _starred = false;
+  int _starsCount = 0;
+  bool _starLoading = false;
+  String _ownerId = '';
 
   @override
   void initState() {
     super.initState();
-    _loadLikes();
+    _loadStars();
   }
 
-  Future<void> _loadLikes() async {
+  Future<void> _loadStars() async {
     if (widget.submissionId.isEmpty) return;
     final doc = await FirebaseFirestore.instance
         .collection('submissions')
         .doc(widget.submissionId)
         .get();
     if (!doc.exists || !mounted) return;
-    final likes = List<String>.from(doc.data()?['likes'] ?? []);
+    final data = doc.data()!;
+    final starredBy = List<String>.from(data['starredBy'] ?? []);
     setState(() {
-      _liked = likes.contains(_uid);
-      _likeCount = likes.length;
+      _starred = starredBy.contains(_uid);
+      _starsCount = (data['starsCount'] as num?)?.toInt() ?? starredBy.length;
+      _ownerId = data['userId'] as String? ?? '';
     });
   }
 
-  Future<void> _toggleLike() async {
-    if (widget.submissionId.isEmpty || _likeLoading) return;
-    setState(() => _likeLoading = true);
+  Future<void> _toggleStar() async {
+    if (widget.submissionId.isEmpty || _starLoading) return;
+    setState(() => _starLoading = true);
 
     final ref = FirebaseFirestore.instance
         .collection('submissions')
         .doc(widget.submissionId);
+    final delta = _starred ? -1 : 1;
 
-    if (_liked) {
-      await ref.update({'likes': FieldValue.arrayRemove([_uid])});
-      if (mounted) setState(() { _liked = false; _likeCount--; });
-    } else {
-      await ref.update({'likes': FieldValue.arrayUnion([_uid])});
-      if (mounted) setState(() { _liked = true; _likeCount++; });
+    await ref.update({
+      'starredBy': _starred
+          ? FieldValue.arrayRemove([_uid])
+          : FieldValue.arrayUnion([_uid]),
+      'starsCount': FieldValue.increment(delta),
+    });
+
+    // Update owner's starsReceived (skip own videos)
+    if (_ownerId.isNotEmpty && _ownerId != _uid) {
+      FirebaseFirestore.instance.collection('users').doc(_ownerId).update({
+        'starsReceived': FieldValue.increment(delta),
+      });
     }
 
-    if (mounted) setState(() => _likeLoading = false);
+    if (mounted) {
+      setState(() {
+        _starred = !_starred;
+        _starsCount += delta;
+        _starLoading = false;
+      });
+    }
   }
 
   void _share() {
@@ -99,11 +115,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _LikeButton(
-                  liked: _liked,
-                  count: _likeCount,
-                  loading: _likeLoading,
-                  onTap: _toggleLike,
+                _StarButton(
+                  starred: _starred,
+                  count: _starsCount,
+                  loading: _starLoading,
+                  onTap: _toggleStar,
                 ),
                 const SizedBox(width: 32),
                 _ShareButton(onTap: _share),
@@ -216,14 +232,14 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   }
 }
 
-class _LikeButton extends StatelessWidget {
-  final bool liked;
+class _StarButton extends StatelessWidget {
+  final bool starred;
   final int count;
   final bool loading;
   final VoidCallback onTap;
 
-  const _LikeButton({
-    required this.liked,
+  const _StarButton({
+    required this.starred,
     required this.count,
     required this.loading,
     required this.onTap,
@@ -241,19 +257,20 @@ class _LikeButton extends StatelessWidget {
                 ? const SizedBox(
                     width: 28,
                     height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7B2CBF)),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Color(0xFF7B2CBF)),
                   )
                 : Icon(
-                    liked ? Icons.favorite : Icons.favorite_border,
-                    key: ValueKey(liked),
-                    color: liked ? const Color(0xFFE0245E) : Colors.grey,
+                    starred ? Icons.star_rounded : Icons.star_outline_rounded,
+                    key: ValueKey(starred),
+                    color: starred ? const Color(0xFFFFD700) : Colors.grey,
                     size: 28,
                   ),
           ),
           const SizedBox(height: 4),
           Text(
             '$count',
-            style: const TextStyle(fontSize: 13, color: Colors.black54),
+            style: const TextStyle(fontSize: 13, color: Colors.white54),
           ),
         ],
       ),

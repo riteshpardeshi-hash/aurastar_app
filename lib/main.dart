@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
 import 'firebase_options.dart';
 import 'features/challenges/screens/challenge_detail.dart';
@@ -46,26 +48,34 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _handleLink(Uri uri) async {
     final segments = uri.pathSegments;
-    // Expects paths like /challenge/{challengeId}
-    if (segments.length < 2 || segments[0] != 'challenge') return;
-    final challengeId = segments[1];
-    if (challengeId.isEmpty) return;
+    if (segments.length < 2) return;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(challengeId)
-        .get();
-    if (!doc.exists) return;
-
-    final data = doc.data()!;
-    _navigatorKey.currentState?.push(MaterialPageRoute(
-      builder: (_) => ChallengeDetail(
-        challengeId: challengeId,
-        title: data['title'] as String? ?? '',
-        instructions: data['instructions'] as String? ?? '',
-        videoUrl: data['videoUrl'] as String? ?? '',
-      ),
-    ));
+    if (segments[0] == 'challenge') {
+      final challengeId = segments[1];
+      if (challengeId.isEmpty) return;
+      final doc = await FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(challengeId)
+          .get();
+      if (!doc.exists) return;
+      final data = doc.data()!;
+      _navigatorKey.currentState?.push(MaterialPageRoute(
+        builder: (_) => ChallengeDetail(
+          challengeId: challengeId,
+          title: data['title'] as String? ?? '',
+          instructions: data['instructions'] as String? ?? '',
+          videoUrl: data['videoUrl'] as String? ?? '',
+        ),
+      ));
+    } else if (segments[0] == 'ref') {
+      final code = segments[1].trim().toUpperCase();
+      if (code.isEmpty) return;
+      // Only save for new (not yet logged-in) users — existing users are ignored
+      if (FirebaseAuth.instance.currentUser == null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('pending_referral_code', code);
+      }
+    }
   }
 
   @override
@@ -79,6 +89,26 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        fontFamily: 'ClashDisplay',
+        textTheme: const TextTheme(
+          displayLarge: TextStyle(fontFamily: 'ClashDisplay'),
+          displayMedium: TextStyle(fontFamily: 'ClashDisplay'),
+          displaySmall: TextStyle(fontFamily: 'ClashDisplay'),
+          headlineLarge: TextStyle(fontFamily: 'ClashDisplay'),
+          headlineMedium: TextStyle(fontFamily: 'ClashDisplay'),
+          headlineSmall: TextStyle(fontFamily: 'ClashDisplay'),
+          titleLarge: TextStyle(fontFamily: 'ClashDisplay'),
+          titleMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
+          titleSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
+          bodyLarge: TextStyle(fontFamily: 'SpaceGrotesk'),
+          bodyMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
+          bodySmall: TextStyle(fontFamily: 'SpaceGrotesk'),
+          labelLarge: TextStyle(fontFamily: 'SpaceGrotesk'),
+          labelMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
+          labelSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
+        ),
+      ),
       home: const SplashScreen(),
     );
   }

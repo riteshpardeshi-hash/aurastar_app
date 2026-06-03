@@ -18,6 +18,10 @@ class _SplashScreenState extends State<SplashScreen>
   late final List<AnimationController> _ctrl;
   late final AnimationController _orbPulse;
   late final Animation<double> _orbScale;
+  // Shared repeating animations for onboarding slides
+  late final AnimationController _iconGlow; // pulsing glow on icon circle
+  late final AnimationController _btnGlow;  // pulsing glow on Start Playing button
+  late final AnimationController _starSpin; // continuous slow rotation on star
   final List<Timer> _timers = [];
 
   static const _durations = [2800, 3000, 3000, 3200]; // ms per slide
@@ -28,12 +32,21 @@ class _SplashScreenState extends State<SplashScreen>
     _ctrl = List.generate(
       4,
       (_) => AnimationController(
-          vsync: this, duration: const Duration(milliseconds: 750)),
+          vsync: this, duration: const Duration(milliseconds: 850)),
     );
     _orbPulse = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1100));
     _orbScale = Tween<double>(begin: 0.80, end: 1.20).animate(
         CurvedAnimation(parent: _orbPulse, curve: Curves.easeInOut));
+    _iconGlow = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1600))
+      ..repeat(reverse: true);
+    _btnGlow = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1000))
+      ..repeat(reverse: true);
+    _starSpin = AnimationController(
+        vsync: this, duration: const Duration(seconds: 8))
+      ..repeat();
     _startSequence();
   }
 
@@ -57,9 +70,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   void _goToApp() {
-    for (final t in _timers) {
-      t.cancel();
-    }
+    for (final t in _timers) { t.cancel(); }
     if (!mounted) return;
     final user = FirebaseAuth.instance.currentUser;
     Navigator.of(context).pushReplacement(PageRouteBuilder<void>(
@@ -73,13 +84,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    for (final t in _timers) {
-      t.cancel();
-    }
-    for (final c in _ctrl) {
-      c.dispose();
-    }
+    for (final t in _timers) { t.cancel(); }
+    for (final c in _ctrl) { c.dispose(); }
     _orbPulse.dispose();
+    _iconGlow.dispose();
+    _btnGlow.dispose();
+    _starSpin.dispose();
     super.dispose();
   }
 
@@ -89,9 +99,15 @@ class _SplashScreenState extends State<SplashScreen>
     return Scaffold(
       backgroundColor: Colors.black,
       body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 500),
-        transitionBuilder: (child, anim) =>
-            FadeTransition(opacity: anim, child: child),
+        duration: const Duration(milliseconds: 600),
+        transitionBuilder: (child, anim) {
+          final scale = Tween<double>(begin: 0.94, end: 1.0).animate(
+              CurvedAnimation(parent: anim, curve: Curves.easeOut));
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+            child: ScaleTransition(scale: scale, child: child),
+          );
+        },
         child: KeyedSubtree(
           key: ValueKey(_slide),
           child: _buildSlide(_slide, size),
@@ -102,16 +118,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   Widget _buildSlide(int slide, Size size) {
     switch (slide) {
-      case 0:
-        return _screen1Logo(size);
-      case 1:
-        return _screen2SeeIt(size);
-      case 2:
-        return _screen3YourMoves(size);
-      case 3:
-        return _screen4ClimbBoard(size);
-      default:
-        return const SizedBox.shrink();
+      case 0:  return _screen1Logo(size);
+      case 1:  return _screen2SeeIt(size);
+      case 2:  return _screen3YourMoves(size);
+      case 3:  return _screen4ClimbBoard(size);
+      default: return const SizedBox.shrink();
     }
   }
 
@@ -130,7 +141,6 @@ class _SplashScreenState extends State<SplashScreen>
         children: [
           Image.asset('assets/images/Splash screen/BG.png', fit: BoxFit.cover),
 
-          // "Play. Score. Flex." – upper
           Positioned(
             top: size.height * 0.17,
             left: 0,
@@ -150,7 +160,6 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
 
-          // Star icon + AURA ARENA – center
           Center(
             child: FadeTransition(
               opacity: fade,
@@ -179,7 +188,6 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
 
-          // Orb + "Charging your aura…" – bottom
           Positioned(
             bottom: size.height * 0.10,
             left: 0,
@@ -217,198 +225,69 @@ class _SplashScreenState extends State<SplashScreen>
   // ───────────────────────────────────────────────────────────────────────────
   Widget _screen2SeeIt(Size size) {
     final c = _ctrl[1];
-    final fade = _fadeIn(c);
-    final up = _up(c);
     return AnimatedBuilder(
-      animation: c,
-      builder: (_, __) => Stack(
-        fit: StackFit.expand,
-        children: [
-          // Full-bleed background: person + purple portal + challenge cards
-          Image.asset(
-            'assets/images/Splash screen/bg 2.png',
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-          ),
+      animation: Listenable.merge([c, _iconGlow]),
+      builder: (_, __) {
+        final iconScale  = _iconEntrance(c);
+        final logoFade   = _logoEntrance(c);
+        final titleFade  = _titleEntrance(c);
+        final titleSlide = _titleSlideAnim(c);
+        final subFade    = _subtitleEntrance(c);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/Splash screen/onbarding-screen-bg.jpg',
+              fit: BoxFit.cover,
+            ),
 
-          // Gradient: image fades to black in lower half
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.40, 0.58, 0.74, 1.0],
-                  colors: [
-                    Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.50),
-                    Colors.black.withValues(alpha: 0.92),
-                    Colors.black,
-                  ],
+            // Logo fades in from top
+            Positioned(
+              top: size.height * 0.055,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: logoFade,
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/Splash screen/logo.png',
+                    width: size.width * 0.44,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          // Content
-          FadeTransition(
-            opacity: fade,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // AURA ARENA header
-                Positioned(
-                  top: size.height * 0.055,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/Splash screen/logo.png',
-                      width: size.width * 0.44,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-
-                // Bottom content block
-                Positioned(
-                  bottom: size.height * 0.042,
-                  left: size.width * 0.06,
-                  right: size.width * 0.06,
-                  child: SlideTransition(
-                    position: up,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Icon row with dividers
-                        _iconRow(
-                          size: size,
-                          icon: 'assets/images/Splash screen/ICON.png',
-                          iconSize: size.width * 0.12,
-                        ),
-                        SizedBox(height: size.height * 0.020),
-
-                        // Title (PNG asset — correct font)
-                        Image.asset(
-                          'assets/images/Splash screen/See It. Copy It. Slay It.png',
-                          width: size.width * 0.88,
+            // Staggered centered content
+            Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: size.width * 0.06),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Icon: elastic pop-in + glow ring
+                    ScaleTransition(
+                      scale: iconScale,
+                      child: _glowCircle(
+                        iconSize: size.width * 0.12,
+                        glowValue: _iconGlow.value,
+                        child: Image.asset(
+                          'assets/images/Splash screen/ICON.png',
+                          width: size.width * 0.12,
                           fit: BoxFit.contain,
                         ),
-                        SizedBox(height: size.height * 0.014),
-
-                        // Subtitle (PNG asset — correct font)
-                        Image.asset(
-                          'assets/images/Splash screen/Copy the challenge as close as you can.png',
-                          width: size.width * 0.82,
-                          fit: BoxFit.contain,
-                        ),
-                        SizedBox(height: size.height * 0.028),
-
-                        // Page dots — screen 1 of 3
-                        _dots(active: 0, size: size),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                    SizedBox(height: size.height * 0.028),
 
-  // ───────────────────────────────────────────────────────────────────────────
-  // Screen 3 — Your Moves. Your Score. Your Aura.
-  // ───────────────────────────────────────────────────────────────────────────
-  Widget _screen3YourMoves(Size size) {
-    final c = _ctrl[2];
-    final fade = _fadeIn(c);
-    final elastic = _elastic(c);
-    final up = _up(c);
-    return AnimatedBuilder(
-      animation: c,
-      builder: (_, __) => Stack(
-        fit: StackFit.expand,
-        children: [
-          // Neon 4-pointed star + floating crystals background
-          Image.asset(
-            'assets/images/Splash screen/BG 3.png',
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-          ),
-
-          // Gradient: fades to black toward bottom
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.38, 0.56, 0.72, 1.0],
-                  colors: [
-                    Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.black.withValues(alpha: 0.90),
-                    Colors.black,
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          FadeTransition(
-            opacity: fade,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // AURA ARENA header
-                Positioned(
-                  top: size.height * 0.055,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/Splash screen/logo.png',
-                      width: size.width * 0.44,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-
-                // Bottom content block
-                Positioned(
-                  bottom: size.height * 0.042,
-                  left: size.width * 0.06,
-                  right: size.width * 0.06,
-                  child: SlideTransition(
-                    position: up,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Star icon 2 with dividers
-                        _iconRow(
-                          size: size,
-                          icon: 'assets/images/Splash screen/Star icon 2.png',
-                          iconSize: size.width * 0.11,
-                          iconWidget: ScaleTransition(
-                            scale: elastic,
-                            child: Image.asset(
-                              'assets/images/Splash screen/Star icon 2.png',
-                              width: size.width * 0.11,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: size.height * 0.020),
-
-                        // "Your Moves. Your Score." — white bold text
-                        Text(
-                          'Your Moves.Your Score.',
+                    // Title: slides up
+                    FadeTransition(
+                      opacity: titleFade,
+                      child: SlideTransition(
+                        position: titleSlide,
+                        child: Text(
+                          'See It. Copy It. Slay It.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white,
@@ -418,34 +297,170 @@ class _SplashScreenState extends State<SplashScreen>
                             height: 1.1,
                           ),
                         ),
-
-                        // "Your Aura." — PNG asset (purple text, correct font)
-                        Image.asset(
-                          'assets/images/Splash screen/headline.png',
-                          width: size.width * 0.60,
-                          fit: BoxFit.contain,
-                        ),
-                        SizedBox(height: size.height * 0.010),
-
-                        // Subtitle PNG — "The closer you get, the higher your Aura."
-                        Image.asset(
-                          'assets/images/Splash screen/Subhead.png',
-                          width: size.width * 0.82,
-                          fit: BoxFit.contain,
-                        ),
-                        SizedBox(height: size.height * 0.028),
-
-                        // Page dots — screen 2 of 3
-                        _dots(active: 1, size: size),
-                      ],
+                      ),
                     ),
+                    SizedBox(height: size.height * 0.014),
+
+                    // Subtitle: fades in last
+                    FadeTransition(
+                      opacity: subFade,
+                      child: Text(
+                        'Copy the challenge as close as you can.\nAuraSense is watching.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: size.width * 0.038,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Dots fade in with subtitle
+            Positioned(
+              bottom: size.height * 0.05,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: subFade,
+                child: Center(child: _dots(active: 0, size: size)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Screen 3 — Your Moves. Your Score. Your Aura.
+  // ───────────────────────────────────────────────────────────────────────────
+  Widget _screen3YourMoves(Size size) {
+    final c = _ctrl[2];
+    return AnimatedBuilder(
+      animation: Listenable.merge([c, _iconGlow, _starSpin]),
+      builder: (_, __) {
+        final iconScale  = _iconEntrance(c);
+        final logoFade   = _logoEntrance(c);
+        final titleFade  = _titleEntrance(c);
+        final titleSlide = _titleSlideAnim(c);
+        final subFade    = _subtitleEntrance(c);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/Splash screen/onbarding-screen-bg.jpg',
+              fit: BoxFit.cover,
+            ),
+
+            Positioned(
+              top: size.height * 0.055,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: logoFade,
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/Splash screen/logo.png',
+                    width: size.width * 0.44,
+                    fit: BoxFit.contain,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
+
+            Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: size.width * 0.06),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Star: elastic pop + continuous slow rotation + glow
+                    ScaleTransition(
+                      scale: iconScale,
+                      child: _glowCircle(
+                        iconSize: size.width * 0.12,
+                        glowValue: _iconGlow.value,
+                        child: RotationTransition(
+                          turns: _starSpin,
+                          child: Image.asset(
+                            'assets/images/Splash screen/star motion.png',
+                            width: size.width * 0.12,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: size.height * 0.028),
+
+                    FadeTransition(
+                      opacity: titleFade,
+                      child: SlideTransition(
+                        position: titleSlide,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Your Moves.Your Score.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: size.width * 0.072,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
+                                height: 1.1,
+                              ),
+                            ),
+                            Text(
+                              'Your Aura.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: const Color(0xFF7B2CBF),
+                                fontSize: size.width * 0.072,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.5,
+                                height: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: size.height * 0.014),
+
+                    FadeTransition(
+                      opacity: subFade,
+                      child: Text(
+                        'The closer you get, the higher your Aura.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: size.width * 0.038,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            Positioned(
+              bottom: size.height * 0.05,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: subFade,
+                child: Center(child: _dots(active: 1, size: size)),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -454,89 +469,65 @@ class _SplashScreenState extends State<SplashScreen>
   // ───────────────────────────────────────────────────────────────────────────
   Widget _screen4ClimbBoard(Size size) {
     final c = _ctrl[3];
-    final fade = _fadeIn(c);
-    final elastic = _elastic(c);
-    final up = _up(c);
     return AnimatedBuilder(
-      animation: c,
-      builder: (_, __) => Stack(
-        fit: StackFit.expand,
-        children: [
-          // Three leaderboard player cards background
-          Image.asset(
-            'assets/images/Splash screen/bg 4.png',
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
-          ),
+      animation: Listenable.merge([c, _iconGlow, _btnGlow]),
+      builder: (_, __) {
+        final iconScale  = _iconEntrance(c);
+        final logoFade   = _logoEntrance(c);
+        final titleFade  = _titleEntrance(c);
+        final titleSlide = _titleSlideAnim(c);
+        final subFade    = _subtitleEntrance(c);
+        final btnFade    = _btnEntrance(c);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/Splash screen/onbarding-screen-bg.jpg',
+              fit: BoxFit.cover,
+            ),
 
-          // Gradient: fades to black
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.0, 0.36, 0.54, 0.70, 1.0],
-                  colors: [
-                    Colors.transparent,
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.black.withValues(alpha: 0.92),
-                    Colors.black,
-                  ],
+            Positioned(
+              top: size.height * 0.055,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: logoFade,
+                child: Center(
+                  child: Image.asset(
+                    'assets/images/Splash screen/logo.png',
+                    width: size.width * 0.44,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          FadeTransition(
-            opacity: fade,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // AURA ARENA header
-                Positioned(
-                  top: size.height * 0.055,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Image.asset(
-                      'assets/images/Splash screen/logo.png',
-                      width: size.width * 0.44,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
-
-                // Bottom content block
-                Positioned(
-                  bottom: size.height * 0.042,
-                  left: size.width * 0.06,
-                  right: size.width * 0.06,
-                  child: SlideTransition(
-                    position: up,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Crown with dividers
-                        _iconRow(
-                          size: size,
-                          icon: 'assets/images/Splash screen/Crown.png',
-                          iconSize: size.width * 0.11,
-                          iconWidget: ScaleTransition(
-                            scale: elastic,
-                            child: Image.asset(
-                              'assets/images/Splash screen/Crown.png',
-                              width: size.width * 0.11,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
+            Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: size.width * 0.06),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    ScaleTransition(
+                      scale: iconScale,
+                      child: _glowCircle(
+                        iconSize: size.width * 0.12,
+                        glowValue: _iconGlow.value,
+                        child: Image.asset(
+                          'assets/images/Splash screen/Crown.png',
+                          width: size.width * 0.12,
+                          fit: BoxFit.contain,
                         ),
-                        SizedBox(height: size.height * 0.020),
+                      ),
+                    ),
+                    SizedBox(height: size.height * 0.028),
 
-                        // "Climb the Board. Unlock Real Rewards." — white bold text
-                        Text(
+                    FadeTransition(
+                      opacity: titleFade,
+                      child: SlideTransition(
+                        position: titleSlide,
+                        child: Text(
                           'Climb the Board.\nUnlock Real Rewards.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -547,83 +538,118 @@ class _SplashScreenState extends State<SplashScreen>
                             height: 1.1,
                           ),
                         ),
-                        SizedBox(height: size.height * 0.012),
+                      ),
+                    ),
+                    SizedBox(height: size.height * 0.012),
 
-                        // Subtitle PNG — "Level up faster and unlock offers…"
-                        Image.asset(
-                          'assets/images/Splash screen/subtext.png',
-                          width: size.width * 0.82,
-                          fit: BoxFit.contain,
+                    FadeTransition(
+                      opacity: subFade,
+                      child: Text(
+                        'Level up faster and unlock offers\nfrom the brands you love.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: size.width * 0.038,
+                          height: 1.5,
                         ),
-                        SizedBox(height: size.height * 0.024),
+                      ),
+                    ),
+                    SizedBox(height: size.height * 0.036),
 
-                        // Start Playing button (bg + text as stacked PNGs)
-                        GestureDetector(
-                          onTap: _goToApp,
-                          child: SizedBox(
-                            width: size.width * 0.88,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Image.asset(
-                                  'assets/images/Splash screen/button.png',
-                                  width: size.width * 0.88,
-                                  fit: BoxFit.contain,
-                                ),
-                                Image.asset(
-                                  'assets/images/Splash screen/start text.png',
-                                  width: size.width * 0.55,
-                                  fit: BoxFit.contain,
-                                ),
-                              ],
+                    // Button fades in last with a breathing glow
+                    FadeTransition(
+                      opacity: btnFade,
+                      child: GestureDetector(
+                        onTap: _goToApp,
+                        child: Container(
+                          width: size.width * 0.88,
+                          height: size.height * 0.068,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF5A1A9A), Color(0xFF9D4EDD)],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                              color: const Color(0xFF9D4EDD).withValues(alpha: 0.6),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF9D4EDD).withValues(
+                                    alpha: 0.25 + 0.35 * _btnGlow.value),
+                                blurRadius: 16 + 22 * _btnGlow.value,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Start Playing',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: size.width * 0.045,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
-      ),
+
+            Positioned(
+              bottom: size.height * 0.05,
+              left: 0,
+              right: 0,
+              child: FadeTransition(
+                opacity: subFade,
+                child: Center(child: _dots(active: 2, size: size)),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Shared: icon row with horizontal dividers on each side
+  // Shared: icon in a pulsing glow circle
   // ───────────────────────────────────────────────────────────────────────────
-  Widget _iconRow({
-    required Size size,
-    required String icon,
+  Widget _glowCircle({
     required double iconSize,
-    Widget? iconWidget,
+    required double glowValue,
+    required Widget child,
   }) {
     final circleSize = iconSize * 1.9;
-    return Row(
-      children: [
-        const Expanded(
-          child: Divider(color: Colors.white24, thickness: 0.6),
+    return Container(
+      width: circleSize,
+      height: circleSize,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Color.lerp(
+            Colors.white24,
+            const Color(0xFF9D4EDD),
+            glowValue * 0.55,
+          )!,
+          width: 0.8 + glowValue * 0.5,
         ),
-        SizedBox(width: size.width * 0.03),
-        Container(
-          width: circleSize,
-          height: circleSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white24, width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7B2CBF)
+                .withValues(alpha: 0.12 + 0.28 * glowValue),
+            blurRadius: 8 + 20 * glowValue,
+            spreadRadius: 1 + 4 * glowValue,
           ),
-          child: Center(
-            child: iconWidget ??
-                Image.asset(icon, width: iconSize, fit: BoxFit.contain),
-          ),
-        ),
-        SizedBox(width: size.width * 0.03),
-        const Expanded(
-          child: Divider(color: Colors.white24, thickness: 0.6),
-        ),
-      ],
+        ],
+      ),
+      child: Center(child: child),
     );
   }
 
@@ -651,7 +677,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Animation helpers
+  // Animation helpers — Screen 1 (legacy)
   // ───────────────────────────────────────────────────────────────────────────
   Animation<double> _fadeIn(AnimationController c) =>
       Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -664,4 +690,37 @@ class _SplashScreenState extends State<SplashScreen>
   Animation<Offset> _up(AnimationController c) =>
       Tween<Offset>(begin: const Offset(0, 0.26), end: Offset.zero).animate(
           CurvedAnimation(parent: c, curve: const Interval(0.05, 0.70, curve: Curves.easeOut)));
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Animation helpers — Screens 2–4 (staggered entrance)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Icon pops in first with elastic overshoot
+  Animation<double> _iconEntrance(AnimationController c) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.0, 0.55, curve: Curves.elasticOut)));
+
+  // Logo fades in quickly at the start
+  Animation<double> _logoEntrance(AnimationController c) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.0, 0.40, curve: Curves.easeIn)));
+
+  // Title slides up after icon settles
+  Animation<double> _titleEntrance(AnimationController c) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.22, 0.65, curve: Curves.easeOut)));
+
+  Animation<Offset> _titleSlideAnim(AnimationController c) =>
+      Tween<Offset>(begin: const Offset(0, 0.30), end: Offset.zero).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.22, 0.65, curve: Curves.easeOut)));
+
+  // Subtitle and dots fade in last
+  Animation<double> _subtitleEntrance(AnimationController c) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.42, 0.88, curve: Curves.easeOut)));
+
+  // Button fades in after subtitle on screen 4
+  Animation<double> _btnEntrance(AnimationController c) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: c, curve: const Interval(0.60, 1.0, curve: Curves.easeOut)));
 }

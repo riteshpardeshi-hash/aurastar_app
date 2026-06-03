@@ -7,6 +7,10 @@
           {
             "/": "/challenge/*",
             "comment": "Opens challenge detail page in the Aura app"
+          },
+          {
+            "/": "/ref/*",
+            "comment": "Opens referral handler in the Aura app"
           }
         ]
       }

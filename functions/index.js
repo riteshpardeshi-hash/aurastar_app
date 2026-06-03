@@ -1,4 +1,5 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const { defineString } = require('firebase-functions/params');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -38,85 +39,89 @@ async function uploadVideoToGemini(fileManager, filePath, displayName) {
   return file;
 }
 
-// Applies the daily valid score limit rule.
-// Only the top N approved scores per day count for Auras.
-// Returns { isCountedForDailyAuras, netAurasAwarded }.
-// Also creates auraTransaction records and updates totalRewards.
-async function applyDailyScoreLimit(submissionId, userId, auraPoints, score, challengeTitle) {
-  const userDoc = await db.collection('users').doc(userId).get();
-  const dailyLimit = (userDoc.data() || {}).dailyValidScoreLimit ?? 3;
+// Per-challenge best-attempt logic.
+// Only the highest score for a given challenge ever counts.
+// If the new score beats the previous best, the old best is archived (7-day delete).
+// Returns { isBestForChallenge, netAurasAwarded }.
+async function applyBestAttemptLogic(submissionId, userId, auraPoints, score, challengeId, challengeTitle) {
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const sevenDaysFromNow = admin.firestore.Timestamp.fromDate(new Date(Date.now() + sevenDaysMs));
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayTimestamp = admin.firestore.Timestamp.fromDate(todayStart);
-
-  // Query today's submissions that already count for daily Auras (requires composite index:
-  // submissions: userId ASC, isCountedForDailyAuras ASC, createdAt ASC)
-  const todaySnap = await db.collection('submissions')
+  // Find the user's current best submission for this challenge
+  const bestSnap = await db.collection('submissions')
     .where('userId', '==', userId)
-    .where('isCountedForDailyAuras', '==', true)
-    .where('createdAt', '>=', todayTimestamp)
+    .where('challengeId', '==', challengeId)
+    .where('isBestForChallenge', '==', true)
+    .limit(1)
     .get();
 
-  const todayCounted = todaySnap.docs
-    .filter(d => d.id !== submissionId)
-    .map(d => ({ id: d.id, points: (d.data().auraPoints || 0) }));
-
-  todayCounted.sort((a, b) => b.points - a.points); // highest first
-
-  let isCountedForDailyAuras = false;
+  let isBestForChallenge = false;
   let netAurasAwarded = 0;
 
-  if (todayCounted.length < dailyLimit) {
-    // Open slot available — full score counts
-    isCountedForDailyAuras = true;
+  if (bestSnap.empty) {
+    // First scored attempt for this challenge — it is automatically the best
+    isBestForChallenge = true;
     netAurasAwarded = auraPoints;
   } else {
-    const lowest = todayCounted[todayCounted.length - 1];
-    if (auraPoints > lowest.points) {
-      // New score beats the lowest counted score — replace it
-      isCountedForDailyAuras = true;
-      netAurasAwarded = auraPoints - lowest.points;
+    const prevDoc = bestSnap.docs[0];
+    const prevData = prevDoc.data();
+    const prevScore = prevData.aiScore || 0;
+    const prevAuras = prevData.auraPoints || 0;
 
-      await db.collection('submissions').doc(lowest.id).update({
-        isCountedForDailyAuras: false,
+    if (score > prevScore) {
+      // New attempt beats the previous best
+      isBestForChallenge = true;
+      netAurasAwarded = Math.max(0, auraPoints - prevAuras); // net improvement only
+
+      // Archive the old best with a 7-day delete timer
+      await prevDoc.ref.update({
+        isBestForChallenge: false,
+        isArchived: true,
+        isPublic: false,
+        archiveDeleteAt: sevenDaysFromNow,
+        archivedReason: 'lower_score',
       });
 
-      // Negative transaction for the score being replaced
-      await db.collection('auraTransactions').add({
-        userId,
-        amount: -lowest.points,
-        type: 'daily_score_replacement',
-        sourceId: lowest.id,
-        description: `Previous score replaced by a better attempt`,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      // Reverse the old auras before crediting the new total
+      if (prevAuras > 0) {
+        await db.collection('users').doc(userId).update({
+          totalRewards: admin.firestore.FieldValue.increment(-prevAuras),
+        });
+        await db.collection('auraTransactions').add({
+          userId,
+          amount: -prevAuras,
+          type: 'best_attempt_replaced',
+          sourceId: prevDoc.id,
+          description: `Previous best (${prevScore}/100) replaced by score ${score}/100 on "${challengeTitle}"`,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
     }
-    // else: doesn't enter top N — no Auras awarded
+    // else: new score is not better — isBestForChallenge stays false, netAurasAwarded stays 0
   }
 
+  // Credit Auras for the new best
   if (netAurasAwarded > 0) {
     await db.collection('users').doc(userId).update({
       totalRewards: admin.firestore.FieldValue.increment(netAurasAwarded),
     });
   }
 
-  // Record this submission's transaction
+  // Transaction record for this submission
   await db.collection('auraTransactions').add({
     userId,
     amount: netAurasAwarded,
     type: 'challenge_score',
     sourceId: submissionId,
-    description: isCountedForDailyAuras
-      ? `Scored ${score}/100 on "${challengeTitle}" — +${netAurasAwarded} Auras`
-      : `Scored ${score}/100 on "${challengeTitle}" — didn't enter your top ${dailyLimit} today`,
-    isCountedForDailyAuras,
-    dailyLimit,
+    description: isBestForChallenge
+      ? `New best! ${score}/100 on "${challengeTitle}" — +${netAurasAwarded} Auras`
+      : `${score}/100 on "${challengeTitle}" — not your best, no Auras earned`,
+    isBestForChallenge,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  console.log(`[applyDailyScoreLimit] ${submissionId}: counted=${isCountedForDailyAuras}, net=${netAurasAwarded}, daily slots used=${todayCounted.length}/${dailyLimit}`);
-  return { isCountedForDailyAuras, netAurasAwarded };
+  console.log(`[applyBestAttemptLogic] ${submissionId}: best=${isBestForChallenge}, net=${netAurasAwarded}, score=${score}`);
+  return { isBestForChallenge, netAurasAwarded };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,6 +246,82 @@ Rules for the prompt:
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STREAK: Called after every approved submission. Tracks the 7-day streak
+// and credits +50 Auras on Day 7, then resets the cycle.
+// ─────────────────────────────────────────────────────────────────────────────
+async function applyStreakBonus(submissionId, userId) {
+  try {
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    const userData = userDoc.data() || {};
+
+    const tz = userData.streakTimezone || 'Asia/Kolkata';
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+
+    const lastStreakDate = userData.lastStreakDate || '';
+    if (lastStreakDate === today) return; // already qualified today
+
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: tz });
+
+    let streakDay = typeof userData.streakDay === 'number' ? userData.streakDay : 0;
+
+    if (lastStreakDate === yesterday) {
+      streakDay += 1; // consecutive day
+    } else {
+      streakDay = 1;  // streak broken or first ever
+    }
+
+    if (streakDay >= 7) {
+      // Bonus day — credit +50 Auras and reset
+      await userRef.update({
+        streakDay: 0,
+        lastStreakDate: today,
+        totalRewards: admin.firestore.FieldValue.increment(50),
+      });
+
+      await db.collection('auraTransactions').add({
+        userId,
+        amount: 50,
+        type: 'streak_bonus',
+        sourceId: submissionId,
+        description: '🔥 7-Day Streak Bonus! +50 Auras',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      await db.collection('notifications').add({
+        userId,
+        type: 'streak_bonus',
+        message: '🔥 7-Day Streak complete! You earned +50 Auras. New cycle starts now.',
+        isRead: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[applyStreakBonus] ${userId}: Day 7 complete — +50 Auras, streak reset.`);
+    } else {
+      await userRef.update({ streakDay, lastStreakDate: today });
+
+      // Progress notification on days 3, 5, 6 only
+      if ([3, 5, 6].includes(streakDay)) {
+        await db.collection('notifications').add({
+          userId,
+          type: 'streak_progress',
+          message: `🔥 Day ${streakDay}/7 — play tomorrow to keep your streak going!`,
+          isRead: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+
+      console.log(`[applyStreakBonus] ${userId}: Day ${streakDay}/7 streak.`);
+    }
+  } catch (err) {
+    // Non-fatal — scoring still succeeds even if streak update fails
+    console.error(`[applyStreakBonus] Error for ${userId}:`, err.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STEP 2: Score each submission using the checklist.
 //         Gemini answers YES/NO per question. Score = (yesCount / total) * 100.
 //         Daily valid score limit is applied — only top N scores earn Auras.
@@ -321,22 +402,32 @@ exports.scoreSubmission = onDocumentCreated('submissions/{submissionId}', async 
 
       console.log(`[scoreSubmission] ${submissionId}: manual prompt → score ${score}`);
 
-      const { isCountedForDailyAuras, netAurasAwarded } = approved
-        ? await applyDailyScoreLimit(submissionId, submission.userId, auraPoints, score, challenge.title)
-        : { isCountedForDailyAuras: false, netAurasAwarded: 0 };
+      const { isBestForChallenge, netAurasAwarded } = approved
+        ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
+        : { isBestForChallenge: false, netAurasAwarded: 0 };
+
+      const notBestFields = (approved && !isBestForChallenge) ? {
+        isArchived: true,
+        isPublic: false,
+        archiveDeleteAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        archivedReason: 'lower_score',
+      } : {};
 
       await submissionRef.update({
         status: approved ? 'approved' : 'rejected',
         auraPoints,
         netAurasAwarded,
-        isCountedForDailyAuras,
+        isBestForChallenge,
         aiScore: score,
         aiReason: reason,
-        aiFullResponse: ai,           // full detailed breakdown stored here
+        aiFullResponse: ai,
         reviewedByAI: true,
         usedManualPrompt: true,
         reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...notBestFields,
       });
+
+      if (approved) await applyStreakBonus(submissionId, submission.userId);
 
     } else if (Array.isArray(checklist) && checklist.length > 0) {
       // ── CHECKLIST PATH: YES/NO per question, score counted in code ──────────
@@ -386,16 +477,22 @@ The answers array must have exactly ${checklist.length} entries in the same orde
 
       console.log(`[scoreSubmission] ${submissionId}: ${yesCount}/${checklist.length} YES → score ${score}`);
 
-      // Apply daily score limit (handles totalRewards increment and transaction creation)
-      const { isCountedForDailyAuras, netAurasAwarded } = approved
-        ? await applyDailyScoreLimit(submissionId, submission.userId, auraPoints, score, challenge.title)
-        : { isCountedForDailyAuras: false, netAurasAwarded: 0 };
+      const { isBestForChallenge, netAurasAwarded } = approved
+        ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
+        : { isBestForChallenge: false, netAurasAwarded: 0 };
+
+      const notBestFields = (approved && !isBestForChallenge) ? {
+        isArchived: true,
+        isPublic: false,
+        archiveDeleteAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        archivedReason: 'lower_score',
+      } : {};
 
       await submissionRef.update({
         status: approved ? 'approved' : 'rejected',
         auraPoints,
         netAurasAwarded,
-        isCountedForDailyAuras,
+        isBestForChallenge,
         aiScore: score,
         aiReason: reason,
         reviewedByAI: true,
@@ -405,7 +502,10 @@ The answers array must have exactly ${checklist.length} entries in the same orde
           answer: answers[i] || 'NO',
         })),
         reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...notBestFields,
       });
+
+      if (approved) await applyStreakBonus(submissionId, submission.userId);
 
     } else {
       // ── FALLBACK PATH: no checklist, upload reference and do comparison ─────
@@ -448,22 +548,31 @@ Respond with ONLY this JSON:
       auraPoints = approved ? score : 0;
       reason = String(ai.reason || 'AI review complete.');
 
-      // Apply daily score limit (handles totalRewards increment and transaction creation)
-      const { isCountedForDailyAuras, netAurasAwarded } = approved
-        ? await applyDailyScoreLimit(submissionId, submission.userId, auraPoints, score, challenge.title)
-        : { isCountedForDailyAuras: false, netAurasAwarded: 0 };
+      const { isBestForChallenge, netAurasAwarded } = approved
+        ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
+        : { isBestForChallenge: false, netAurasAwarded: 0 };
+
+      const notBestFields = (approved && !isBestForChallenge) ? {
+        isArchived: true,
+        isPublic: false,
+        archiveDeleteAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        archivedReason: 'lower_score',
+      } : {};
 
       await submissionRef.update({
         status: approved ? 'approved' : 'rejected',
         auraPoints,
         netAurasAwarded,
-        isCountedForDailyAuras,
+        isBestForChallenge,
         aiScore: score,
         aiReason: reason,
         reviewedByAI: true,
         usedAiChecklist: false,
         reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+        ...notBestFields,
       });
+
+      if (approved) await applyStreakBonus(submissionId, submission.userId);
     }
 
   } catch (err) {
@@ -477,3 +586,87 @@ Respond with ONLY this JSON:
     for (const name of uploadedFileNames) { try { await fileManager.deleteFile(name); } catch (_) {} }
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULED: Runs daily at 2 AM IST. Finds archived submissions whose
+// archiveDeleteAt has passed, deletes the video from Storage, and marks
+// the Firestore doc as deleted.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.autoDeleteArchivedSubmissions = onSchedule(
+  {
+    schedule: '0 2 * * *',
+    timeZone: 'Asia/Kolkata',
+    memory: '256MiB',
+    timeoutSeconds: 540,
+  },
+  async () => {
+    const now = admin.firestore.Timestamp.now();
+
+    const snap = await db.collection('submissions')
+      .where('isArchived', '==', true)
+      .where('isDeleted', '==', false)
+      .where('archiveDeleteAt', '<=', now)
+      .get();
+
+    if (snap.empty) {
+      console.log('[autoDelete] No submissions to delete today.');
+      return;
+    }
+
+    console.log(`[autoDelete] Found ${snap.docs.length} submissions to delete.`);
+
+    let deleted = 0;
+    let failed = 0;
+
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      const videoUrl = data.videoUrl || '';
+
+      // Delete video file from Firebase Storage
+      if (videoUrl) {
+        try {
+          const storagePath = _extractStoragePath(videoUrl);
+          if (storagePath) {
+            await admin.storage().bucket().file(storagePath).delete();
+            console.log(`[autoDelete] Deleted storage file: ${storagePath}`);
+          }
+        } catch (err) {
+          // Log but continue — still mark as deleted in Firestore
+          console.warn(`[autoDelete] Could not delete storage for ${doc.id}: ${err.message}`);
+        }
+      }
+
+      // Mark as deleted in Firestore
+      try {
+        await doc.ref.update({
+          isDeleted: true,
+          isArchived: false,
+          isPublic: false,
+          videoUrl: '',
+          deletedAt: admin.firestore.FieldValue.serverTimestamp(),
+          deletedReason: 'auto_archive_expired',
+        });
+        deleted++;
+      } catch (err) {
+        console.error(`[autoDelete] Failed to mark ${doc.id} as deleted: ${err.message}`);
+        failed++;
+      }
+    }
+
+    console.log(`[autoDelete] Done. Deleted: ${deleted}, Failed: ${failed}`);
+  }
+);
+
+// Extracts the Firebase Storage file path from a download URL.
+// e.g. https://firebasestorage.googleapis.com/v0/b/bucket/o/submissions%2Fuid%2Ffile.mp4?alt=media
+// → submissions/uid/file.mp4
+function _extractStoragePath(videoUrl) {
+  try {
+    const url = new URL(videoUrl);
+    const match = url.pathname.match(/\/o\/(.+)/);
+    if (!match) return null;
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}

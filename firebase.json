@@ -9,12 +9,22 @@
         "headers": [
           { "key": "Content-Type", "value": "application/json" }
         ]
+      },
+      {
+        "source": "/.well-known/assetlinks.json",
+        "headers": [
+          { "key": "Content-Type", "value": "application/json" }
+        ]
       }
     ],
     "rewrites": [
       {
         "source": "/challenge/**",
         "destination": "/challenge/index.html"
+      },
+      {
+        "source": "/ref/**",
+        "destination": "/ref/index.html"
       }
     ]
   },

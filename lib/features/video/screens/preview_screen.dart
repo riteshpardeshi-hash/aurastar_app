@@ -25,47 +25,50 @@ class PreviewScreen extends StatefulWidget {
 }
 
 class _PreviewScreenState extends State<PreviewScreen> {
-  late VideoPlayerController _controller;
-  bool isUploading = false;
+  static const _purple = Color(0xFF7B2CBF);
+
+  late VideoPlayerController _player;
+  bool _playerReady = false;
+  bool _isPlaying = false;
+
+  // Upload state
+  _UploadState _uploadState = _UploadState.idle;
+  double _progress = 0; // 0.0 – 1.0
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.file(
-      File(widget.videoPath),
-    )..initialize().then((_) {
-      setState(() {});
-      _controller.play();
+    _player = VideoPlayerController.file(File(widget.videoPath))
+      ..initialize().then((_) {
+        if (mounted) setState(() => _playerReady = true);
+        _player.play();
+        _player.setLooping(true);
+        setState(() => _isPlaying = true);
+      });
+    _player.addListener(() {
+      if (mounted) setState(() => _isPlaying = _player.value.isPlaying);
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _player.dispose();
     super.dispose();
   }
 
-  Future<bool?> _showAuraSubmittedPopup(String submissionId) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.85),
-      builder: (_) => AuraSubmittedPopup(
-        submissionId: submissionId,
-        challengeTitle: widget.challengeTitle,
-        challengeId: widget.challengeId,
-      ),
-    );
-  }
+  // ── Upload ──────────────────────────────────────────────────────────────────
 
-  Future<void> uploadVideo() async {
+  Future<void> _upload() async {
+    setState(() {
+      _uploadState = _UploadState.uploading;
+      _progress = 0;
+    });
+
     try {
-      setState(() => isUploading = true);
-
       final user = FirebaseAuth.instance.currentUser!;
       final file = File(widget.videoPath);
 
-      // Fetch username for feed display
+      // Fetch username
       String username = 'User';
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -78,18 +81,29 @@ class _PreviewScreenState extends State<PreviewScreen> {
       }
 
       final fileName =
-          "${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}";
-
+          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
       final ref = FirebaseStorage.instance
           .ref()
           .child('submissions')
           .child(user.uid)
           .child(fileName);
 
-      await ref.putFile(file);
+      final task = ref.putFile(file);
+
+      // Stream upload progress
+      task.snapshotEvents.listen((snap) {
+        if (snap.totalBytes > 0 && mounted) {
+          setState(() =>
+              _progress = snap.bytesTransferred / snap.totalBytes);
+        }
+      });
+
+      await task;
+
       final videoUrl = await ref.getDownloadURL();
 
-      final docRef = await FirebaseFirestore.instance.collection('submissions').add({
+      final docRef =
+          await FirebaseFirestore.instance.collection('submissions').add({
         'userId': user.uid,
         'username': username,
         'challengeTitle': widget.challengeTitle,
@@ -109,13 +123,21 @@ class _PreviewScreenState extends State<PreviewScreen> {
         'createdAt': Timestamp.now(),
       });
 
-      setState(() => isUploading = false);
+      if (!mounted) return;
+      setState(() => _uploadState = _UploadState.done);
+
+      await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withValues(alpha: 0.85),
+        builder: (_) => AuraSubmittedPopup(
+          submissionId: docRef.id,
+          challengeTitle: widget.challengeTitle,
+          challengeId: widget.challengeId,
+        ),
+      );
 
       if (!mounted) return;
-      await _showAuraSubmittedPopup(docRef.id);
-      if (!mounted) return;
-
-      // Navigate to post-score action screen regardless of scoring state
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -127,42 +149,310 @@ class _PreviewScreenState extends State<PreviewScreen> {
         ),
       );
     } catch (e) {
-      setState(() => isUploading = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      setState(() => _uploadState = _UploadState.failed);
     }
   }
+
+  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Preview")),
-      body: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: _controller.value.isInitialized
-                  ? AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: VideoPlayer(_controller),
-                    )
-                  : const CircularProgressIndicator(),
-            ),
-          ),
-          const SizedBox(height: 20),
-          isUploading
-              ? const CircularProgressIndicator()
-              : Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ElevatedButton(
-                    onPressed: uploadVideo,
-                    child: const Text("Submit Video"),
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: _uploadState == _UploadState.uploading
+                        ? null
+                        : () => Navigator.pop(context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white, size: 20),
+                    ),
                   ),
-                ),
-        ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.challengeTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Video preview
+            Expanded(
+              child: _playerReady
+                  ? GestureDetector(
+                      onTap: () {
+                        _isPlaying ? _player.pause() : _player.play();
+                      },
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: _player.value.aspectRatio,
+                            child: VideoPlayer(_player),
+                          ),
+                          if (!_isPlaying)
+                            Container(
+                              width: 56,
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.50),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded,
+                                  color: Colors.white, size: 30),
+                            ),
+                        ],
+                      ),
+                    )
+                  : const Center(
+                      child: CircularProgressIndicator(color: _purple)),
+            ),
+
+            // Bottom section
+            _buildBottom(),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _buildBottom() {
+    switch (_uploadState) {
+      case _UploadState.idle:
+        return _idleControls();
+      case _UploadState.uploading:
+        return _uploadingView();
+      case _UploadState.failed:
+        return _failedView();
+      case _UploadState.done:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // Idle — Submit / Retake buttons
+  Widget _idleControls() => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Looks good?',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55), fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.15)),
+                      ),
+                      child: const Center(
+                        child: Text('Retake',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: GestureDetector(
+                    onTap: _upload,
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: _purple,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _purple.withValues(alpha: 0.45),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      child: const Center(
+                        child: Text('Submit for Aura Score',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  // Uploading — progress bar with %
+  Widget _uploadingView() => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Uploading…',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${(_progress * 100).toInt()}%',
+                  style: const TextStyle(
+                    color: _purple,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: _progress,
+                backgroundColor: Colors.white.withValues(alpha: 0.12),
+                valueColor: const AlwaysStoppedAnimation(_purple),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Keep app open • Failed upload = no attempt lost',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.35), fontSize: 12),
+            ),
+          ],
+        ),
+      );
+
+  // Failed — retry button, local file preserved
+  Widget _failedView() => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.wifi_off_rounded,
+                    color: Colors.redAccent, size: 18),
+                const SizedBox(width: 8),
+                const Text('Upload failed',
+                    style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Your attempt was not consumed. Tap retry when you\'re back online.',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.15)),
+                      ),
+                      child: const Center(
+                        child: Text('Retake',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: GestureDetector(
+                    onTap: _upload,
+                    child: Container(
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.redAccent.withValues(alpha: 0.40),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      child: const Center(
+                        child: Text('Retry Upload',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
 }
+
+enum _UploadState { idle, uploading, failed, done }

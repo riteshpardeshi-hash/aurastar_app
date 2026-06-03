@@ -28,7 +28,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     with TickerProviderStateMixin {
   String? _resultStatus;
   int _netAurasAwarded = 0;
-  bool _isCountedForDailyAuras = false;
+  bool _isBestForChallenge = false;
   String _aiReason = '';
   bool _timedOut = false;
   Timer? _timeoutTimer;
@@ -95,14 +95,14 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       if (status == 'approved' || status == 'rejected' || status == 'ai_error') {
         final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
         final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
-        final counted = data['isCountedForDailyAuras'] as bool? ?? false;
+        final isBest = data['isBestForChallenge'] as bool? ?? false;
         final reason = data['aiReason'] as String? ?? '';
         final uname = data['username'] as String? ?? 'User';
         _timeoutTimer?.cancel();
         setState(() {
           _resultStatus = status;
           _netAurasAwarded = netAwarded;
-          _isCountedForDailyAuras = counted;
+          _isBestForChallenge = isBest;
           _aiReason = reason;
           _username = uname;
         });
@@ -111,6 +111,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           _countCtrl.forward();
           _particleCtrl.forward();
           _saveCardToProfile();
+          _triggerReferralBonusIfEligible();
         } else {
           // auto-close rejected/error after 8 seconds
           Future.delayed(const Duration(seconds: 8), () {
@@ -119,6 +120,49 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         }
       }
     });
+  }
+
+  Future<void> _triggerReferralBonusIfEligible() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = userDoc.data() ?? {};
+      final referrerId = data['referredBy'] as String? ?? '';
+      final bonusApplied = data['referralBonusApplied'] as bool? ?? false;
+      if (referrerId.isEmpty || bonusApplied) return;
+
+      // Mark applied first to prevent double-trigger
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'referralBonusApplied': true,
+      });
+
+      // Award +50 to referrer
+      await FirebaseFirestore.instance.collection('users').doc(referrerId).update({
+        'totalRewards': FieldValue.increment(50),
+        'referralCompletedCount': FieldValue.increment(1),
+      });
+
+      // Wallet transaction for referrer
+      await FirebaseFirestore.instance.collection('auraTransactions').add({
+        'userId': referrerId,
+        'amount': 50,
+        'type': 'referral_join_bonus',
+        'description': 'Referral bonus — your friend completed their first challenge! +50 Auras',
+        'createdAt': Timestamp.now(),
+      });
+
+      // Notification for referrer
+      await FirebaseFirestore.instance.collection('notifications').add({
+        'userId': referrerId,
+        'message': 'Your referral completed their first challenge! +50 Auras have been credited to your wallet.',
+        'type': 'referral',
+        'isRead': false,
+        'createdAt': Timestamp.now(),
+      });
+    } catch (_) {
+      // silently ignore — referral is best-effort
+    }
   }
 
   Future<void> _saveCardToProfile() async {
@@ -416,22 +460,22 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _isCountedForDailyAuras
+              color: _isBestForChallenge
                   ? Colors.greenAccent.withValues(alpha: 0.12)
                   : Colors.orange.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: _isCountedForDailyAuras
+                color: _isBestForChallenge
                     ? Colors.greenAccent.withValues(alpha: 0.35)
                     : Colors.orange.withValues(alpha: 0.35),
               ),
             ),
             child: Text(
-              _isCountedForDailyAuras
-                  ? '✓  Counted in your top scores today'
-                  : "Flex score — didn't enter your top scores today",
+              _isBestForChallenge
+                  ? '✓  Your new best for this challenge'
+                  : 'Not your best — archived (deletes in 7 days)',
               style: TextStyle(
-                color: _isCountedForDailyAuras ? Colors.greenAccent : Colors.orange,
+                color: _isBestForChallenge ? Colors.greenAccent : Colors.orange,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),

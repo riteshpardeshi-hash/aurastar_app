@@ -165,7 +165,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     final netAwarded = (_submission?['netAurasAwarded'] as num?)?.toInt() ??
         (_submission?['auraPoints'] as num?)?.toInt() ??
         0;
-    final counted = _submission?['isCountedForDailyAuras'] as bool? ?? false;
+    final isBest = _submission?['isBestForChallenge'] as bool? ?? false;
     final status = _submission?['status'] as String? ?? 'pending';
 
     return Scaffold(
@@ -186,12 +186,36 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
           child: Column(
             children: [
               if (score != null && status != 'pending')
-                _buildScoreCard(score, netAwarded, counted, status),
+                _buildScoreCard(score, netAwarded, isBest, status),
               const SizedBox(height: 28),
-              const Text(
-                'What do you want to do\nwith your video?',
+              if (!isBest && status == 'approved')
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.archive_outlined, color: Colors.orange, size: 18),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Not your best — this has been archived automatically and will be deleted in 7 days.',
+                            style: TextStyle(color: Colors.orange, fontSize: 12, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Text(
+                isBest ? 'What do you want to do\nwith your video?' : 'Your video is archived',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -199,14 +223,15 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              _buildAction(
-                label: 'Share Publicly',
-                subtitle: 'Visible to the community. Eligible for leaderboards & stars.',
-                icon: Icons.public_rounded,
-                gradient: const [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
-                onTap: _share,
-              ),
-              const SizedBox(height: 12),
+              if (isBest)
+                _buildAction(
+                  label: 'Share Publicly',
+                  subtitle: 'Visible to the community. Eligible for leaderboards & stars.',
+                  icon: Icons.public_rounded,
+                  gradient: const [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
+                  onTap: _share,
+                ),
+              if (isBest) const SizedBox(height: 12),
               _buildAction(
                 label: 'Archive (Keep Private)',
                 subtitle: 'Only you can see it. Your Auras are kept.',
@@ -231,7 +256,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     );
   }
 
-  Widget _buildScoreCard(int score, int netAwarded, bool counted, String status) {
+  Widget _buildScoreCard(int score, int netAwarded, bool isBest, String status) {
     final approved = status == 'approved';
     return Container(
       width: double.infinity,
@@ -276,22 +301,22 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: counted
+                color: isBest
                     ? Colors.greenAccent.withValues(alpha: 0.12)
                     : Colors.orange.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: counted
+                  color: isBest
                       ? Colors.greenAccent.withValues(alpha: 0.35)
                       : Colors.orange.withValues(alpha: 0.35),
                 ),
               ),
               child: Text(
-                counted
-                    ? '+$netAwarded Auras earned today ✓'
-                    : 'Flex score — didn\'t enter your top scores today',
+                isBest
+                    ? '+$netAwarded Auras earned ✓ New best!'
+                    : 'Not your best — no Auras earned',
                 style: TextStyle(
-                  color: counted ? Colors.greenAccent : Colors.orange,
+                  color: isBest ? Colors.greenAccent : Colors.orange,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),

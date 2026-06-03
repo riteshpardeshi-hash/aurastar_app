@@ -1,7 +1,8 @@
-import 'dart:typed_data';
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
@@ -353,6 +354,213 @@ class MyAccountScreen extends StatelessWidget {
     );
   }
 
+  static String _makeCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rng = Random.secure();
+    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
+  }
+
+  Widget _buildReferralCard(
+      BuildContext context, String referralCode, Map<String, dynamic> userData) {
+    // Existing users created before referral system — generate a code lazily
+    if (referralCode.isEmpty) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final newCode = _makeCode();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+            'referralCode': newCode,
+            'referredBy': '',
+            'referralBonusApplied': false,
+            'referralCount': 0,
+            'referralCompletedCount': 0,
+          });
+        });
+      }
+      return const SizedBox.shrink(); // StreamBuilder will re-render once Firestore updates
+    }
+    final referralCount = (userData['referralCount'] as num?)?.toInt() ?? 0;
+    final completedCount =
+        (userData['referralCompletedCount'] as num?)?.toInt() ?? 0;
+    final link = 'https://aura-app-efae1.web.app/ref/$referralCode';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.group_add_rounded,
+                    color: _accent, size: 18),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Refer to Friends',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Share your code. When your friend completes a challenge, you earn 50 Auras!',
+            style:
+                TextStyle(color: Colors.black54, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 14),
+          // Code display row
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _accent.withValues(alpha: 0.22)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Your referral code',
+                          style:
+                              TextStyle(color: Colors.black38, fontSize: 10)),
+                      const SizedBox(height: 2),
+                      Text(
+                        referralCode,
+                        style: const TextStyle(
+                          color: _accent,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 3,
+                          fontFamily: 'SpaceGrotesk',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: referralCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('Referral code copied!'),
+                          duration: Duration(seconds: 2)),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.copy_rounded, color: _accent, size: 14),
+                        SizedBox(width: 4),
+                        Text('Copy',
+                            style: TextStyle(
+                                color: _accent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Stats
+          Row(
+            children: [
+              _referralStat('$referralCount', 'Joined'),
+              const SizedBox(width: 20),
+              _referralStat('$completedCount', 'Completed'),
+              const SizedBox(width: 20),
+              _referralStat('${completedCount * 50}', 'Auras Earned'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Share button
+          GestureDetector(
+            onTap: () => Share.share(
+              '🎯 Join Aura Arena — copy viral challenges and earn real rewards!\n\n'
+              'Use my referral code: $referralCode\n\n'
+              '👉 $link\n\n'
+              'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.share_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 8),
+                    Text(
+                      'Share Referral Link',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'SpaceGrotesk',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _referralStat(String value, String label) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _accent)),
+          Text(label,
+              style:
+                  const TextStyle(color: Colors.black38, fontSize: 11)),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -490,6 +698,10 @@ class MyAccountScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     _buildAuraPointsCard(totalRewards),
+                    _buildReferralCard(
+                        context,
+                        userData['referralCode'] as String? ?? '',
+                        userData),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),

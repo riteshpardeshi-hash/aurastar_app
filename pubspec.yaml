@@ -1,7 +1,7 @@
 name: aura_app
 description: "A new Flutter project."
 publish_to: 'none'
-version: 1.0.0+6
+version: 1.0.0+7
 
 environment:
   sdk: ^3.7.0
@@ -22,6 +22,7 @@ dependencies:
   image_picker: ^1.1.2
   share_plus: ^10.0.0
   app_links: ^6.0.0
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -76,3 +77,36 @@ flutter:
     - assets/images/Splash screen/button.png
     - assets/images/Splash screen/start text.png
     - assets/images/Splash screen/Double lines.png
+    - assets/images/Splash screen/onbarding-screen-bg.jpg
+    - assets/images/Splash screen/star motion.png
+    - assets/images/homescreen/
+    - assets/images/homescreen/menu/
+    - assets/images/homescreen/separate elements/
+
+  fonts:
+    - family: ClashDisplay
+      fonts:
+        - asset: assets/fonts/ClashDisplay-Extralight.otf
+          weight: 200
+        - asset: assets/fonts/ClashDisplay-Light.otf
+          weight: 300
+        - asset: assets/fonts/ClashDisplay-Regular.otf
+          weight: 400
+        - asset: assets/fonts/ClashDisplay-Medium.otf
+          weight: 500
+        - asset: assets/fonts/ClashDisplay-Semibold.otf
+          weight: 600
+        - asset: assets/fonts/ClashDisplay-Bold.otf
+          weight: 700
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Light.ttf
+          weight: 300
+        - asset: assets/fonts/SpaceGrotesk-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700

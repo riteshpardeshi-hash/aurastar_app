@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../widgets/achievement_card.dart';
 import '../../video/screens/preview_screen.dart';
+import '../../video/screens/video_feed_screen.dart';
 import 'camera_screen.dart';
 
 class ChallengeDetail extends StatefulWidget {
@@ -160,6 +161,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     builder: (_) => CameraScreen(
                       challengeTitle: widget.title,
                       challengeId: widget.challengeId,
+                      referenceVideoUrl: widget.videoUrl,
                     ),
                   ),
                 );
@@ -313,6 +315,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
                         // Rewards section
                         _buildRewardsSection(),
+
+                        // Player videos feed
+                        if (widget.challengeId.isNotEmpty)
+                          _ChallengeVideoSection(
+                              challengeId: widget.challengeId,
+                              challengeTitle: widget.title),
 
                         // Leaderboard
                         if (widget.challengeId.isNotEmpty)
@@ -664,6 +672,229 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         .map((s) => s.endsWith('.') ? s : '$s.')
         .toList();
     return sentences.length > 1 ? sentences : [text];
+  }
+}
+
+// ── Player videos section ──────────────────────────────────────────────────────
+
+class _ChallengeVideoSection extends StatelessWidget {
+  final String challengeId;
+  final String challengeTitle;
+
+  const _ChallengeVideoSection({
+    required this.challengeId,
+    required this.challengeTitle,
+  });
+
+  static const _accent = Color(0xFF7B2CBF);
+
+  void _openFeed(BuildContext context, List<QueryDocumentSnapshot> docs, int startIndex) {
+    final submissions = docs.map((d) => {
+      'id': d.id,
+      'data': d.data() as Map<String, dynamic>,
+    }).toList();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoFeedScreen(
+          submissions: submissions,
+          initialIndex: startIndex,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('submissions')
+          .where('challengeId', isEqualTo: challengeId)
+          .where('isPublic', isEqualTo: true)
+          .where('status', isEqualTo: 'approved')
+          .orderBy('aiScore', descending: true)
+          .limit(20)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Player Videos',
+                      style: TextStyle(
+                        color: _accent,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _accent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${docs.length}${docs.length == 20 ? '+' : ''}',
+                        style: const TextStyle(
+                          color: _accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => _openFeed(context, docs, 0),
+                      child: const Row(
+                        children: [
+                          Text(
+                            'See All',
+                            style: TextStyle(
+                              color: _accent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(width: 2),
+                          Icon(Icons.chevron_right_rounded, color: _accent, size: 18),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Horizontal thumbnail scroll
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final data = docs[i].data() as Map<String, dynamic>;
+                    final username = data['username'] as String? ?? 'User';
+                    final videoUrl = data['videoUrl'] as String? ?? '';
+                    final aiScore = (data['aiScore'] as num?)?.toInt();
+
+                    return GestureDetector(
+                      onTap: () => _openFeed(context, docs, i),
+                      child: Container(
+                        width: 130,
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // Thumbnail
+                              VideoThumbnailWidget(
+                                videoUrl: videoUrl,
+                                fit: BoxFit.cover,
+                              ),
+
+                              // Dark gradient overlay
+                              Positioned.fill(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.75),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              // Play icon
+                              Center(
+                                child: Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.85),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ),
+                              ),
+
+                              // Score badge top-right
+                              if (aiScore != null)
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: _accent.withValues(alpha: 0.90),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '$aiScore',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                              // Username bottom
+                              Positioned(
+                                left: 8,
+                                right: 8,
+                                bottom: 8,
+                                child: Text(
+                                  '@$username',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

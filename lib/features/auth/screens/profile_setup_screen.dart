@@ -1,7 +1,11 @@
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'rules_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -18,6 +22,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   String? _gender;
   String? _state;
   bool _saving = false;
+
+  File? _pickedImage;
 
   static const _purple = Color(0xFF7B2CBF);
   static const _genders = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
@@ -55,6 +61,64 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     if (result != null) setState(() => _state = result);
   }
 
+  Future<void> _pickPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF0E0E1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Add Profile Photo',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            _sheetOption(Icons.camera_alt_rounded, 'Camera', ImageSource.camera),
+            const SizedBox(height: 12),
+            _sheetOption(Icons.photo_library_rounded, 'Gallery', ImageSource.gallery),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final picked = await ImagePicker().pickImage(source: source, imageQuality: 80, maxWidth: 512);
+    if (picked != null && mounted) setState(() => _pickedImage = File(picked.path));
+  }
+
+  Widget _sheetOption(IconData icon, String label, ImageSource source) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(context, source),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: _purple, size: 22),
+            const SizedBox(width: 14),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 15)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty || _usernameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -64,6 +128,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
     setState(() => _saving = true);
     final user = FirebaseAuth.instance.currentUser!;
+
+    String photoUrl = '';
+    if (_pickedImage != null) {
+      final ref = FirebaseStorage.instance.ref().child('profile_photos/${user.uid}');
+      await ref.putFile(_pickedImage!);
+      photoUrl = await ref.getDownloadURL();
+    }
+
     await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
       'name': _nameCtrl.text.trim(),
       'username': _usernameCtrl.text.trim(),
@@ -77,8 +149,18 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       'dailyValidScoreLimit': 3,
       'starsReceived': 0,
       'bio': '',
-      'profileImageUrl': '',
+      'profileImageUrl': photoUrl,
       'pageName': '',
+      'streakDay': 0,
+      'lastStreakDate': '',
+      'streakTimezone': 'Asia/Kolkata',
+      'followerCount': 0,
+      'followingCount': 0,
+      'referralCode': _generateReferralCode(),
+      'referredBy': '',
+      'referralBonusApplied': false,
+      'referralCount': 0,
+      'referralCompletedCount': 0,
       'createdAt': Timestamp.now(),
     });
     if (!mounted) return;
@@ -152,44 +234,56 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
                     // ── Avatar ──────────────────────────────────────────────
                     Center(
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 96,
-                            height: 96,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: _purple.withValues(alpha: 0.45),
-                                  blurRadius: 24,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(Icons.person_rounded,
-                                color: Colors.white, size: 44),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: const BoxDecoration(
-                                color: _purple,
+                      child: GestureDetector(
+                        onTap: _pickPhoto,
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 96,
+                              height: 96,
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _purple.withValues(alpha: 0.45),
+                                    blurRadius: 24,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.add,
-                                  color: Colors.white, size: 18),
+                              child: ClipOval(
+                                child: _pickedImage != null
+                                    ? Image.file(_pickedImage!, fit: BoxFit.cover)
+                                    : const Icon(Icons.person_rounded,
+                                        color: Colors.white, size: 44),
+                              ),
                             ),
-                          ),
-                        ],
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                decoration: const BoxDecoration(
+                                  color: _purple,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _pickedImage != null
+                                      ? Icons.check_rounded
+                                      : Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 15,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 
@@ -378,6 +472,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ),
       ),
     );
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  String _generateReferralCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rng = Random.secure();
+    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
   }
 
   // ── Shared UI helpers ──────────────────────────────────────────────────────
