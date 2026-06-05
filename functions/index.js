@@ -8,6 +8,9 @@ const admin = require('firebase-admin');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const ffmpegPath = require('ffmpeg-static');
+const ffmpeg = require('fluent-ffmpeg');
+const { randomUUID } = require('crypto');
 
 setGlobalOptions({ maxInstances: 10, memory: '1GiB', timeoutSeconds: 300 });
 
@@ -670,3 +673,239 @@ function _extractStoragePath(videoUrl) {
     return null;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIDEO PROCESSING HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Uploads a local file to Firebase Storage and returns a Firebase-style
+ * download URL (same format as Flutter's firebase_storage SDK).
+ * Sets Cache-Control: public so the URL is CDN-cacheable.
+ */
+async function _uploadAndGetUrl(bucket, localPath, remotePath, contentType) {
+  const token = randomUUID();
+  await bucket.upload(localPath, {
+    destination: remotePath,
+    metadata: {
+      contentType,
+      cacheControl: 'public, max-age=31536000',
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
+  });
+  const encoded = encodeURIComponent(remotePath);
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encoded}?alt=media&token=${token}`;
+}
+
+/**
+ * Extracts a single JPEG frame from the video at the 1-second mark,
+ * scaled to 480 px height (width auto, rounded to even for codec compat).
+ */
+function _generateThumbnail(inputPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .setFfmpegPath(ffmpegPath)
+      .seekInput(1)
+      .frames(1)
+      .videoFilters('scale=-2:480')
+      .output(outputPath)
+      .on('end', resolve)
+      .on('error', reject)
+      .run();
+  });
+}
+
+/**
+ * Transcodes the video to H.264 / AAC MP4.
+ * -movflags +faststart puts the MOOV atom first, enabling HTTP range-request
+ * streaming (progressive download) from Firebase Storage / CDN.
+ */
+function _transcodeVideo(inputPath, outputPath, height, videoBitrate) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .setFfmpegPath(ffmpegPath)
+      .videoCodec('libx264')
+      .videoBitrate(videoBitrate)
+      .audioCodec('aac')
+      .audioBitrate('128k')
+      .videoFilters(`scale=-2:${height}`)
+      .outputOptions([
+        '-preset fast',    // fast encode, good quality
+        '-crf 23',         // quality floor (lower = better, 18–28 typical)
+        '-movflags +faststart', // HTTP streaming / range-request support
+        '-pix_fmt yuv420p',     // broad device compatibility
+      ])
+      .output(outputPath)
+      .on('end', resolve)
+      .on('error', reject)
+      .run();
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processSubmissionVideo
+// Triggered whenever a new submissions/{submissionId} doc is created.
+// Runs in parallel with scoreSubmission — both update different fields.
+//
+// Generates and uploads:
+//   • thumbnailUrl      — JPEG frame at 1 s, 480 px high
+//   • videoUrl480p      — H.264 480p MP4 (~800 kbps)  ← default playback
+//   • videoUrl720p      — H.264 720p MP4 (~2 000 kbps) ← high-quality
+//   • originalVideoUrl  — copy of the original videoUrl for reference
+// ─────────────────────────────────────────────────────────────────────────────
+exports.processSubmissionVideo = onDocumentCreated(
+  {
+    document: 'submissions/{submissionId}',
+    memory: '2GiB',
+    cpu: 2,
+    timeoutSeconds: 540,
+    maxInstances: 5,
+  },
+  async (event) => {
+    const submission = event.data.data();
+    const submissionRef = event.data.ref;
+    const submissionId = event.params.submissionId;
+
+    const videoUrl = submission.videoUrl;
+    if (!videoUrl) {
+      console.log(`[processSubmissionVideo] ${submissionId}: no videoUrl, skipping.`);
+      return;
+    }
+
+    // Skip if already processed (e.g. a retry)
+    if (submission.thumbnailUrl) {
+      console.log(`[processSubmissionVideo] ${submissionId}: already processed.`);
+      return;
+    }
+
+    const storagePath = _extractStoragePath(videoUrl);
+    if (!storagePath) {
+      console.error(`[processSubmissionVideo] ${submissionId}: cannot parse storage path.`);
+      return;
+    }
+
+    const dir = path.dirname(storagePath);       // e.g. submissions/uid
+    const base = path.basename(storagePath, path.extname(storagePath)); // e.g. video_1234
+
+    const origTempPath   = path.join(os.tmpdir(), `orig_${submissionId}.mp4`);
+    const thumbTempPath  = path.join(os.tmpdir(), `thumb_${submissionId}.jpg`);
+    const p480TempPath   = path.join(os.tmpdir(), `480p_${submissionId}.mp4`);
+    const p720TempPath   = path.join(os.tmpdir(), `720p_${submissionId}.mp4`);
+    const tempFiles = [origTempPath, thumbTempPath, p480TempPath, p720TempPath];
+
+    try {
+      const bucket = admin.storage().bucket();
+
+      // 1. Download original from Firebase Storage (no URL expiry issues)
+      console.log(`[processSubmissionVideo] ${submissionId}: downloading original...`);
+      await bucket.file(storagePath).download({ destination: origTempPath });
+
+      // 2. Generate thumbnail
+      console.log(`[processSubmissionVideo] ${submissionId}: generating thumbnail...`);
+      await _generateThumbnail(origTempPath, thumbTempPath);
+
+      // 3. Transcode 480p (runs before 720p — faster, needed for default playback)
+      console.log(`[processSubmissionVideo] ${submissionId}: transcoding 480p...`);
+      await _transcodeVideo(origTempPath, p480TempPath, 480, '800k');
+
+      // 4. Transcode 720p
+      console.log(`[processSubmissionVideo] ${submissionId}: transcoding 720p...`);
+      await _transcodeVideo(origTempPath, p720TempPath, 720, '2000k');
+
+      // 5. Upload all three
+      const thumbUrl = await _uploadAndGetUrl(
+        bucket,
+        thumbTempPath,
+        `${dir}/thumb_${base}.jpg`,
+        'image/jpeg',
+      );
+      const url480p = await _uploadAndGetUrl(
+        bucket,
+        p480TempPath,
+        `${dir}/${base}_480p.mp4`,
+        'video/mp4',
+      );
+      const url720p = await _uploadAndGetUrl(
+        bucket,
+        p720TempPath,
+        `${dir}/${base}_720p.mp4`,
+        'video/mp4',
+      );
+
+      // 6. Write URLs back to Firestore
+      await submissionRef.update({
+        thumbnailUrl: thumbUrl,
+        videoUrl480p: url480p,
+        videoUrl720p: url720p,
+        originalVideoUrl: videoUrl,
+        videoProcessedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`[processSubmissionVideo] ${submissionId}: done — thumbnail + 480p + 720p ready.`);
+    } catch (err) {
+      // Non-fatal: scoring still works; thumbnail/transcode can be retried
+      console.error(`[processSubmissionVideo] ${submissionId}: error — ${err.message}`);
+      await submissionRef.update({
+        videoProcessingError: err.message.slice(0, 500),
+        videoProcessedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } finally {
+      for (const p of tempFiles) { try { fs.unlinkSync(p); } catch (_) {} }
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// processChallengeVideo
+// Triggered when a new challenges/{challengeId} doc is created.
+// Generates a JPEG thumbnail for the reference video so challenge cards
+// in the app can show an instant image instead of extracting from the video.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.processChallengeVideo = onDocumentCreated(
+  {
+    document: 'challenges/{challengeId}',
+    memory: '512MiB',
+    timeoutSeconds: 180,
+    maxInstances: 5,
+  },
+  async (event) => {
+    const challenge = event.data.data();
+    const challengeRef = event.data.ref;
+    const challengeId = event.params.challengeId;
+
+    const videoUrl = challenge.videoUrl;
+    if (!videoUrl || challenge.thumbnailUrl) return;
+
+    const storagePath = _extractStoragePath(videoUrl);
+    if (!storagePath) return;
+
+    const dir = path.dirname(storagePath);
+    const base = path.basename(storagePath, path.extname(storagePath));
+
+    const origTempPath  = path.join(os.tmpdir(), `ch_orig_${challengeId}.mp4`);
+    const thumbTempPath = path.join(os.tmpdir(), `ch_thumb_${challengeId}.jpg`);
+
+    try {
+      const bucket = admin.storage().bucket();
+
+      await bucket.file(storagePath).download({ destination: origTempPath });
+      await _generateThumbnail(origTempPath, thumbTempPath);
+
+      const thumbUrl = await _uploadAndGetUrl(
+        bucket,
+        thumbTempPath,
+        `${dir}/thumb_${base}.jpg`,
+        'image/jpeg',
+      );
+
+      await challengeRef.update({ thumbnailUrl: thumbUrl });
+      console.log(`[processChallengeVideo] ${challengeId}: thumbnail ready.`);
+    } catch (err) {
+      console.error(`[processChallengeVideo] ${challengeId}: error — ${err.message}`);
+    } finally {
+      for (const p of [origTempPath, thumbTempPath]) {
+        try { fs.unlinkSync(p); } catch (_) {}
+      }
+    }
+  },
+);

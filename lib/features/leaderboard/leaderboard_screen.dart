@@ -72,38 +72,91 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
 // ── Global Board ───────────────────────────────────────────────────────────────
 
-class _GlobalBoard extends StatelessWidget {
+class _GlobalBoard extends StatefulWidget {
   const _GlobalBoard();
 
+  @override
+  State<_GlobalBoard> createState() => _GlobalBoardState();
+}
+
+class _GlobalBoardState extends State<_GlobalBoard>
+    with AutomaticKeepAliveClientMixin {
   static const _accent = Color(0xFF7B2CBF);
+  static const _pageSize = 20;
+
+  final _scrollCtrl = ScrollController();
+  final List<QueryDocumentSnapshot> _docs = [];
+  DocumentSnapshot? _lastDoc;
+  bool _loading = false;
+  bool _initialLoading = true;
+  bool _hasMore = true;
+  final _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >
+        _scrollCtrl.position.maxScrollExtent - 300) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      var q = FirebaseFirestore.instance
+          .collection('users')
+          .orderBy('totalRewards', descending: true)
+          .limit(_pageSize);
+      if (_lastDoc != null) q = q.startAfterDocument(_lastDoc!);
+      final snap = await q.get();
+      if (mounted) {
+        setState(() {
+          _docs.addAll(snap.docs);
+          _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
+          _hasMore = snap.docs.length == _pageSize;
+          _loading = false;
+          _initialLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .orderBy('totalRewards', descending: true)
-          .limit(50)
-          .snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return _emptyState('No players yet', 'Complete challenges to appear here');
-        }
-        final userInList = docs.any((d) => d.id == uid);
-        return _BoardList(
-          docs: docs,
-          currentUid: uid,
-          scoreField: 'totalRewards',
-          scoreSuffix: 'Auras',
-          showCurrentUserFooter: !userInList && uid.isNotEmpty,
-        );
-      },
+    super.build(context);
+    if (_initialLoading) {
+      return const Center(child: CircularProgressIndicator(color: _accent));
+    }
+    if (_docs.isEmpty) {
+      return _emptyState('No players yet', 'Complete challenges to appear here');
+    }
+    final userInList = _docs.any((d) => d.id == _uid);
+    return _BoardList(
+      docs: _docs,
+      currentUid: _uid,
+      scoreField: 'totalRewards',
+      scoreSuffix: 'Auras',
+      showCurrentUserFooter: !userInList && _uid.isNotEmpty,
+      scrollController: _scrollCtrl,
+      loadingMore: _loading,
     );
   }
 }
@@ -163,7 +216,7 @@ class _CityBoard extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('users')
                     .where('city', isEqualTo: city)
-                    .limit(100)
+                    .limit(50)
                     .snapshots(),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
@@ -431,6 +484,8 @@ class _BoardList extends StatelessWidget {
   final String scoreField;
   final String scoreSuffix;
   final bool showCurrentUserFooter;
+  final ScrollController? scrollController;
+  final bool loadingMore;
 
   const _BoardList({
     required this.docs,
@@ -438,18 +493,22 @@ class _BoardList extends StatelessWidget {
     required this.scoreField,
     required this.scoreSuffix,
     this.showCurrentUserFooter = false,
+    this.scrollController,
+    this.loadingMore = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // +2 items when footer needed: separator + user row
+    // +2 items when footer needed: separator + user row; +1 for load-more spinner
     final extra = showCurrentUserFooter ? 2 : 0;
+    final total = docs.length + extra + (loadingMore ? 1 : 0);
 
     return ListView.builder(
+      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: docs.length + extra,
+      itemCount: total,
       itemBuilder: (_, i) {
-        // Normal rows
+        // 1. Normal rows
         if (i < docs.length) {
           final doc = docs[i];
           final data = doc.data() as Map<String, dynamic>;
@@ -468,15 +527,33 @@ class _BoardList extends StatelessWidget {
           );
         }
 
-        // Separator
-        if (i == docs.length) {
+        // Compute offset past the normal rows (accounts for optional spinner)
+        var offset = i - docs.length;
+
+        // 2. Load-more spinner right after normal rows
+        if (loadingMore) {
+          if (offset == 0) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                      color: Color(0xFF7B2CBF), strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+          offset -= 1;
+        }
+
+        // 3. "Your position" separator
+        if (showCurrentUserFooter && offset == 0) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                Expanded(
-                    child: Divider(
-                        color: Colors.white.withValues(alpha: 0.08))),
+                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
@@ -487,15 +564,13 @@ class _BoardList extends StatelessWidget {
                         fontFamily: 'SpaceGrotesk'),
                   ),
                 ),
-                Expanded(
-                    child: Divider(
-                        color: Colors.white.withValues(alpha: 0.08))),
+                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
               ],
             ),
           );
         }
 
-        // Current user's own row (fetched live)
+        // 4. Current user's own row (fetched live)
         return StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
               .collection('users')

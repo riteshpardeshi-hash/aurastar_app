@@ -5,6 +5,7 @@ import '../../challenges/screens/challenge_detail.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 import '../../explore/screens/participant_profile_screen.dart';
 import '../../video/screens/public_video_screen.dart';
+import '../../../shared/widgets/video_thumbnail_widget.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -33,30 +34,415 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     super.dispose();
   }
 
-  Future<void> _toggleStar(
-      String submissionId, List starredBy, String ownerId) async {
-    if (_uid == null) return;
-    final isStarred = starredBy.contains(_uid);
-    final submissionRef =
-        FirebaseFirestore.instance.collection('submissions').doc(submissionId);
-    final delta = isStarred ? -1 : 1;
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        foregroundColor: Colors.white,
+        titleSpacing: 0,
+        title: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Image.asset('assets/images/Aura Arena Mono.png', height: 30),
+        ),
+        centerTitle: false,
+        bottom: TabBar(
+          controller: _tabs,
+          indicatorColor: _accent,
+          indicatorWeight: 3,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white38,
+          labelStyle:
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          tabs: const [
+            Tab(text: 'For You'),
+            Tab(text: 'Following'),
+            Tab(text: 'Trending'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabs,
+        children: [
+          _PaginatedFeedTab(uid: _uid, orderBy: 'createdAt'),
+          _FollowingFeedTab(uid: _uid),
+          _PaginatedFeedTab(uid: _uid, orderBy: 'starsCount'),
+        ],
+      ),
+    );
+  }
+}
 
-    await submissionRef.update({
-      'starredBy': isStarred
-          ? FieldValue.arrayRemove([_uid])
-          : FieldValue.arrayUnion([_uid]),
-      'starsCount': FieldValue.increment(delta),
-    });
+// ── Paginated feed tab ────────────────────────────────────────────────────────
 
-    // Keep owner's starsReceived in sync (skip own videos)
-    if (ownerId.isNotEmpty && ownerId != _uid) {
-      FirebaseFirestore.instance.collection('users').doc(ownerId).update({
-        'starsReceived': FieldValue.increment(delta),
-      });
+class _PaginatedFeedTab extends StatefulWidget {
+  final String? uid;
+  final String orderBy;
+
+  const _PaginatedFeedTab({required this.uid, required this.orderBy});
+
+  @override
+  State<_PaginatedFeedTab> createState() => _PaginatedFeedTabState();
+}
+
+class _PaginatedFeedTabState extends State<_PaginatedFeedTab>
+    with AutomaticKeepAliveClientMixin {
+  static const _pageSize = 10;
+  static const _accent = Color(0xFF7B2CBF);
+
+  final _scrollCtrl = ScrollController();
+  final List<QueryDocumentSnapshot> _docs = [];
+  DocumentSnapshot? _lastDoc;
+  bool _loading = false;
+  bool _initialLoading = true;
+  bool _hasMore = true;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMore();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >
+        _scrollCtrl.position.maxScrollExtent - 400) {
+      _loadMore();
     }
   }
 
-  void _showReportSheet(BuildContext context, String submissionId) {
+  Future<void> _loadMore() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+
+    try {
+      var q = FirebaseFirestore.instance
+          .collection('submissions')
+          .where('isPublic', isEqualTo: true)
+          .orderBy(widget.orderBy, descending: true)
+          .limit(_pageSize);
+
+      if (_lastDoc != null) q = q.startAfterDocument(_lastDoc!);
+
+      final snap = await q.get();
+      if (mounted) {
+        setState(() {
+          _docs.addAll(snap.docs);
+          _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
+          _hasMore = snap.docs.length == _pageSize;
+          _loading = false;
+          _initialLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _docs.clear();
+      _lastDoc = null;
+      _hasMore = true;
+      _initialLoading = true;
+    });
+    await _loadMore();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (_initialLoading) {
+      return const Center(child: CircularProgressIndicator(color: _accent));
+    }
+
+    if (_docs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.people_outline_rounded,
+                color: Colors.white24, size: 52),
+            const SizedBox(height: 14),
+            const Text('No posts yet',
+                style: TextStyle(color: Colors.white38, fontSize: 16)),
+            const SizedBox(height: 6),
+            const Text('Be the first to share a challenge!',
+                style: TextStyle(color: Colors.white24, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: _accent,
+      child: ListView.builder(
+        controller: _scrollCtrl,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        itemCount: _docs.length + (_loading || _hasMore ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (i >= _docs.length) {
+            return const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: _accent, strokeWidth: 2)),
+            );
+          }
+          final doc = _docs[i];
+          return _FeedCard(
+            submissionId: doc.id,
+            data: doc.data() as Map<String, dynamic>,
+            uid: widget.uid,
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Following feed tab ────────────────────────────────────────────────────────
+
+class _FollowingFeedTab extends StatefulWidget {
+  final String? uid;
+  const _FollowingFeedTab({required this.uid});
+
+  @override
+  State<_FollowingFeedTab> createState() => _FollowingFeedTabState();
+}
+
+class _FollowingFeedTabState extends State<_FollowingFeedTab>
+    with AutomaticKeepAliveClientMixin {
+  static const _accent = Color(0xFF7B2CBF);
+  static const _pageSize = 10;
+
+  final _scrollCtrl = ScrollController();
+  List<String> _followedIds = [];
+  final List<QueryDocumentSnapshot> _docs = [];
+  DocumentSnapshot? _lastDoc;
+  bool _loading = false;
+  bool _initialLoading = true;
+  bool _hasMore = true;
+  bool _followsLoaded = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFollows();
+    _scrollCtrl.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollCtrl.position.pixels >
+        _scrollCtrl.position.maxScrollExtent - 400) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadFollows() async {
+    if (widget.uid == null) {
+      if (mounted) setState(() => _initialLoading = false);
+      return;
+    }
+    final snap = await FirebaseFirestore.instance
+        .collection('follows')
+        .where('followerUserId', isEqualTo: widget.uid)
+        .limit(30)
+        .get();
+    _followedIds = snap.docs
+        .map((d) =>
+            (d.data())['followedUserId'] as String? ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList();
+    _followsLoaded = true;
+    await _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (!_followsLoaded || _loading || !_hasMore) return;
+    if (_followedIds.isEmpty) {
+      if (mounted) setState(() => _initialLoading = false);
+      return;
+    }
+    setState(() => _loading = true);
+
+    try {
+      var q = FirebaseFirestore.instance
+          .collection('submissions')
+          .where('userId', whereIn: _followedIds)
+          .where('isPublic', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(_pageSize);
+
+      if (_lastDoc != null) q = q.startAfterDocument(_lastDoc!);
+
+      final snap = await q.get();
+      if (mounted) {
+        setState(() {
+          _docs.addAll(snap.docs);
+          _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
+          _hasMore = snap.docs.length == _pageSize;
+          _loading = false;
+          _initialLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _docs.clear();
+      _lastDoc = null;
+      _hasMore = true;
+      _initialLoading = true;
+      _followsLoaded = false;
+    });
+    await _loadFollows();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (widget.uid == null) {
+      return const Center(
+        child: Text('Log in to see your following feed',
+            style: TextStyle(color: Colors.white38)),
+      );
+    }
+
+    if (_initialLoading) {
+      return const Center(child: CircularProgressIndicator(color: _accent));
+    }
+
+    if (!_followsLoaded || _followedIds.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.people_outline_rounded,
+                  color: Colors.white24, size: 52),
+              SizedBox(height: 14),
+              Text("You're not following anyone yet",
+                  style: TextStyle(color: Colors.white38, fontSize: 16),
+                  textAlign: TextAlign.center),
+              SizedBox(height: 6),
+              Text('Follow players and creators to see their videos here',
+                  style: TextStyle(color: Colors.white24, fontSize: 13),
+                  textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_docs.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.video_library_outlined, color: Colors.white24, size: 52),
+            SizedBox(height: 14),
+            Text('No videos yet from people you follow',
+                style: TextStyle(color: Colors.white38, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: _accent,
+      child: ListView.builder(
+        controller: _scrollCtrl,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        itemCount: _docs.length + (_loading || _hasMore ? 1 : 0),
+        itemBuilder: (context, i) {
+          if (i >= _docs.length) {
+            return const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: _accent, strokeWidth: 2)),
+            );
+          }
+          final doc = _docs[i];
+          return _FeedCard(
+            submissionId: doc.id,
+            data: doc.data() as Map<String, dynamic>,
+            uid: widget.uid,
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Feed card ─────────────────────────────────────────────────────────────────
+
+class _FeedCard extends StatelessWidget {
+  final String submissionId;
+  final Map<String, dynamic> data;
+  final String? uid;
+
+  static const _accent = Color(0xFF7B2CBF);
+
+  const _FeedCard({
+    required this.submissionId,
+    required this.data,
+    required this.uid,
+  });
+
+  Future<void> _toggleStar(BuildContext context) async {
+    if (uid == null) return;
+    final starredBy = (data['starredBy'] as List?) ?? [];
+    final isStarred = starredBy.contains(uid);
+    final ownerId = data['userId'] as String? ?? '';
+    final delta = isStarred ? -1 : 1;
+
+    await FirebaseFirestore.instance
+        .collection('submissions')
+        .doc(submissionId)
+        .update({
+      'starredBy': isStarred
+          ? FieldValue.arrayRemove([uid])
+          : FieldValue.arrayUnion([uid]),
+      'starsCount': FieldValue.increment(delta),
+    });
+    if (ownerId.isNotEmpty && ownerId != uid) {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(ownerId)
+          .update({'starsReceived': FieldValue.increment(delta)});
+    }
+  }
+
+  void _showReportSheet(BuildContext context) {
     const reasons = [
       'Bullying / harassment',
       'Unsafe act',
@@ -79,12 +465,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           children: [
             Center(
               child: Container(
-                width: 36,
-                height: 4,
+                width: 36, height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
@@ -101,8 +485,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                   title: Text(r,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 14)),
+                      style: const TextStyle(color: Colors.white, fontSize: 14)),
                   trailing: const Icon(Icons.chevron_right_rounded,
                       color: Colors.white24, size: 18),
                   onTap: () async {
@@ -111,15 +494,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                         .collection('reports')
                         .add({
                       'submissionId': submissionId,
-                      'reportedBy': _uid,
+                      'reportedBy': uid,
                       'reason': r,
                       'createdAt': Timestamp.now(),
                     });
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text(
-                                'Report submitted. Thank you.')),
+                            content: Text('Report submitted. Thank you.')),
                       );
                     }
                   },
@@ -132,206 +514,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        foregroundColor: Colors.white,
-        titleSpacing: 0,
-        title: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Image.asset('assets/images/Aura Arena Mono.png', height: 30),
-        ),
-        centerTitle: false,
-        bottom: TabBar(
-          controller: _tabs,
-          indicatorColor: _accent,
-          indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          tabs: const [
-            Tab(text: 'For You'),
-            Tab(text: 'Following'),
-            Tab(text: 'Trending'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          _buildFeed('createdAt'),
-          _buildFollowingFeed(),
-          _buildFeed('starsCount'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFollowingFeed() {
-    if (_uid == null) {
-      return const Center(
-        child: Text('Log in to see your following feed',
-            style: TextStyle(color: Colors.white38)),
-      );
-    }
-
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
-          .collection('follows')
-          .where('followerUserId', isEqualTo: _uid)
-          .limit(30)
-          .get(),
-      builder: (context, followSnap) {
-        if (followSnap.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(color: _accent));
-        }
-
-        final followedIds = (followSnap.data?.docs ?? [])
-            .map((d) =>
-                (d.data() as Map<String, dynamic>)['followedUserId']
-                    as String? ??
-                '')
-            .where((id) => id.isNotEmpty)
-            .toList();
-
-        if (followedIds.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.people_outline_rounded,
-                      color: Colors.white24, size: 52),
-                  SizedBox(height: 14),
-                  Text(
-                    "You're not following anyone yet",
-                    style:
-                        TextStyle(color: Colors.white38, fontSize: 16),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    'Follow players and creators to see their videos here',
-                    style:
-                        TextStyle(color: Colors.white24, fontSize: 13),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('submissions')
-              .where('userId', whereIn: followedIds)
-              .where('isPublic', isEqualTo: true)
-              .orderBy('createdAt', descending: true)
-              .limit(30)
-              .snapshots(),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(
-                  child: CircularProgressIndicator(color: _accent));
-            }
-
-            final docs = snap.data?.docs ?? [];
-
-            if (docs.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.video_library_outlined,
-                        color: Colors.white24, size: 52),
-                    SizedBox(height: 14),
-                    Text(
-                      'No videos yet from people you follow',
-                      style: TextStyle(
-                          color: Colors.white38, fontSize: 16),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              itemCount: docs.length,
-              itemBuilder: (context, i) {
-                final doc = docs[i];
-                return _buildCard(
-                    doc.id, doc.data() as Map<String, dynamic>);
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildFeed(String orderBy) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('submissions')
-          .where('isPublic', isEqualTo: true)
-          .orderBy(orderBy, descending: true)
-          .limit(30)
-          .snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
-
-        final docs = snap.data?.docs ?? [];
-
-        if (docs.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.people_outline_rounded, color: Colors.white24, size: 52),
-                const SizedBox(height: 14),
-                const Text(
-                  'No posts yet',
-                  style: TextStyle(color: Colors.white38, fontSize: 16),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Be the first to share a challenge!',
-                  style: TextStyle(color: Colors.white24, fontSize: 13),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          itemCount: docs.length,
-          itemBuilder: (context, i) {
-            final doc = docs[i];
-            return _buildCard(doc.id, doc.data() as Map<String, dynamic>);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildCard(String submissionId, Map<String, dynamic> data) {
     final username = data['username'] as String? ?? 'User';
     final userId = data['userId'] as String? ?? '';
     final challengeTitle = data['challengeTitle'] as String? ?? 'Challenge';
     final challengeId = data['challengeId'] as String? ?? '';
     final videoUrl = data['videoUrl'] as String? ?? '';
+    final thumbnailUrl = data['thumbnailUrl'] as String?;
     final aiScore = (data['aiScore'] as num?)?.toInt();
     final starsCount = (data['starsCount'] as num?)?.toInt() ?? 0;
     final starredBy = (data['starredBy'] as List?) ?? [];
-    final isStarred = starredBy.contains(_uid);
+    final isStarred = starredBy.contains(uid);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -348,16 +540,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(
               children: [
-                // Tappable avatar → participant profile
                 GestureDetector(
                   onTap: userId.isNotEmpty
-                      ? () => Navigator.push(
-                            context,
+                      ? () => Navigator.push(context,
                             MaterialPageRoute(
                               builder: (_) =>
                                   ParticipantProfileScreen(userId: userId),
-                            ),
-                          )
+                            ))
                       : null,
                   child: CircleAvatar(
                     radius: 18,
@@ -365,10 +554,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     child: Text(
                       username.isNotEmpty ? username[0].toUpperCase() : 'U',
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15),
                     ),
                   ),
                 ),
@@ -377,16 +565,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tappable username → participant profile
                       GestureDetector(
                         onTap: userId.isNotEmpty
-                            ? () => Navigator.push(
-                                  context,
+                            ? () => Navigator.push(context,
                                   MaterialPageRoute(
                                     builder: (_) => ParticipantProfileScreen(
                                         userId: userId),
-                                  ),
-                                )
+                                  ))
                             : null,
                         child: Text(username,
                             style: const TextStyle(
@@ -394,11 +579,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14)),
                       ),
-                      // Tappable challenge title → challenge detail
                       GestureDetector(
                         onTap: challengeId.isNotEmpty
-                            ? () => Navigator.push(
-                                  context,
+                            ? () => Navigator.push(context,
                                   MaterialPageRoute(
                                     builder: (_) => ChallengeDetail(
                                       title: challengeTitle,
@@ -406,8 +589,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                       videoUrl: videoUrl,
                                       challengeId: challengeId,
                                     ),
-                                  ),
-                                )
+                                  ))
                             : null,
                         child: Text(
                           challengeTitle,
@@ -425,24 +607,25 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 ),
                 if (aiScore != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       color: _accent.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _accent.withValues(alpha: 0.5)),
+                      border:
+                          Border.all(color: _accent.withValues(alpha: 0.5)),
                     ),
                     child: Text(
                       '$aiScore',
                       style: const TextStyle(
-                        color: Color(0xFFD4A8FF),
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
+                          color: Color(0xFFD4A8FF),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18),
                     ),
                   ),
                 const SizedBox(width: 4),
                 GestureDetector(
-                  onTap: () => _showReportSheet(context, submissionId),
+                  onTap: () => _showReportSheet(context),
                   child: const Icon(Icons.more_vert_rounded,
                       color: Colors.white38, size: 20),
                 ),
@@ -450,7 +633,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             ),
           ),
 
-          // ── Video placeholder (tap to open full-screen player) ───────────
+          // ── Thumbnail → tap opens full-screen player ─────────────────────
           GestureDetector(
             onTap: () => Navigator.push(
               context,
@@ -458,6 +641,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 builder: (_) => PublicVideoScreen(
                   submissionId: submissionId,
                   videoUrl: videoUrl,
+                  videoUrl480p: data['videoUrl480p'] as String?,
+                  thumbnailUrl: thumbnailUrl,
                   username: username,
                   userId: userId,
                   challengeTitle: challengeTitle,
@@ -469,22 +654,35 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                 ),
               ),
             ),
-            child: Container(
-              height: 210,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    _accent.withValues(alpha: 0.14),
-                    Colors.black.withValues(alpha: 0.6),
+            child: ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(0)),
+              child: SizedBox(
+                height: 210,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    VideoThumbnailWidget(
+                      videoUrl: videoUrl,
+                      thumbnailUrl: thumbnailUrl,
+                      fit: BoxFit.cover,
+                    ),
+                    // Play-button overlay
+                    Center(
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 30),
+                      ),
+                    ),
                   ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
                 ),
-              ),
-              child: const Center(
-                child: Icon(Icons.play_circle_outline_rounded,
-                    color: Colors.white60, size: 64),
               ),
             ),
           ),
@@ -494,30 +692,31 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Row(
               children: [
-                // Star button
                 GestureDetector(
-                  onTap: () => _toggleStar(submissionId, starredBy, userId),
+                  onTap: () => _toggleStar(context),
                   child: Row(
                     children: [
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 200),
                         child: Icon(
-                          isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
+                          isStarred
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
                           key: ValueKey(isStarred),
-                          color: isStarred ? const Color(0xFFFFD700) : Colors.white54,
+                          color: isStarred
+                              ? const Color(0xFFFFD700)
+                              : Colors.white54,
                           size: 26,
                         ),
                       ),
                       const SizedBox(width: 5),
-                      Text(
-                        '$starsCount',
-                        style: const TextStyle(color: Colors.white54, fontSize: 14),
-                      ),
+                      Text('$starsCount',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 14)),
                     ],
                   ),
                 ),
                 const Spacer(),
-                // Take Challenge button
                 if (challengeId.isNotEmpty)
                   GestureDetector(
                     onTap: () => Navigator.push(
@@ -532,7 +731,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                       ),
                     ),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 9),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
                           colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
@@ -542,10 +742,9 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                       child: const Text(
                         'Take Challenge',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                        ),
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -562,7 +761,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
 class _SourceInfo {
   final String label;
-  final String? creatorId; // null = official AURA ARENA challenge
+  final String? creatorId;
   const _SourceInfo(this.label, this.creatorId);
 }
 
@@ -629,7 +828,8 @@ class _SourceChip extends StatelessWidget {
                   )
               : null,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: chipColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),

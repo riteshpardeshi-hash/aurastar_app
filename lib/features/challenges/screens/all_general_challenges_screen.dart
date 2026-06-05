@@ -5,8 +5,8 @@ import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
 import '../../../features/account/screens/my_account_screen.dart';
-import '../../../features/explore/screens/explore_creators_screen.dart';
 import '../../../features/video/screens/video_feed_screen.dart';
+import '../../../shared/widgets/aura_action_sheet.dart';
 import 'challenge_detail.dart';
 
 class AllGeneralChallengesScreen extends StatelessWidget {
@@ -112,23 +112,19 @@ class AllGeneralChallengesScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _navItem(
-                  icon: Icons.sports_esports_outlined,
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  onTap: () => Navigator.popUntil(context, (r) => r.isFirst),
+                ),
+                _navItem(
+                  icon: Icons.flag_rounded,
                   label: 'Challenges',
                   active: true,
                   onTap: () {},
                 ),
-                _navItem(
-                  icon: Icons.store_outlined,
-                  label: 'Brand\nChallenges',
-                  onTap: () => Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ExploreCreatorsScreen()),
-                  ),
-                ),
                 const SizedBox(width: 64),
                 _navItem(
-                  icon: Icons.emoji_events_outlined,
+                  icon: Icons.leaderboard_rounded,
                   label: 'Leaderboard',
                   onTap: () => Navigator.push(
                     context,
@@ -150,7 +146,7 @@ class AllGeneralChallengesScreen extends StatelessWidget {
             Positioned(
               top: -22,
               child: GestureDetector(
-                onTap: () => Navigator.popUntil(context, (r) => r.isFirst),
+                onTap: () => showAuraActionSheet(context),
                 child: Container(
                   width: 60,
                   height: 60,

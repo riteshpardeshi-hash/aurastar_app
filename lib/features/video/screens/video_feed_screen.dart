@@ -5,7 +5,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../challenges/screens/category_challenges_screen.dart';
+import '../../explore/screens/creator_profile_screen.dart';
 import '../../explore/screens/participant_profile_screen.dart';
+import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../../core/services/video_cache_service.dart';
 
 /// Vertical TikTok-style video feed.
 /// Each item in [submissions] must be: `{'id': String, 'data': Map}`
@@ -58,6 +62,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
             submissionId: item['id'] as String,
             data: item['data'] as Map<String, dynamic>,
             isActive: i == _currentIndex,
+            isPreload: i == _currentIndex + 1,
           );
         },
       ),
@@ -71,12 +76,14 @@ class _VideoPage extends StatefulWidget {
   final String submissionId;
   final Map<String, dynamic> data;
   final bool isActive;
+  final bool isPreload;
 
   const _VideoPage({
     super.key,
     required this.submissionId,
     required this.data,
     required this.isActive,
+    this.isPreload = false,
   });
 
   @override
@@ -89,11 +96,16 @@ class _VideoPageState extends State<_VideoPage> {
 
   VideoPlayerController? _player;
   bool _playerReady = false;
+  bool _initStarted = false;
   bool _isPlaying = false;
 
   late bool _starred;
   late int _stars;
   bool _starLoading = false;
+
+  // Smart link data fetched lazily from the challenge doc
+  Map<String, dynamic>? _challengeData;
+  bool _challengeFetched = false;
 
   @override
   void initState() {
@@ -101,30 +113,74 @@ class _VideoPageState extends State<_VideoPage> {
     final starredBy = (widget.data['starredBy'] as List?) ?? [];
     _starred = starredBy.contains(_uid);
     _stars = (widget.data['starsCount'] as num?)?.toInt() ?? 0;
-    if (widget.isActive) _initPlayer();
+    if (widget.isActive || widget.isPreload) _initPlayer();
+    if (widget.isActive) _fetchChallengeData();
   }
 
   @override
   void didUpdateWidget(_VideoPage old) {
     super.didUpdateWidget(old);
+
     if (!old.isActive && widget.isActive) {
-      _playerReady ? _player?.play() : _initPlayer();
+      _fetchChallengeData();
+      if (_playerReady) {
+        _player?.play();
+        setState(() => _isPlaying = true);
+      } else if (!_initStarted) {
+        _initPlayer();
+      }
+      // If init is in-flight, _initPlayer will auto-play once ready
     } else if (old.isActive && !widget.isActive) {
       _player?.pause();
+      if (mounted) setState(() => _isPlaying = false);
+    } else if (!old.isPreload && widget.isPreload && !_initStarted) {
+      _initPlayer(); // newly entered preload range
     }
   }
 
   Future<void> _initPlayer() async {
+    if (_initStarted) return;
+    _initStarted = true;
+
     final videoUrl = widget.data['videoUrl'] as String? ?? '';
-    if (videoUrl.isEmpty) return;
-    _player = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
+    // Prefer 480p optimised version produced by the Cloud Function
+    final playUrl = (widget.data['videoUrl480p'] as String?)?.isNotEmpty == true
+        ? widget.data['videoUrl480p'] as String
+        : videoUrl;
+    if (playUrl.isEmpty) return;
+
+    VideoCacheService.markViewed(playUrl);
+
+    _player = VideoPlayerController.networkUrl(
+      Uri.parse(playUrl),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+    );
     await _player!.initialize();
     _player!.setLooping(true);
-    _player!.play();
-    if (mounted) setState(() { _playerReady = true; _isPlaying = true; });
+
+    if (widget.isActive) _player!.play();
+
+    if (mounted) {
+      setState(() {
+        _playerReady = true;
+        _isPlaying = widget.isActive;
+      });
+    }
+
     _player!.addListener(() {
       if (mounted) setState(() => _isPlaying = _player!.value.isPlaying);
     });
+  }
+
+  Future<void> _fetchChallengeData() async {
+    if (_challengeFetched) return;
+    _challengeFetched = true;
+    final cid = widget.data['challengeId'] as String? ?? '';
+    if (cid.isEmpty) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('challenges').doc(cid).get();
+      if (doc.exists && mounted) setState(() => _challengeData = doc.data());
+    } catch (_) {}
   }
 
   @override
@@ -182,11 +238,13 @@ class _VideoPageState extends State<_VideoPage> {
           children: [
             Center(child: Container(
               width: 36, height: 4,
-              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)),
             )),
             const SizedBox(height: 16),
             const Text('Report Video',
-                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontSize: 17,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             const Text('Why are you reporting this?',
                 style: TextStyle(color: Colors.white54, fontSize: 13)),
@@ -194,8 +252,10 @@ class _VideoPageState extends State<_VideoPage> {
             ...reasons.map((r) => ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              title: Text(r, style: const TextStyle(color: Colors.white, fontSize: 14)),
-              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
+              title: Text(r,
+                  style: const TextStyle(color: Colors.white, fontSize: 14)),
+              trailing: const Icon(Icons.chevron_right_rounded,
+                  color: Colors.white24, size: 18),
               onTap: () async {
                 Navigator.pop(context);
                 await FirebaseFirestore.instance.collection('reports').add({
@@ -206,7 +266,8 @@ class _VideoPageState extends State<_VideoPage> {
                 });
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Report submitted. Thank you.')),
+                    const SnackBar(
+                        content: Text('Report submitted. Thank you.')),
                   );
                 }
               },
@@ -221,9 +282,11 @@ class _VideoPageState extends State<_VideoPage> {
   Widget build(BuildContext context) {
     final username = widget.data['username'] as String? ?? 'User';
     final userId = widget.data['userId'] as String? ?? '';
-    final challengeTitle = widget.data['challengeTitle'] as String? ?? 'Challenge';
+    final challengeTitle =
+        widget.data['challengeTitle'] as String? ?? 'Challenge';
     final challengeId = widget.data['challengeId'] as String? ?? '';
     final videoUrl = widget.data['videoUrl'] as String? ?? '';
+    final thumbnailUrl = widget.data['thumbnailUrl'] as String?;
     final aiScore = (widget.data['aiScore'] as num?)?.toInt();
 
     return GestureDetector(
@@ -231,23 +294,46 @@ class _VideoPageState extends State<_VideoPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Video
-          _playerReady
-              ? Center(child: AspectRatio(
-                  aspectRatio: _player!.value.aspectRatio,
-                  child: VideoPlayer(_player!),
-                ))
-              : const Center(child: CircularProgressIndicator(color: _purple)),
+          // Thumbnail shown until video is ready
+          VideoThumbnailWidget(
+            videoUrl: videoUrl,
+            thumbnailUrl: thumbnailUrl,
+            fit: BoxFit.cover,
+          ),
+
+          // Video overlaid once initialised
+          if (_playerReady)
+            Center(
+              child: AspectRatio(
+                aspectRatio: _player!.value.aspectRatio,
+                child: VideoPlayer(_player!),
+              ),
+            ),
+
+          // Buffering indicator
+          if (!_playerReady && widget.isActive)
+            const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                    color: _purple, strokeWidth: 2.5),
+              ),
+            ),
 
           if (_playerReady && !_isPlaying)
-            Center(child: Container(
-              width: 60, height: 60,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                shape: BoxShape.circle,
+            Center(
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.pause_rounded,
+                    color: Colors.white, size: 32),
               ),
-              child: const Icon(Icons.pause_rounded, color: Colors.white, size: 32),
-            )),
+            ),
 
           // Top bar
           SafeArea(
@@ -255,9 +341,11 @@ class _VideoPageState extends State<_VideoPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  _iconBtn(Icons.arrow_back_rounded, onTap: () => Navigator.pop(context)),
+                  _iconBtn(Icons.arrow_back_rounded,
+                      onTap: () => Navigator.pop(context)),
                   const Spacer(),
-                  _iconBtn(Icons.more_vert_rounded, onTap: () => _showReport(context)),
+                  _iconBtn(Icons.more_vert_rounded,
+                      onTap: () => _showReport(context)),
                 ],
               ),
             ),
@@ -270,7 +358,9 @@ class _VideoPageState extends State<_VideoPage> {
             child: Column(
               children: [
                 _SideAction(
-                  icon: _starred ? Icons.star_rounded : Icons.star_outline_rounded,
+                  icon: _starred
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
                   color: _starred ? const Color(0xFFFFD700) : Colors.white,
                   label: _fmt(_stars),
                   loading: _starLoading,
@@ -281,21 +371,27 @@ class _VideoPageState extends State<_VideoPage> {
                   icon: Icons.share_rounded,
                   color: Colors.white,
                   label: 'Share',
-                  onTap: () => Share.share('Watch this challenge on Aura Arena!\n$videoUrl'),
+                  onTap: () => Share.share(
+                      'Watch this challenge on Aura Arena!\n$videoUrl'),
                 ),
               ],
             ),
           ),
 
-          // Bottom info — username only shown here (not on feed cards)
+          // Bottom info
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Colors.black.withValues(alpha: 0.90), Colors.transparent],
+                  colors: [
+                    Colors.black.withValues(alpha: 0.90),
+                    Colors.transparent
+                  ],
                 ),
               ),
               padding: const EdgeInsets.fromLTRB(16, 40, 90, 32),
@@ -305,9 +401,13 @@ class _VideoPageState extends State<_VideoPage> {
                 children: [
                   GestureDetector(
                     onTap: userId.isNotEmpty
-                        ? () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => ParticipantProfileScreen(userId: userId),
-                            ))
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ParticipantProfileScreen(userId: userId),
+                              ),
+                            )
                         : null,
                     child: Row(
                       children: [
@@ -315,44 +415,80 @@ class _VideoPageState extends State<_VideoPage> {
                           radius: 16,
                           backgroundColor: _purple.withValues(alpha: 0.35),
                           child: Text(
-                            username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            username.isNotEmpty
+                                ? username[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text('@$username',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15)),
                         if (aiScore != null) ...[
                           const SizedBox(width: 10),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: _purple.withValues(alpha: 0.30),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: _purple.withValues(alpha: 0.60)),
+                              border: Border.all(
+                                  color: _purple.withValues(alpha: 0.60)),
                             ),
                             child: Text('$aiScore',
                                 style: const TextStyle(
-                                    color: Color(0xFFD4A8FF), fontWeight: FontWeight.w900, fontSize: 14)),
+                                    color: Color(0xFFD4A8FF),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14)),
                           ),
                         ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(challengeTitle,
-                      style: const TextStyle(color: Color(0xFFBB6BD9), fontSize: 13, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  // Challenge title — tappable
+                  GestureDetector(
+                    onTap: challengeId.isNotEmpty
+                        ? () => Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => ChallengeDetail(
+                                title: challengeTitle,
+                                instructions: '',
+                                videoUrl: videoUrl,
+                                challengeId: challengeId,
+                              ),
+                            ))
+                        : null,
+                    child: Text(challengeTitle,
+                        style: const TextStyle(
+                            color: Color(0xFFBB6BD9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500)),
+                  ),
+                  // Smart links row
+                  if (_challengeData != null) ...[
+                    const SizedBox(height: 8),
+                    _buildSmartLinks(context, challengeTitle, challengeId, videoUrl),
+                  ],
                   if (challengeId.isNotEmpty) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ChallengeDetail(
-                          title: challengeTitle,
-                          instructions: '',
-                          videoUrl: videoUrl,
-                          challengeId: challengeId,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChallengeDetail(
+                            title: challengeTitle,
+                            instructions: '',
+                            videoUrl: videoUrl,
+                            challengeId: challengeId,
+                          ),
                         ),
-                      )),
+                      ),
                       child: Container(
                         width: double.infinity,
                         height: 50,
@@ -360,15 +496,20 @@ class _VideoPageState extends State<_VideoPage> {
                           gradient: const LinearGradient(
                               colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)]),
                           borderRadius: BorderRadius.circular(14),
-                          boxShadow: [BoxShadow(
-                            color: _purple.withValues(alpha: 0.40),
-                            blurRadius: 14,
-                            offset: const Offset(0, 5),
-                          )],
+                          boxShadow: [
+                            BoxShadow(
+                              color: _purple.withValues(alpha: 0.40),
+                              blurRadius: 14,
+                              offset: const Offset(0, 5),
+                            )
+                          ],
                         ),
                         child: const Center(
                           child: Text('Try this Challenge',
-                              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700)),
                         ),
                       ),
                     ),
@@ -382,16 +523,89 @@ class _VideoPageState extends State<_VideoPage> {
     );
   }
 
-  Widget _iconBtn(IconData icon, {required VoidCallback onTap}) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 40, height: 40,
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), shape: BoxShape.circle),
-      child: Icon(icon, color: Colors.white, size: 20),
-    ),
-  );
+  Widget _buildSmartLinks(BuildContext context, String challengeTitle, String challengeId, String videoUrl) {
+    final cd         = _challengeData!;
+    final category   = cd['category']   as String? ?? '';
+    final creatorId  = cd['creatorId']  as String? ?? '';
+    final isSystem   = creatorId == 'system' || creatorId.isEmpty;
 
-  String _fmt(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}K' : '$n';
+    final chips = <Widget>[];
+
+    if (category.isNotEmpty) {
+      chips.add(_linkChip(
+        label: category,
+        icon: Icons.category_outlined,
+        color: _categoryColor(category),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => CategoryChallengesScreen(category: category),
+        )),
+      ));
+    }
+
+    if (!isSystem) {
+      chips.add(_linkChip(
+        label: 'Brand',
+        icon: Icons.store_rounded,
+        color: const Color(0xFF4B6EF6),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => CreatorProfileScreen(creatorId: creatorId),
+        )),
+      ));
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Wrap(spacing: 6, runSpacing: 4, children: chips);
+  }
+
+  Widget _linkChip({required String label, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.40)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 11),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _categoryColor(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'dance':   return const Color(0xFF4B6EF6);
+      case 'fitness': return const Color(0xFF22C55E);
+      case 'fashion': return const Color(0xFFFF6B9D);
+      case 'sports':  return const Color(0xFFF97316);
+      case 'comedy':  return const Color(0xFFEAB308);
+      case 'skill':   return const Color(0xFF06B6D4);
+      default:        return const Color(0xFF7B2CBF);
+    }
+  }
+
+  Widget _iconBtn(IconData icon, {required VoidCallback onTap}) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              shape: BoxShape.circle),
+          child: Icon(icon, color: Colors.white, size: 20),
+        ),
+      );
+
+  String _fmt(int n) =>
+      n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}K' : '$n';
 }
 
 // ── Reusable side action button ───────────────────────────────────────────────
@@ -413,21 +627,27 @@ class _SideAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: loading ? null : onTap,
-    child: Column(
-      children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          child: loading
-              ? const SizedBox(
-                  width: 32, height: 32,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                )
-              : Icon(icon, key: ValueKey(icon), color: color, size: 32),
+        onTap: loading ? null : onTap,
+        child: Column(
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: loading
+                  ? const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : Icon(icon, key: ValueKey(icon), color: color, size: 32),
+            ),
+            const SizedBox(height: 4),
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
-    ),
-  );
+      );
 }

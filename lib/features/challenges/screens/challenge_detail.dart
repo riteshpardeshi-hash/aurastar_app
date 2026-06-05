@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
@@ -9,6 +10,7 @@ import '../widgets/achievement_card.dart';
 import '../../video/screens/preview_screen.dart';
 import '../../video/screens/video_feed_screen.dart';
 import 'camera_screen.dart';
+import 'watch_others_screen.dart';
 
 class ChallengeDetail extends StatefulWidget {
   final String title;
@@ -41,12 +43,25 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   // Challenge data
   int _auraPoints = 150;
-  bool _dataLoaded = false;
+  String _difficulty = '';
+  String _sourceType = '';
+  String _category = '';
+
+  // Stats
+  int _attemptCount = 0;
+  int _topScore = 0;
+  bool _statsLoaded = false;
+
+  // Bookmark
+  bool _isSaved = false;
+  bool _savingBookmark = false;
 
   @override
   void initState() {
     super.initState();
     _fetchChallengeData();
+    _fetchStats();
+    _checkSaved();
   }
 
   Future<void> _fetchChallengeData() async {
@@ -60,10 +75,81 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       final data = doc.data()!;
       setState(() {
         _auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 150;
-        _dataLoaded = true;
+        _difficulty = data['difficulty'] as String? ?? '';
+        _sourceType = data['sourceType'] as String? ?? '';
+        _category = data['category'] as String? ?? '';
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _checkSaved() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || widget.challengeId.isEmpty) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('saved_challenges').doc(widget.challengeId)
+          .get();
+      if (mounted) setState(() => _isSaved = doc.exists);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleSave() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || widget.challengeId.isEmpty || _savingBookmark) return;
+    setState(() => _savingBookmark = true);
+    final ref = FirebaseFirestore.instance
+        .collection('users').doc(uid)
+        .collection('saved_challenges').doc(widget.challengeId);
+    try {
+      if (_isSaved) {
+        await ref.delete();
+        if (mounted) setState(() { _isSaved = false; _savingBookmark = false; });
+      } else {
+        await ref.set({
+          'challengeId':   widget.challengeId,
+          'title':         widget.title,
+          'instructions':  widget.instructions,
+          'videoUrl':      widget.videoUrl,
+          'auraPoints':    _auraPoints,
+          'category':      _category,
+          'difficulty':    _difficulty,
+          'savedAt':       FieldValue.serverTimestamp(),
+        });
+        if (mounted) setState(() { _isSaved = true; _savingBookmark = false; });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _savingBookmark = false);
+    }
+  }
+
+  Future<void> _fetchStats() async {
+    if (widget.challengeId.isEmpty) return;
+    try {
+      final countSnap = await FirebaseFirestore.instance
+          .collection('submissions')
+          .where('challengeId', isEqualTo: widget.challengeId)
+          .where('status', isEqualTo: 'approved')
+          .count()
+          .get();
+      final topSnap = await FirebaseFirestore.instance
+          .collection('submissions')
+          .where('challengeId', isEqualTo: widget.challengeId)
+          .where('status', isEqualTo: 'approved')
+          .orderBy('aiScore', descending: true)
+          .limit(1)
+          .get();
+      if (!mounted) return;
+      setState(() {
+        _attemptCount = countSnap.count ?? 0;
+        if (topSnap.docs.isNotEmpty) {
+          final d = topSnap.docs.first.data();
+          _topScore = (d['aiScore'] as num?)?.toInt() ?? 0;
+        }
+        _statsLoaded = true;
       });
     } catch (_) {
-      if (mounted) setState(() => _dataLoaded = true);
+      if (mounted) setState(() => _statsLoaded = true);
     }
   }
 
@@ -173,12 +259,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               label: 'Pick from Gallery',
               subtitle: 'Choose an existing video',
               onTap: () async {
-                Navigator.pop(context);
+                final nav = Navigator.of(context);
+                nav.pop();
                 final picked = await ImagePicker()
                     .pickVideo(source: ImageSource.gallery);
-                if (picked == null || !context.mounted) return;
-                Navigator.push(
-                  context,
+                if (picked == null) return;
+                nav.push(
                   MaterialPageRoute(
                     builder: (_) => PreviewScreen(
                       videoPath: picked.path,
@@ -295,7 +381,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         if (_subtitle.isNotEmpty)
                           Padding(
                             padding:
-                                const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                                const EdgeInsets.fromLTRB(20, 0, 20, 12),
                             child: Text(
                               _subtitle,
                               style: const TextStyle(
@@ -307,11 +393,20 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                             ),
                           ),
 
+                        // Meta chips: source • category • difficulty • aura
+                        _buildMetaRow(),
+
                         // Video player
                         _buildVideoSection(),
 
+                        // Stats bar: attempts + top score
+                        _buildStatsBar(),
+
                         // Details section
                         _buildDetailsSection(),
+
+                        // Scoring rubric
+                        _buildScoringRubric(),
 
                         // Rewards section
                         _buildRewardsSection(),
@@ -361,6 +456,26 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                       shape: const CircleBorder(),
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: _savingBookmark ? null : _toggleSave,
+                    icon: _savingBookmark
+                        ? const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Icon(
+                            _isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                            color: _isSaved ? const Color(0xFFD4A8FF) : Colors.white,
+                            size: 20,
+                          ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _isSaved
+                          ? const Color(0xFF7B2CBF).withValues(alpha: 0.30)
+                          : Colors.white.withValues(alpha: 0.12),
+                      shape: const CircleBorder(),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -384,38 +499,74 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     ],
                   ),
                 ),
-                child: GestureDetector(
-                  onTap: _showTakeChallengeSheet,
-                  child: Container(
-                    width: double.infinity,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _accent.withValues(alpha: 0.50),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Take this Challenge',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
+                child: Row(
+                  children: [
+                    // Watch Others
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => WatchOthersScreen(
+                            challengeId: widget.challengeId,
+                            challengeTitle: widget.title,
+                            auraPoints: _auraPoints,
+                            referenceVideoUrl: widget.videoUrl,
+                          ),
                         ),
                       ),
+                      child: Container(
+                        height: 58,
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Watch Others',
+                            style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    // Take this Challenge
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _showTakeChallengeSheet,
+                        child: Container(
+                          height: 58,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _accent.withValues(alpha: 0.50),
+                                blurRadius: 20,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Take this Challenge',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -477,6 +628,135 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Meta row ──────────────────────────────────────────────────────────────
+  Widget _buildMetaRow() {
+    final chips = <Widget>[];
+    if (_sourceType.isNotEmpty) {
+      chips.add(_metaChip(_sourceType, Icons.verified_outlined, _sourceTypeColor));
+    }
+    if (_category.isNotEmpty) {
+      chips.add(_metaChip(_category, Icons.category_outlined, Colors.white54));
+    }
+    if (_difficulty.isNotEmpty) {
+      chips.add(_metaChip(_difficulty, Icons.speed_outlined, _difficultyColor));
+    }
+    chips.add(_metaChip('$_auraPoints Aura', Icons.diamond, _accent));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: Wrap(spacing: 8, runSpacing: 6, children: chips),
+    );
+  }
+
+  Widget _metaChip(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  // ── Stats bar ─────────────────────────────────────────────────────────────
+  Widget _buildStatsBar() {
+    if (!_statsLoaded || (_attemptCount == 0 && _topScore == 0)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _statItem(Icons.people_outline_rounded, _formatCount(_attemptCount), 'Attempts'),
+            Container(width: 1, height: 32, color: Colors.white12),
+            _statItem(Icons.emoji_events_outlined, _topScore > 0 ? '$_topScore' : '—', 'Top Score'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statItem(IconData icon, String value, String label) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: _accent, size: 15),
+            const SizedBox(width: 5),
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+      ],
+    );
+  }
+
+  // ── Scoring rubric ────────────────────────────────────────────────────────
+  Widget _buildScoringRubric() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Scoring :',
+            style: TextStyle(color: _accent, fontSize: 20, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _scorePill('Style', '30%', const Color(0xFF4B6EF6)),
+              _scorePill('Match', '30%', const Color(0xFF9B4DCA)),
+              _scorePill('Confidence', '20%', const Color(0xFFFF6B9D)),
+              _scorePill('Finish', '20%', const Color(0xFF06B6D4)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _scorePill(String label, String pct, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(text: label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+            TextSpan(text: '  $pct', style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ],
         ),
       ),
@@ -649,6 +929,30 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     return '';
   }
 
+  String _formatCount(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
+    return '$n';
+  }
+
+  Color get _difficultyColor {
+    switch (_difficulty.toLowerCase()) {
+      case 'easy': return Colors.greenAccent;
+      case 'medium': return Colors.yellow;
+      case 'hard': return Colors.orange;
+      case 'pro': return Colors.redAccent;
+      default: return Colors.white54;
+    }
+  }
+
+  Color get _sourceTypeColor {
+    switch (_sourceType.toLowerCase()) {
+      case 'brand': return const Color(0xFF4B6EF6);
+      case 'creator': return const Color(0xFFFF6B9D);
+      case 'sponsored': return const Color(0xFFFFD700);
+      default: return _accent;
+    }
+  }
+
   List<String> get _bulletPoints {
     final text = widget.instructions.trim();
     if (text.isEmpty) return [];
@@ -688,20 +992,23 @@ class _ChallengeVideoSection extends StatelessWidget {
 
   static const _accent = Color(0xFF7B2CBF);
 
+  void _openWatchOthers(BuildContext context) {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => WatchOthersScreen(
+        challengeId: challengeId,
+        challengeTitle: challengeTitle,
+      ),
+    ));
+  }
+
   void _openFeed(BuildContext context, List<QueryDocumentSnapshot> docs, int startIndex) {
     final submissions = docs.map((d) => {
       'id': d.id,
       'data': d.data() as Map<String, dynamic>,
     }).toList();
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => VideoFeedScreen(
-          submissions: submissions,
-          initialIndex: startIndex,
-        ),
-      ),
-    );
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => VideoFeedScreen(submissions: submissions, initialIndex: startIndex),
+    ));
   }
 
   @override
@@ -755,7 +1062,7 @@ class _ChallengeVideoSection extends StatelessWidget {
                     ),
                     const Spacer(),
                     GestureDetector(
-                      onTap: () => _openFeed(context, docs, 0),
+                      onTap: () => _openWatchOthers(context),
                       child: const Row(
                         children: [
                           Text(

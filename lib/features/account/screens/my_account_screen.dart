@@ -10,6 +10,7 @@ import '../../../core/models/aura_tier.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
 import 'settings_screen.dart';
+import 'saved_challenges_screen.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -731,6 +732,8 @@ class MyAccountScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     _AchievementCardsSection(uid: user.uid),
+                    const SizedBox(height: 16),
+                    _SavedChallengesRow(uid: user.uid),
                     const SizedBox(height: 24),
                     const Text(
                       "My Videos",
@@ -928,6 +931,78 @@ class MyAccountScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ── Saved Challenges row ───────────────────────────────────────────────────────
+
+class _SavedChallengesRow extends StatelessWidget {
+  final String uid;
+  const _SavedChallengesRow({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('saved_challenges')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        final hasSaved = (snap.data?.docs.length ?? 0) > 0;
+
+        return GestureDetector(
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const SavedChallengesScreen())),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF12102A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasSaved
+                    ? const Color(0xFF7B2CBF).withValues(alpha: 0.40)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF7B2CBF).withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                    color: hasSaved ? const Color(0xFFD4A8FF) : Colors.white38,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Saved Challenges',
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasSaved
+                            ? 'Tap to see your saved list'
+                            : 'Bookmark challenges to try later',
+                        style: const TextStyle(color: Colors.white38, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 20),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

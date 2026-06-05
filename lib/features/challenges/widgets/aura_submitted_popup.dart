@@ -28,8 +28,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     with TickerProviderStateMixin {
   String? _resultStatus;
   int _netAurasAwarded = 0;
+  int _aiScore = 0;
   bool _isBestForChallenge = false;
   String _aiReason = '';
+  bool _showExplanation = false;
   bool _timedOut = false;
   Timer? _timeoutTimer;
   StreamSubscription<DocumentSnapshot>? _sub;
@@ -47,6 +49,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   late AnimationController _resultEnterCtrl;
   late AnimationController _countCtrl;
   late AnimationController _particleCtrl;
+  late AnimationController _explanationCtrl;
 
   late Animation<double> _enterScale;
   late Animation<double> _enterFade;
@@ -54,6 +57,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   late Animation<double> _pulseAnim;
   late Animation<double> _resultScale;
   late Animation<double> _resultFade;
+  late Animation<double> _explanationFade;
+  late Animation<Offset> _explanationSlide;
 
   @override
   void initState() {
@@ -67,6 +72,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     _resultEnterCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _countCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
     _particleCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800));
+    _explanationCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
 
     _enterScale = CurvedAnimation(parent: _enterCtrl, curve: Curves.elasticOut);
     _enterFade = CurvedAnimation(parent: _enterCtrl, curve: Curves.easeIn);
@@ -76,6 +82,9 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
     _resultScale = CurvedAnimation(parent: _resultEnterCtrl, curve: Curves.elasticOut);
     _resultFade = CurvedAnimation(parent: _resultEnterCtrl, curve: Curves.easeIn);
+    _explanationFade = CurvedAnimation(parent: _explanationCtrl, curve: Curves.easeIn);
+    _explanationSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _explanationCtrl, curve: Curves.easeOutCubic));
 
     _enterCtrl.forward();
 
@@ -95,6 +104,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       if (status == 'approved' || status == 'rejected' || status == 'ai_error') {
         final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
         final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
+        final score = (data['aiScore'] as num?)?.toInt() ?? 0;
         final isBest = data['isBestForChallenge'] as bool? ?? false;
         final reason = data['aiReason'] as String? ?? '';
         final uname = data['username'] as String? ?? 'User';
@@ -102,14 +112,17 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         setState(() {
           _resultStatus = status;
           _netAurasAwarded = netAwarded;
+          _aiScore = score;
           _isBestForChallenge = isBest;
           _aiReason = reason;
           _username = uname;
+          _showExplanation = status == 'approved' && reason.isNotEmpty;
         });
         _resultEnterCtrl.forward();
         if (status == 'approved') {
           _countCtrl.forward();
           _particleCtrl.forward();
+          if (reason.isNotEmpty) _explanationCtrl.forward();
           _saveCardToProfile();
           _triggerReferralBonusIfEligible();
         } else {
@@ -231,6 +244,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     _resultEnterCtrl.dispose();
     _countCtrl.dispose();
     _particleCtrl.dispose();
+    _explanationCtrl.dispose();
     super.dispose();
   }
 
@@ -429,10 +443,126 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
   }
 
-  // ── Approved: achievement card ────────────────────────────────────────────────
+  // ── Approved: explanation → card flow ────────────────────────────────────────
 
   Widget _buildApprovedContent() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+      child: _showExplanation ? _buildExplanationView() : _buildCardView(),
+    );
+  }
+
+  Widget _buildExplanationView() {
+    return SlideTransition(
+      position: _explanationSlide,
+      child: FadeTransition(
+        opacity: _explanationFade,
+        child: SingleChildScrollView(
+          key: const ValueKey('explanation'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _aiScore > 0 ? '$_aiScore' : '${_netAurasAwarded * 6}',
+                style: const TextStyle(
+                  color: Color(0xFFFFD700),
+                  fontSize: 72,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+              const Text(
+                'AURA SCORE',
+                style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 2.5, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _isBestForChallenge
+                      ? Colors.greenAccent.withValues(alpha: 0.12)
+                      : Colors.orange.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _isBestForChallenge
+                        ? Colors.greenAccent.withValues(alpha: 0.35)
+                        : Colors.orange.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  _isBestForChallenge
+                      ? '+$_netAurasAwarded Aura earned  ✓'
+                      : 'Not your best — no Auras earned',
+                  style: TextStyle(
+                    color: _isBestForChallenge ? Colors.greenAccent : Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A0533).withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.psychology_outlined, color: Color(0xFFD4A8FF), size: 18),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Score Breakdown',
+                          style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _aiReason,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.55),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () {
+                  setState(() => _showExplanation = false);
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)]),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.45), blurRadius: 12, spreadRadius: 1),
+                    ],
+                  ),
+                  child: const Text(
+                    'Got it',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCardView() {
     return SingleChildScrollView(
+      key: const ValueKey('card'),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -445,17 +575,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               username: _username,
             ),
           ),
-          if (_aiReason.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                _aiReason,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4),
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -651,7 +770,9 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   @override
   Widget build(BuildContext context) {
     final isApproved = _resultStatus == 'approved';
-    final dialogH = isApproved ? 560.0 : 410.0;
+    final dialogH = isApproved
+        ? (_showExplanation ? 520.0 : 560.0)
+        : 410.0;
 
     return GestureDetector(
       onTap: isApproved ? null : () => Navigator.of(context).pop(true),

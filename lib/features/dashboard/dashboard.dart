@@ -4,12 +4,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
+import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
 import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
-import '../challenges/screens/brand_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../explore/screens/explore_creators_screen.dart';
+import '../challenges/screens/category_challenges_screen.dart';
+import '../challenges/screens/trending_screen.dart';
+import '../explore/screens/creator_videos_screen.dart';
+import '../home/screens/home_feed_screen.dart';
+import '../video/screens/video_feed_screen.dart';
+import '../../shared/widgets/aura_action_sheet.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../account/screens/my_account_screen.dart';
 import '../creator/admin/creator_admin_screen.dart';
@@ -129,6 +135,9 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(
                     child: _buildAuraArenaNewSection(context)),
                 SliverToBoxAdapter(child: _buildBrandAuraSection(context)),
+                SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
+                SliverToBoxAdapter(child: _buildCategorySection(context)),
+                SliverToBoxAdapter(child: _buildUserVideosSection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
                 if (isBrand || isAdmin)
                   SliverToBoxAdapter(
@@ -1003,16 +1012,27 @@ class _DashboardState extends State<Dashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text(
-            'Trending',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'ClashDisplay',
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Trending',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'ClashDisplay',
+                ),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TrendingScreen())),
+                child: const Text('See All ›',
+                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
         ),
         StreamBuilder<QuerySnapshot>(
@@ -1186,6 +1206,305 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  // ── Creator Videos ────────────────────────────────────────────────────────
+  Widget _buildCreatorVideosSection(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .where('isCreator', isEqualTo: true)
+          .limit(10)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Creator Videos',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
+                    child: const Text('See All ›',
+                        style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 88,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final data     = docs[i].data() as Map<String, dynamic>;
+                  final pageName = data['pageName'] as String? ?? data['name'] as String? ?? 'Creator';
+                  final imgUrl   = data['profileImageUrl'] as String? ?? '';
+                  final followers = (data['followerCount'] as num?)?.toInt() ?? 0;
+
+                  return GestureDetector(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
+                    child: Container(
+                      width: 72,
+                      margin: const EdgeInsets.only(right: 12),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 52, height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF7B2FF7), Color(0xFFF107A3)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              border: Border.all(color: _accent.withValues(alpha: 0.45), width: 1.5),
+                            ),
+                            child: imgUrl.isNotEmpty
+                                ? ClipOval(child: Image.network(imgUrl, fit: BoxFit.cover))
+                                : Center(
+                                    child: Text(
+                                      pageName.isNotEmpty ? pageName[0].toUpperCase() : 'C',
+                                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(pageName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600,
+                                  fontFamily: 'SpaceGrotesk')),
+                          if (followers > 0)
+                            Text('${_fmt(followers)} followers',
+                                style: const TextStyle(color: Colors.white38, fontSize: 9, fontFamily: 'SpaceGrotesk')),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── Category Videos ───────────────────────────────────────────────────────
+  Widget _buildCategorySection(BuildContext context) {
+    const categories = [
+      ('Dance',   Icons.music_note_rounded,        Color(0xFF4B6EF6)),
+      ('Fitness', Icons.fitness_center_rounded,    Color(0xFF22C55E)),
+      ('Fashion', Icons.checkroom_rounded,         Color(0xFFFF6B9D)),
+      ('Sports',  Icons.sports_basketball_rounded, Color(0xFFF97316)),
+      ('Comedy',  Icons.mood_rounded,              Color(0xFFEAB308)),
+      ('Skill',   Icons.psychology_rounded,        Color(0xFF06B6D4)),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Category Videos',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AllGeneralChallengesScreen())),
+                child: const Text('See All ›',
+                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 88,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: categories.length,
+            itemBuilder: (_, i) {
+              final (name, icon, color) = categories[i];
+              return GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => CategoryChallengesScreen(category: name))),
+                child: Container(
+                  width: 78,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: color.withValues(alpha: 0.30)),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, color: color, size: 26),
+                      const SizedBox(height: 6),
+                      Text(name,
+                          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, fontFamily: 'SpaceGrotesk')),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  // ── User Videos ────────────────────────────────────────────────────────────
+  Widget _buildUserVideosSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('User Videos',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const HomeFeedScreen())),
+                child: const Text('See All ›',
+                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('submissions')
+              .where('status',   isEqualTo: 'approved')
+              .where('isPublic', isEqualTo: true)
+              .orderBy('createdAt', descending: true)
+              .limit(8)
+              .snapshots(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox.shrink();
+
+            final submissions = docs
+                .map((d) => {'id': d.id, 'data': d.data() as Map<String, dynamic>})
+                .toList();
+
+            return SizedBox(
+              height: 160,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: docs.length,
+                itemBuilder: (_, i) {
+                  final data = docs[i].data() as Map<String, dynamic>;
+                  final videoUrl  = data['videoUrl']        as String? ?? '';
+                  final username  = data['username']        as String? ?? 'User';
+                  final aiScore   = (data['aiScore'] as num?)?.toInt();
+                  final challenge = data['challengeTitle']  as String? ?? '';
+
+                  return GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => VideoFeedScreen(submissions: submissions, initialIndex: i),
+                    )),
+                    child: Container(
+                      width: 110,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _VideoThumbnailWidget(
+                              videoUrl: videoUrl,
+                              fallbackAsset: 'assets/images/homescreen/challenge 1.png',
+                            ),
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.80)],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            // Play icon
+                            Center(
+                              child: Container(
+                                width: 30, height: 30,
+                                decoration: BoxDecoration(
+                                  color: _accent.withValues(alpha: 0.85),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
+                              ),
+                            ),
+                            // Score badge
+                            if (aiScore != null)
+                              Positioned(
+                                top: 6, right: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.90),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text('$aiScore',
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                                ),
+                              ),
+                            // Username + challenge name
+                            Positioned(
+                              left: 6, right: 6, bottom: 6,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('@$username',
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                                  if (challenge.isNotEmpty)
+                                    Text(challenge,
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white54, fontSize: 9)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   // ── Brand Tools (brand/admin only) ─────────────────────────────────────────
   Widget _buildBrandTools(
       BuildContext context, String userId, bool isBrand) {
@@ -1343,22 +1662,18 @@ class _DashboardState extends State<Dashboard> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _navItem(
+                        icon: Icons.home_rounded,
+                        label: 'Home',
+                        active: true,
+                        onTap: () {},
+                      ),
+                      _navItem(
                         icon: Icons.flag_rounded,
                         label: 'Challenges',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) =>
-                                  const AllGeneralChallengesScreen()),
-                        ),
-                      ),
-                      _navItem(
-                        icon: Icons.sell_rounded,
-                        label: 'Brand\nChallenges',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const BrandChallengesScreen()),
+                              builder: (_) => const AllGeneralChallengesScreen()),
                         ),
                       ),
                       const SizedBox(width: 58),
@@ -1388,8 +1703,7 @@ class _DashboardState extends State<Dashboard> {
               Positioned(
                 top: 0,
                 child: GestureDetector(
-                  onTap: () =>
-                      Navigator.popUntil(context, (route) => route.isFirst),
+                  onTap: () => showAuraActionSheet(context),
                   child: Container(
                     width: 56,
                     height: 56,
@@ -1429,6 +1743,7 @@ class _DashboardState extends State<Dashboard> {
     required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool active = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1438,13 +1753,13 @@ class _DashboardState extends State<Dashboard> {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white54, size: 22),
+            Icon(icon, color: active ? _accent : Colors.white54, size: 22),
             const SizedBox(height: 3),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white38,
+              style: TextStyle(
+                color: active ? _accent : Colors.white38,
                 fontSize: 9,
                 fontFamily: 'SpaceGrotesk',
                 height: 1.2,
@@ -1498,13 +1813,19 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
 
   Future<void> _load() async {
     if (widget.videoUrl.isEmpty) return;
+    // Check shared in-memory cache first
+    if (videoThumbnailCache.containsKey(widget.videoUrl)) {
+      if (mounted) setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
+      return;
+    }
     try {
       final bytes = await VideoThumbnail.thumbnailData(
         video: widget.videoUrl,
         imageFormat: ImageFormat.JPEG,
         maxWidth: 480,
-        quality: 80,
+        quality: 75,
       );
+      if (bytes != null) videoThumbnailCache[widget.videoUrl] = bytes;
       if (mounted) setState(() => _thumb = bytes);
     } catch (_) {}
   }

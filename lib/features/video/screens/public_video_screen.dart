@@ -5,11 +5,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../challenges/screens/category_challenges_screen.dart';
+import '../../explore/screens/creator_profile_screen.dart';
 import '../../explore/screens/participant_profile_screen.dart';
 
 class PublicVideoScreen extends StatefulWidget {
   final String submissionId;
   final String videoUrl;
+
+  /// 480p optimised URL written by the Cloud Function — used for playback.
+  /// Falls back to [videoUrl] when not yet processed.
+  final String? videoUrl480p;
+
+  /// Pre-generated thumbnail URL written by the Cloud Function.
+  final String? thumbnailUrl;
+
   final String username;
   final String userId;
   final String challengeTitle;
@@ -23,6 +33,8 @@ class PublicVideoScreen extends StatefulWidget {
     super.key,
     required this.submissionId,
     required this.videoUrl,
+    this.videoUrl480p,
+    this.thumbnailUrl,
     required this.username,
     required this.userId,
     required this.challengeTitle,
@@ -51,6 +63,9 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
   late int _stars;
   bool _starLoading = false;
 
+  // Smart link data
+  Map<String, dynamic>? _challengeData;
+
   @override
   void initState() {
     super.initState();
@@ -58,12 +73,28 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
     _starred = widget.initiallyStarred;
     _stars = widget.initialStars;
     _initPlayer();
+    _fetchChallengeData();
+  }
+
+  Future<void> _fetchChallengeData() async {
+    if (widget.challengeId.isEmpty) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('challenges').doc(widget.challengeId).get();
+      if (doc.exists && mounted) setState(() => _challengeData = doc.data());
+    } catch (_) {}
   }
 
   Future<void> _initPlayer() async {
-    if (widget.videoUrl.isEmpty) return;
-    _player =
-        VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    // Prefer 480p optimised version; fall back to original
+    final url = (widget.videoUrl480p?.isNotEmpty == true)
+        ? widget.videoUrl480p!
+        : widget.videoUrl;
+    if (url.isEmpty) return;
+
+    _player = VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+    );
     await _player!.initialize();
     _player!.setLooping(true);
     _player!.play();
@@ -203,19 +234,35 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Video ────────────────────────────────────────────────────────
+          // ── Video (thumbnail shown while buffering) ──────────────────────
           GestureDetector(
             onTap: _togglePlay,
-            child: _playerReady
-                ? Center(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Thumbnail background — instant load, no video download
+                if (widget.thumbnailUrl != null || widget.videoUrl.isNotEmpty)
+                  _ThumbnailBackground(
+                    videoUrl: widget.videoUrl,
+                    thumbnailUrl: widget.thumbnailUrl,
+                  ),
+                if (_playerReady)
+                  Center(
                     child: AspectRatio(
                       aspectRatio: _player!.value.aspectRatio,
                       child: VideoPlayer(_player!),
                     ),
-                  )
-                : const Center(
-                    child: CircularProgressIndicator(color: _purple),
                   ),
+                if (!_playerReady)
+                  const Center(
+                    child: SizedBox(
+                      width: 26, height: 26,
+                      child: CircularProgressIndicator(
+                          color: _purple, strokeWidth: 2.5),
+                    ),
+                  ),
+              ],
+            ),
           ),
 
           // Pause indicator
@@ -346,19 +393,37 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
 
-                  // Challenge title
-                  Text(
-                    widget.challengeTitle,
-                    style: const TextStyle(
-                      color: Color(0xFFBB6BD9),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                  // Challenge title — tappable
+                  GestureDetector(
+                    onTap: widget.challengeId.isNotEmpty
+                        ? () => Navigator.push(context, MaterialPageRoute(
+                              builder: (_) => ChallengeDetail(
+                                title: widget.challengeTitle,
+                                instructions: '',
+                                videoUrl: widget.challengeVideoUrl,
+                                challengeId: widget.challengeId,
+                              ),
+                            ))
+                        : null,
+                    child: Text(
+                      widget.challengeTitle,
+                      style: const TextStyle(
+                        color: Color(0xFFBB6BD9),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 16),
+                  // Smart links row
+                  if (_challengeData != null) ...[
+                    const SizedBox(height: 8),
+                    _buildSmartLinks(),
+                  ],
+
+                  const SizedBox(height: 12),
 
                   // Try Challenge CTA
                   if (widget.challengeId.isNotEmpty)
@@ -411,6 +476,74 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
     );
   }
 
+  Widget _buildSmartLinks() {
+    final cd        = _challengeData!;
+    final category  = cd['category']  as String? ?? '';
+    final creatorId = cd['creatorId'] as String? ?? '';
+    final isSystem  = creatorId == 'system' || creatorId.isEmpty;
+
+    final chips = <Widget>[];
+
+    if (category.isNotEmpty) {
+      chips.add(_linkChip(
+        label: category,
+        icon: Icons.category_outlined,
+        color: _categoryColor(category),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => CategoryChallengesScreen(category: category),
+        )),
+      ));
+    }
+
+    if (!isSystem) {
+      chips.add(_linkChip(
+        label: 'Brand',
+        icon: Icons.store_rounded,
+        color: const Color(0xFF4B6EF6),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => CreatorProfileScreen(creatorId: creatorId),
+        )),
+      ));
+    }
+
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Wrap(spacing: 6, runSpacing: 4, children: chips);
+  }
+
+  Widget _linkChip({required String label, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.40)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 11),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _categoryColor(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'dance':   return const Color(0xFF4B6EF6);
+      case 'fitness': return const Color(0xFF22C55E);
+      case 'fashion': return const Color(0xFFFF6B9D);
+      case 'sports':  return const Color(0xFFF97316);
+      case 'comedy':  return const Color(0xFFEAB308);
+      case 'skill':   return const Color(0xFF06B6D4);
+      default:        return const Color(0xFF7B2CBF);
+    }
+  }
+
   Widget _iconBtn(IconData icon, {required VoidCallback onTap}) =>
       GestureDetector(
         onTap: onTap,
@@ -432,6 +565,31 @@ class _PublicVideoScreenState extends State<PublicVideoScreen> {
 }
 
 // ── Shared widgets ────────────────────────────────────────────────────────────
+
+/// Shows a pre-generated thumbnail URL instantly, or falls back to skeleton.
+/// Used as the background layer behind the video player while buffering.
+class _ThumbnailBackground extends StatelessWidget {
+  final String videoUrl;
+  final String? thumbnailUrl;
+
+  const _ThumbnailBackground({required this.videoUrl, this.thumbnailUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    // Import comes from shared widget — this avoids adding another import
+    if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) {
+      return Image.network(
+        thumbnailUrl!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        cacheWidth: 720,
+        errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.black),
+      );
+    }
+    return const ColoredBox(color: Colors.black);
+  }
+}
 
 class _PauseIcon extends StatelessWidget {
   const _PauseIcon();
