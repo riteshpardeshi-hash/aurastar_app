@@ -8,7 +8,15 @@ class CreatorChallengeSubmittedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded),
+              onPressed: () => Navigator.pop(context),
+            ),
+            Expanded(
+              child: Padding(
           padding: const EdgeInsets.all(24),
           child: Center(
             child: Column(
@@ -48,6 +56,9 @@ class CreatorChallengeSubmittedScreen extends StatelessWidget {
               ],
             ),
           ),
+        ),
+            ),
+          ],
         ),
       ),
     );

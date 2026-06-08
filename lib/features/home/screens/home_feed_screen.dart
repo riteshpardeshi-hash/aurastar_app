@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../creator/screens/creator_home_screen.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 import '../../explore/screens/participant_profile_screen.dart';
 import '../../video/screens/public_video_screen.dart';
@@ -18,6 +19,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabs;
   final String? _uid = FirebaseAuth.instance.currentUser?.uid;
+  bool _isCreator = false;
 
   static const _accent = Color(0xFF7B2CBF);
   static const _bg = Color(0xFF080810);
@@ -26,6 +28,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _checkCreator();
+  }
+
+  Future<void> _checkCreator() async {
+    if (_uid == null) return;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(_uid).get();
+    final isCreator = (doc.data() ?? {})['isCreator'] == true;
+    if (mounted && isCreator) setState(() => _isCreator = true);
   }
 
   @override
@@ -47,6 +57,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
           child: Image.asset('assets/images/Aura Arena Mono.png', height: 30),
         ),
         centerTitle: false,
+        actions: _isCreator
+            ? [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: IconButton(
+                    tooltip: 'Creator Dashboard',
+                    icon: const Icon(Icons.dashboard_rounded, color: Color(0xFF9B4DFF)),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CreatorHomeScreen()),
+                    ),
+                  ),
+                ),
+              ]
+            : null,
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: _accent,

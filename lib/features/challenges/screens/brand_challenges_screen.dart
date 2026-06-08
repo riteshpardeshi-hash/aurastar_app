@@ -131,8 +131,13 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                       child: SafeArea(
                         bottom: false,
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const SizedBox(height: 8),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
                             _buildSearchBar(context),
                             const SizedBox(height: 10),
                             _buildCategoryChips(),
