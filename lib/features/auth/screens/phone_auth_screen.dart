@@ -29,9 +29,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   Future<void> sendOtp() async {
     final phone = phoneController.text.trim();
 
-    if (phone.isEmpty) {
+    if (phone.isEmpty || !phone.startsWith('+')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter phone number")),
+        const SnackBar(content: Text('Enter a valid phone number with country code (e.g. +91…)')),
       );
       return;
     }
@@ -50,7 +50,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           if (!mounted) return;
           setState(() => isLoading = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Verification failed: ${e.message}")),
+            const SnackBar(content: Text('Could not verify this number. Check it and try again.')),
           );
         },
         codeSent: (String verId, int? resendToken) {
@@ -61,18 +61,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             isLoading = false;
           });
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("OTP sent successfully")),
+            const SnackBar(content: Text('OTP sent successfully')),
           );
         },
         codeAutoRetrievalTimeout: (String verId) {
           verificationId = verId;
         },
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        const SnackBar(content: Text('Unable to send OTP. Please check the number and try again.')),
       );
     }
   }
@@ -80,9 +80,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   Future<void> verifyOtp() async {
     final otp = otpController.text.trim();
 
-    if (otp.isEmpty) {
+    if (otp.length != 6 || int.tryParse(otp) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter OTP")),
+        const SnackBar(content: Text('Enter the 6-digit OTP from your SMS')),
       );
       return;
     }
@@ -99,11 +99,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
       if (!mounted) return;
       await handlePostLogin();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Invalid OTP or verification failed")),
+        const SnackBar(content: Text('Incorrect OTP. Please try again.')),
       );
     }
   }

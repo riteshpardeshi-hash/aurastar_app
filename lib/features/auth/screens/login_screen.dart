@@ -27,12 +27,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (isLogin) {
         userCred = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: emailController.text.trim(),
-          password: passwordController.text.trim(),
+          password: passwordController.text,
         );
       } else {
         userCred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: emailController.text.trim(),
-          password: passwordController.text.trim(),
+          password: passwordController.text,
         );
       }
 

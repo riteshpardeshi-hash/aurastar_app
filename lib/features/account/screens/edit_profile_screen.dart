@@ -38,12 +38,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         .collection('users')
         .doc(uid)
         .get();
+    if (!mounted) return;
     final data = doc.data() ?? {};
     _nameCtrl.text = data['name'] as String? ?? '';
     _usernameCtrl.text = data['username'] as String? ?? '';
     _bioCtrl.text = data['bio'] as String? ?? '';
     _currentPhotoUrl = data['profileImageUrl'] as String? ?? '';
-    if (!mounted) return;
     setState(() => _loading = false);
   }
 
@@ -123,6 +123,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (_pickedImage != null) {
       final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
       await ref.putFile(_pickedImage!);
+      if (!mounted) return;
       photoUrl = await ref.getDownloadURL();
     }
 

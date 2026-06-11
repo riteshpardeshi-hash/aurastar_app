@@ -264,6 +264,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 final picked = await ImagePicker()
                     .pickVideo(source: ImageSource.gallery);
                 if (picked == null) return;
+                if (!mounted) return;
                 nav.push(
                   MaterialPageRoute(
                     builder: (_) => PreviewScreen(

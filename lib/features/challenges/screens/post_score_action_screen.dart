@@ -34,15 +34,19 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   }
 
   Future<void> _fetchSubmission() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .get();
-    if (mounted) {
-      setState(() {
-        _submission = doc.data();
-        _loading = false;
-      });
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('submissions')
+          .doc(widget.submissionId)
+          .get();
+      if (mounted) {
+        setState(() {
+          _submission = doc.data();
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -50,11 +54,19 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
 
   Future<void> _share() async {
     setState(() => _actioning = true);
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .update({'isPublic': true, 'isArchived': false});
-    _navigateToDashboard();
+    try {
+      await FirebaseFirestore.instance
+          .collection('submissions')
+          .doc(widget.submissionId)
+          .update({'isPublic': true, 'isArchived': false});
+      _navigateToDashboard();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _actioning = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action failed. Please try again.')),
+      );
+    }
   }
 
   Future<void> _archive() async {
@@ -66,11 +78,19 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     );
     if (!ok || !mounted) return;
     setState(() => _actioning = true);
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .update({'isArchived': true, 'isPublic': false});
-    _navigateToDashboard();
+    try {
+      await FirebaseFirestore.instance
+          .collection('submissions')
+          .doc(widget.submissionId)
+          .update({'isArchived': true, 'isPublic': false});
+      _navigateToDashboard();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _actioning = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action failed. Please try again.')),
+      );
+    }
   }
 
   Future<void> _delete() async {
@@ -91,26 +111,36 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     setState(() => _actioning = true);
     final user = FirebaseAuth.instance.currentUser;
 
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .update({'isDeleted': true, 'isPublic': false, 'isArchived': false, 'isCountedForDailyAuras': false});
-
-    if (deduct > 0 && user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'totalRewards': FieldValue.increment(-deduct),
-      });
-      await FirebaseFirestore.instance.collection('auraTransactions').add({
-        'userId': user.uid,
-        'amount': -deduct,
-        'type': 'deleted_video_deduction',
-        'sourceId': widget.submissionId,
-        'description': 'Video deleted — $deduct Auras deducted',
-        'createdAt': Timestamp.now(),
-      });
+    try {
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+      batch.update(
+        db.collection('submissions').doc(widget.submissionId),
+        {'isDeleted': true, 'isPublic': false, 'isArchived': false, 'isCountedForDailyAuras': false},
+      );
+      if (deduct > 0 && user != null) {
+        batch.update(
+          db.collection('users').doc(user.uid),
+          {'totalRewards': FieldValue.increment(-deduct)},
+        );
+        batch.set(db.collection('auraTransactions').doc(), {
+          'userId': user.uid,
+          'amount': -deduct,
+          'type': 'deleted_video_deduction',
+          'sourceId': widget.submissionId,
+          'description': 'Video deleted — $deduct Auras deducted',
+          'createdAt': Timestamp.now(),
+        });
+      }
+      await batch.commit();
+      _navigateToDashboard();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _actioning = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action failed. Please try again.')),
+      );
     }
-
-    _navigateToDashboard();
   }
 
   void _navigateToDashboard() {

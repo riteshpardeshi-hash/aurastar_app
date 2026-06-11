@@ -22,12 +22,14 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with WidgetsBindingObserver {
   static const _purple = Color(0xFF7B2CBF);
   static const _maxSeconds = 15;
 
   CameraController? _cam;
   int _camIndex = 0;
+  bool _cameraError = false;
 
   // Ghost overlay
   VideoPlayerController? _ghostCtrl;
@@ -43,9 +45,28 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _initCamera(_camIndex);
     if (widget.referenceVideoUrl.isNotEmpty) _initGhost();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _timer?.cancel();
+      _timer = null;
+      _ghostCtrl?.pause();
+      final cam = _cam;
+      _cam = null;
+      if (mounted) setState(() => _recording = false);
+      cam?.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+      _cameraError = false;
+      _initCamera(_camIndex);
+      _ghostCtrl?.seekTo(Duration.zero);
+    }
   }
 
   Future<void> _initCamera(int index) async {
@@ -56,10 +77,11 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       await _cam!.initialize();
     } catch (_) {
+      if (mounted) setState(() { _cam = null; _cameraError = true; });
       return;
     }
     if (!mounted) return;
-    setState(() => _camIndex = index);
+    setState(() { _camIndex = index; _cameraError = false; });
   }
 
   Future<void> _initGhost() async {
@@ -135,6 +157,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _timer?.cancel();
     _cam?.dispose();
@@ -155,12 +178,33 @@ class _CameraScreenState extends State<CameraScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: ready ? _buildCamera() : _buildLoading(),
+      body: _cameraError
+          ? _buildCameraError()
+          : ready
+              ? _buildCamera()
+              : _buildLoading(),
     );
   }
 
   Widget _buildLoading() => const Center(
         child: CircularProgressIndicator(color: Color(0xFF7B2CBF)),
+      );
+
+  Widget _buildCameraError() => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 52),
+            const SizedBox(height: 12),
+            const Text('Camera unavailable',
+                style: TextStyle(color: Colors.white54, fontSize: 15)),
+            const SizedBox(height: 20),
+            TextButton(
+              onPressed: () { setState(() => _cameraError = false); _initCamera(_camIndex); },
+              child: const Text('Retry', style: TextStyle(color: Color(0xFF7B2CBF))),
+            ),
+          ],
+        ),
       );
 
   Widget _buildCamera() {

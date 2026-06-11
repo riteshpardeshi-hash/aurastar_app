@@ -19,16 +19,33 @@ class BrandCameraScreen extends StatefulWidget {
   State<BrandCameraScreen> createState() => _BrandCameraScreenState();
 }
 
-class _BrandCameraScreenState extends State<BrandCameraScreen> {
+class _BrandCameraScreenState extends State<BrandCameraScreen>
+    with WidgetsBindingObserver {
   CameraController? controller;
   bool recording = false;
   XFile? videoFile;
   int selectedCameraIndex = 0;
+  bool _cameraError = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     initCamera(selectedCameraIndex);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      final cam = controller;
+      controller = null;
+      if (mounted) setState(() => recording = false);
+      cam?.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!mounted) return;
+      _cameraError = false;
+      initCamera(selectedCameraIndex);
+    }
   }
 
   Future<void> initCamera(int cameraIndex) async {
@@ -44,11 +61,13 @@ class _BrandCameraScreenState extends State<BrandCameraScreen> {
     try {
       await controller!.initialize();
     } catch (_) {
+      if (mounted) setState(() { controller = null; _cameraError = true; });
       return;
     }
     if (!mounted) return;
     setState(() {
       selectedCameraIndex = cameraIndex;
+      _cameraError = false;
     });
   }
 
@@ -72,12 +91,36 @@ class _BrandCameraScreenState extends State<BrandCameraScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_cameraError) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 52),
+              const SizedBox(height: 12),
+              const Text('Camera unavailable',
+                  style: TextStyle(color: Colors.white54)),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: () {
+                  setState(() => _cameraError = false);
+                  initCamera(selectedCameraIndex);
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (controller == null || !controller!.value.isInitialized) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),

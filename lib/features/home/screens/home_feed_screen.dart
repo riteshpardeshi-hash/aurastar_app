@@ -448,20 +448,26 @@ class _FeedCard extends StatelessWidget {
     final ownerId = data['userId'] as String? ?? '';
     final delta = isStarred ? -1 : 1;
 
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(submissionId)
-        .update({
+    final db = FirebaseFirestore.instance;
+    final batch = db.batch();
+    batch.update(db.collection('submissions').doc(submissionId), {
       'starredBy': isStarred
           ? FieldValue.arrayRemove([uid])
           : FieldValue.arrayUnion([uid]),
       'starsCount': FieldValue.increment(delta),
     });
     if (ownerId.isNotEmpty && ownerId != uid) {
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(ownerId)
-          .update({'starsReceived': FieldValue.increment(delta)});
+      batch.update(db.collection('users').doc(ownerId),
+          {'starsReceived': FieldValue.increment(delta)});
+    }
+    try {
+      await batch.commit();
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update star. Try again.')),
+        );
+      }
     }
   }
 
@@ -736,6 +742,7 @@ class _SourceChip extends StatelessWidget {
   const _SourceChip({required this.challengeId});
 
   static Future<_SourceInfo> _resolve(String id) {
+    if (_cache.length >= 200) _cache.remove(_cache.keys.first);
     return _cache.putIfAbsent(id, () async {
       try {
         final doc = await FirebaseFirestore.instance
