@@ -94,11 +94,11 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
         MaterialPageRoute(builder: (_) => const CreatorChallengeSubmittedScreen()),
         (route) => false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => isUploading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        const SnackBar(content: Text('Submission failed. Please try again.')),
       );
     }
   }

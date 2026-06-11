@@ -64,31 +64,36 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     if (widget.submissionId.isEmpty || _starLoading || _uid.isEmpty) return;
     setState(() => _starLoading = true);
 
-    final ref = FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId);
     final delta = _starred ? -1 : 1;
-
-    await ref.update({
+    final db = FirebaseFirestore.instance;
+    final batch = db.batch();
+    batch.update(db.collection('submissions').doc(widget.submissionId), {
       'starredBy': _starred
           ? FieldValue.arrayRemove([_uid])
           : FieldValue.arrayUnion([_uid]),
       'starsCount': FieldValue.increment(delta),
     });
-
-    // Update owner's starsReceived (skip own videos)
     if (_ownerId.isNotEmpty && _ownerId != _uid) {
-      FirebaseFirestore.instance.collection('users').doc(_ownerId).update({
-        'starsReceived': FieldValue.increment(delta),
-      });
+      batch.update(db.collection('users').doc(_ownerId),
+          {'starsReceived': FieldValue.increment(delta)});
     }
 
-    if (mounted) {
-      setState(() {
-        _starred = !_starred;
-        _starsCount += delta;
-        _starLoading = false;
-      });
+    try {
+      await batch.commit();
+      if (mounted) {
+        setState(() {
+          _starred = !_starred;
+          _starsCount += delta;
+          _starLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _starLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update star. Try again.')),
+        );
+      }
     }
   }
 

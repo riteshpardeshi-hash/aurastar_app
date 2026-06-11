@@ -145,11 +145,23 @@ class _SetupScreenState extends State<SetupScreen> {
         }
       }
     } catch (_) {
-      // network error — proceed without referral
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'city': _city ?? '',
-        'interests': _interests.toList(),
-      }).catchError((_) {});
+      // Referral write failed — best-effort save of city/interests alone
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          'city': _city ?? '',
+          'interests': _interests.toList(),
+        });
+      } catch (_) {
+        // Both writes failed — warn the user but still navigate
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Preferences may not have saved. You can update them from your profile.'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }

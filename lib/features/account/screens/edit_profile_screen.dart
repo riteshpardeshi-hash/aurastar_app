@@ -119,26 +119,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
 
-    String photoUrl = _currentPhotoUrl;
-    if (_pickedImage != null) {
-      final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
-      await ref.putFile(_pickedImage!);
-      if (!mounted) return;
-      photoUrl = await ref.getDownloadURL();
-    }
+    try {
+      String photoUrl = _currentPhotoUrl;
+      if (_pickedImage != null) {
+        final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
+        await ref.putFile(_pickedImage!);
+        if (!mounted) return;
+        photoUrl = await ref.getDownloadURL();
+      }
 
-    await FirebaseFirestore.instance.collection('users').doc(uid).update({
-      'name': _nameCtrl.text.trim(),
-      'username': _usernameCtrl.text.trim(),
-      'bio': _bioCtrl.text.trim(),
-      'profileImageUrl': photoUrl,
-    });
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated.')),
-    );
-    Navigator.pop(context);
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'name': _nameCtrl.text.trim(),
+        'username': _usernameCtrl.text.trim(),
+        'bio': _bioCtrl.text.trim(),
+        'profileImageUrl': photoUrl,
+      });
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated.')),
+      );
+      Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save profile. Please try again.')),
+      );
+    }
   }
 
   @override
