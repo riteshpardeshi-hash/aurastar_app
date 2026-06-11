@@ -4,8 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../challenges/screens/challenge_detail.dart';
 import '../../creator/screens/creator_home_screen.dart';
 import '../../explore/screens/creator_profile_screen.dart';
-import '../../explore/screens/participant_profile_screen.dart';
-import '../../video/screens/public_video_screen.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 
 class HomeFeedScreen extends StatefulWidget {
@@ -170,7 +168,7 @@ class _PaginatedFeedTabState extends State<_PaginatedFeedTab>
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+      if (mounted) setState(() { _loading = false; _initialLoading = false; _hasMore = false; });
     }
   }
 
@@ -333,7 +331,7 @@ class _FollowingFeedTabState extends State<_FollowingFeedTab>
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+      if (mounted) setState(() { _loading = false; _initialLoading = false; _hasMore = false; });
     }
   }
 
@@ -540,7 +538,6 @@ class _FeedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final username = data['username'] as String? ?? 'User';
-    final userId = data['userId'] as String? ?? '';
     final challengeTitle = data['challengeTitle'] as String? ?? 'Challenge';
     final challengeId = data['challengeId'] as String? ?? '';
     final videoUrl = data['videoUrl'] as String? ?? '';
@@ -565,24 +562,15 @@ class _FeedCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: userId.isNotEmpty
-                      ? () => Navigator.push(context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  ParticipantProfileScreen(userId: userId),
-                            ))
-                      : null,
-                  child: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: _accent.withValues(alpha: 0.3),
-                    child: Text(
-                      username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15),
-                    ),
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: _accent.withValues(alpha: 0.3),
+                  child: Text(
+                    username.isNotEmpty ? username[0].toUpperCase() : 'U',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -590,20 +578,11 @@ class _FeedCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: userId.isNotEmpty
-                            ? () => Navigator.push(context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ParticipantProfileScreen(
-                                        userId: userId),
-                                  ))
-                            : null,
-                        child: Text(username,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14)),
-                      ),
+                      Text(username,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14)),
                       GestureDetector(
                         onTap: challengeId.isNotEmpty
                             ? () => Navigator.push(context,
@@ -658,56 +637,16 @@ class _FeedCard extends StatelessWidget {
             ),
           ),
 
-          // ── Thumbnail → tap opens full-screen player ─────────────────────
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PublicVideoScreen(
-                  submissionId: submissionId,
-                  videoUrl: videoUrl,
-                  videoUrl480p: data['videoUrl480p'] as String?,
-                  thumbnailUrl: thumbnailUrl,
-                  username: username,
-                  userId: userId,
-                  challengeTitle: challengeTitle,
-                  challengeId: challengeId,
-                  challengeVideoUrl: videoUrl,
-                  initialStars: starsCount,
-                  initiallyStarred: isStarred,
-                  auraScore: aiScore,
-                ),
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(0)),
-              child: SizedBox(
-                height: 210,
-                width: double.infinity,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    VideoThumbnailWidget(
-                      videoUrl: videoUrl,
-                      thumbnailUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                    ),
-                    // Play-button overlay
-                    Center(
-                      child: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.play_arrow_rounded,
-                            color: Colors.white, size: 30),
-                      ),
-                    ),
-                  ],
-                ),
+          ClipRRect(
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(0)),
+            child: SizedBox(
+              height: 210,
+              width: double.infinity,
+              child: VideoThumbnailWidget(
+                videoUrl: videoUrl,
+                thumbnailUrl: thumbnailUrl,
+                fit: BoxFit.cover,
               ),
             ),
           ),

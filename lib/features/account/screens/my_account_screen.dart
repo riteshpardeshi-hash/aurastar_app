@@ -565,6 +565,12 @@ class MyAccountScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF6F7FB),
+        body: Center(child: Text('Not signed in.')),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -583,7 +589,7 @@ class MyAccountScreen extends StatelessWidget {
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
-            .doc(user!.uid)
+            .doc(user.uid)
             .snapshots(),
         builder: (context, userSnapshot) {
           if (userSnapshot.hasError) {

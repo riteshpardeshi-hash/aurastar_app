@@ -37,10 +37,14 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       final user = userCred.user;
+      if (user == null) {
+        if (mounted) setState(() => isLoading = false);
+        return;
+      }
 
       final doc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(user.uid)
           .get();
 
       if (!mounted) return;
@@ -61,8 +65,24 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => isLoading = false);
+      String message = 'Something went wrong. Please try again.';
+      if (e is FirebaseAuthException) {
+        switch (e.code) {
+          case 'user-not-found':
+          case 'wrong-password':
+          case 'invalid-credential':
+          case 'invalid-email':
+            message = 'Invalid email or password.';
+          case 'email-already-in-use':
+            message = 'Sign up failed. Please try again.';
+          case 'too-many-requests':
+            message = 'Too many attempts. Please try again later.';
+          case 'network-request-failed':
+            message = 'Network error. Please check your connection.';
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        SnackBar(content: Text(message)),
       );
     }
   }

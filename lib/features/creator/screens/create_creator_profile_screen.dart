@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'creator_home_screen.dart';
 
 class CreateCreatorProfileScreen extends StatefulWidget {
   const CreateCreatorProfileScreen({super.key});
@@ -45,10 +44,19 @@ class _CreateCreatorProfileScreenState
     try {
       setState(() => isSaving = true);
 
+      // Save display fields on the user doc (no role change from client)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'isCreator': true,
         'pageName': pageNameController.text.trim(),
         'bio': bioController.text.trim(),
+      });
+
+      // Submit application for admin review — isCreator is set server-side on approval
+      await FirebaseFirestore.instance.collection('creator_applications').doc(user.uid).set({
+        'uid': user.uid,
+        'pageName': pageNameController.text.trim(),
+        'bio': bioController.text.trim(),
+        'status': 'pending',
+        'submittedAt': Timestamp.now(),
       });
 
       if (!mounted) return;
@@ -56,13 +64,13 @@ class _CreateCreatorProfileScreenState
       setState(() => isSaving = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Brand profile created successfully")),
+        const SnackBar(
+          content: Text("Application submitted! You'll be notified once approved."),
+          duration: Duration(seconds: 4),
+        ),
       );
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const CreatorHomeScreen()),
-      );
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       setState(() => isSaving = false);

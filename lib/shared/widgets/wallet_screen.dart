@@ -28,6 +28,11 @@ class WalletScreen extends StatelessWidget {
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
         builder: (context, userSnap) {
+          if (userSnap.hasError) {
+            return const Center(
+              child: Text('Failed to load wallet.', style: TextStyle(color: Colors.white54)),
+            );
+          }
           final userData = userSnap.data?.data() as Map<String, dynamic>? ?? {};
           final totalRewards = (userData['totalRewards'] as num?)?.toInt() ?? 0;
 
@@ -131,6 +136,11 @@ class WalletScreen extends StatelessWidget {
           .limit(50)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return const Center(
+            child: Text('Failed to load transactions.', style: TextStyle(color: Colors.white54)),
+          );
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator(color: _accent));
         }

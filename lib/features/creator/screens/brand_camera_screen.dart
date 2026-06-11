@@ -41,13 +41,15 @@ class _BrandCameraScreenState extends State<BrandCameraScreen> {
       ResolutionPreset.medium,
     );
 
-    await controller!.initialize();
-
-    if (mounted) {
-      setState(() {
-        selectedCameraIndex = cameraIndex;
-      });
+    try {
+      await controller!.initialize();
+    } catch (_) {
+      return;
     }
+    if (!mounted) return;
+    setState(() {
+      selectedCameraIndex = cameraIndex;
+    });
   }
 
   Future<void> switchCamera() async {

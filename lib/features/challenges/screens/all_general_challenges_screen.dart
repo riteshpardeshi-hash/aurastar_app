@@ -5,7 +5,6 @@ import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
 import '../../../features/account/screens/my_account_screen.dart';
-import '../../../features/video/screens/video_feed_screen.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
 import 'challenge_detail.dart';
 
@@ -56,7 +55,7 @@ class AllGeneralChallengesScreen extends StatelessWidget {
 
                 // ── Community feed ───────────────────────────────────────────
                 SliverToBoxAdapter(
-                    child: _PublicFeedSection()),
+                    child: const _PublicFeedSection()),
 
                 // ── All challenges grid ──────────────────────────────────────
                 SliverToBoxAdapter(
@@ -636,12 +635,12 @@ class _FeaturedCard extends StatelessWidget {
 // ── Public Feed Section ────────────────────────────────────────────────────────
 class _PublicFeedSection extends StatelessWidget {
   static const _accent = Color(0xFF7B2CBF);
-  final _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  _PublicFeedSection();
+  const _PublicFeedSection();
 
   @override
   Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -674,11 +673,6 @@ class _PublicFeedSection extends StatelessWidget {
             final docs = snap.data?.docs ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
-            // Build the full submissions list once so all cards share it for VideoFeedScreen
-            final submissions = docs
-                .map((d) => {'id': d.id, 'data': d.data() as Map<String, dynamic>})
-                .toList();
-
             return ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -693,7 +687,7 @@ class _PublicFeedSection extends StatelessWidget {
                 final videoUrl = data['videoUrl'] as String? ?? '';
                 final starsCount = (data['starsCount'] as num?)?.toInt() ?? 0;
                 final starredBy = List<String>.from(data['starredBy'] ?? []);
-                final isStarred = starredBy.contains(_uid);
+                final isStarred = starredBy.contains(uid);
                 final aiScore = (data['aiScore'] as num?)?.toInt();
 
                 return Container(
@@ -708,18 +702,8 @@ class _PublicFeedSection extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ── Thumbnail (tap → vertical video feed) ──────────
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => VideoFeedScreen(
-                                submissions: submissions,
-                                initialIndex: i,
-                              ),
-                            ),
-                          ),
-                          child: Stack(
+                        // ── Thumbnail ──────────────────────────────────────
+                        Stack(
                             children: [
                               SizedBox(
                                 height: 210,
@@ -798,7 +782,6 @@ class _PublicFeedSection extends StatelessWidget {
                               ),
                             ],
                           ),
-                        ),
 
                         // ── Actions ────────────────────────────────────────
                         Padding(
@@ -808,25 +791,26 @@ class _PublicFeedSection extends StatelessWidget {
                               // Star
                               GestureDetector(
                                 onTap: () async {
+                                  if (uid.isEmpty) return;
                                   final delta = isStarred ? -1 : 1;
-                                  await FirebaseFirestore.instance
-                                      .collection('submissions')
-                                      .doc(doc.id)
-                                      .update({
-                                    'starredBy': isStarred
-                                        ? FieldValue.arrayRemove([_uid])
-                                        : FieldValue.arrayUnion([_uid]),
-                                    'starsCount': FieldValue.increment(delta),
-                                  });
-                                  if (userId.isNotEmpty && userId != _uid) {
-                                    FirebaseFirestore.instance
-                                        .collection('users')
-                                        .doc(userId)
-                                        .update({
-                                      'starsReceived':
-                                          FieldValue.increment(delta),
-                                    });
+                                  final db = FirebaseFirestore.instance;
+                                  final batch = db.batch();
+                                  batch.update(
+                                    db.collection('submissions').doc(doc.id),
+                                    {
+                                      'starredBy': isStarred
+                                          ? FieldValue.arrayRemove([uid])
+                                          : FieldValue.arrayUnion([uid]),
+                                      'starsCount': FieldValue.increment(delta),
+                                    },
+                                  );
+                                  if (userId.isNotEmpty && userId != uid) {
+                                    batch.update(
+                                      db.collection('users').doc(userId),
+                                      {'starsReceived': FieldValue.increment(delta)},
+                                    );
                                   }
+                                  await batch.commit();
                                 },
                                 child: Row(
                                   children: [

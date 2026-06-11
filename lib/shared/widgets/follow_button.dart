@@ -46,53 +46,47 @@ class _FollowButtonState extends State<FollowButton> {
   }
 
   Future<void> _toggle() async {
-    if (_actioning || _loading) return;
+    if (_actioning || _loading || _currentUid.isEmpty) return;
     setState(() => _actioning = true);
 
+    final db = FirebaseFirestore.instance;
     try {
       if (_following) {
-        final snap = await FirebaseFirestore.instance
+        final snap = await db
             .collection('follows')
             .where('followerUserId', isEqualTo: _currentUid)
             .where('followedUserId', isEqualTo: widget.targetUserId)
             .limit(1)
             .get();
-        for (final doc in snap.docs) {
-          await doc.reference.delete();
+        if (snap.docs.isNotEmpty) {
+          final batch = db.batch();
+          batch.delete(snap.docs.first.reference);
+          batch.update(db.collection('users').doc(widget.targetUserId),
+              {'followerCount': FieldValue.increment(-1)});
+          batch.update(db.collection('users').doc(_currentUid),
+              {'followingCount': FieldValue.increment(-1)});
+          await batch.commit();
         }
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.targetUserId)
-            .update({'followerCount': FieldValue.increment(-1)});
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUid)
-            .update({'followingCount': FieldValue.increment(-1)});
-
         if (mounted) setState(() => _following = false);
       } else {
-        await FirebaseFirestore.instance.collection('follows').add({
+        final followRef = db.collection('follows').doc();
+        final batch = db.batch();
+        batch.set(followRef, {
           'followerUserId': _currentUid,
           'followedUserId': widget.targetUserId,
           'createdAt': Timestamp.now(),
         });
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.targetUserId)
-            .update({'followerCount': FieldValue.increment(1)});
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUid)
-            .update({'followingCount': FieldValue.increment(1)});
+        batch.update(db.collection('users').doc(widget.targetUserId),
+            {'followerCount': FieldValue.increment(1)});
+        batch.update(db.collection('users').doc(_currentUid),
+            {'followingCount': FieldValue.increment(1)});
+        await batch.commit();
 
-        // Notify the target user
-        final myDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_currentUid)
-            .get();
+        // Notification write is separate (not in batch — no add() in batch)
+        final myDoc = await db.collection('users').doc(_currentUid).get();
         final myUsername =
             (myDoc.data() ?? {})['username'] as String? ?? 'Someone';
-        await FirebaseFirestore.instance.collection('notifications').add({
+        await db.collection('notifications').add({
           'userId': widget.targetUserId,
           'type': 'new_follower',
           'message': '@$myUsername started following you',

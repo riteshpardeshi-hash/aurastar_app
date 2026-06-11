@@ -11,7 +11,16 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Scaffold(
+        backgroundColor: _bg,
+        body: Center(
+          child: Text('Not signed in', style: TextStyle(color: Colors.white54)),
+        ),
+      );
+    }
+    final uid = user.uid;
 
     return Scaffold(
       backgroundColor: _bg,

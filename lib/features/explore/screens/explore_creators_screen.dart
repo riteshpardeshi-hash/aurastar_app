@@ -38,50 +38,31 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
               stream: FirebaseFirestore.instance
                   .collection('challenges')
                   .where('creatorId', isNotEqualTo: 'system')
+                  .limit(100)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Failed to load brands.'));
+                }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 final docs = snapshot.data!.docs;
-                final creatorIds = docs.map((doc) => doc['creatorId']).toSet().toList();
+                final creatorIds = <String>{};
+                for (final doc in docs) {
+                  final data = doc.data() as Map<String, dynamic>? ?? {};
+                  final id = data['creatorId'] as String? ?? '';
+                  if (id.isNotEmpty) creatorIds.add(id);
+                }
 
+                final idList = creatorIds.toList();
                 return ListView.builder(
-                  itemCount: creatorIds.length,
+                  itemCount: idList.length,
                   itemBuilder: (context, index) {
-                    final creatorId = creatorIds[index];
-
-                    return FutureBuilder<DocumentSnapshot>(
-                      future: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(creatorId)
-                          .get(),
-                      builder: (context, userSnap) {
-                        if (!userSnap.hasData) return const SizedBox();
-
-                        final name = userSnap.data!['name'] ?? 'Creator';
-
-                        if (!name.toLowerCase().contains(searchQuery)) {
-                          return const SizedBox();
-                        }
-
-                        return ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Colors.orange,
-                            child: Icon(Icons.person, color: Colors.white),
-                          ),
-                          title: Text(name),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CreatorProfileScreen(creatorId: creatorId),
-                              ),
-                            );
-                          },
-                        );
-                      },
+                    return _CreatorTile(
+                      creatorId: idList[index],
+                      searchQuery: searchQuery,
                     );
                   },
                 );
@@ -90,6 +71,56 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CreatorTile extends StatefulWidget {
+  final String creatorId;
+  final String searchQuery;
+  const _CreatorTile({required this.creatorId, required this.searchQuery});
+
+  @override
+  State<_CreatorTile> createState() => _CreatorTileState();
+}
+
+class _CreatorTileState extends State<_CreatorTile> {
+  late final Future<DocumentSnapshot> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.creatorId)
+        .get();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: _future,
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox();
+        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
+        final name = data['name'] as String? ?? 'Creator';
+        if (!name.toLowerCase().contains(widget.searchQuery)) {
+          return const SizedBox();
+        }
+        return ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: Colors.orange,
+            child: Icon(Icons.person, color: Colors.white),
+          ),
+          title: Text(name),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CreatorProfileScreen(creatorId: widget.creatorId),
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -35,8 +35,10 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
     _controller = VideoPlayerController.file(
       File(widget.videoPath),
     )..initialize().then((_) {
-      setState(() {});
-      _controller.play();
+      if (mounted) {
+        setState(() {});
+        _controller.play();
+      }
     });
   }
 
@@ -51,6 +53,15 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
       setState(() => isUploading = true);
 
       final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => isUploading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You must be signed in to submit.')),
+          );
+        }
+        return;
+      }
       final file = File(widget.videoPath);
 
       final fileName =
@@ -59,7 +70,7 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
       final ref = FirebaseStorage.instance
           .ref()
           .child('creator_videos')
-          .child(user!.uid)
+          .child(user.uid)
           .child(fileName);
 
       await ref.putFile(file);

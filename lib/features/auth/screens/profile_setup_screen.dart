@@ -127,45 +127,73 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       return;
     }
     setState(() => _saving = true);
-    final user = FirebaseAuth.instance.currentUser!;
-
-    String photoUrl = '';
-    if (_pickedImage != null) {
-      final ref = FirebaseStorage.instance.ref().child('profile_photos/${user.uid}');
-      await ref.putFile(_pickedImage!);
-      photoUrl = await ref.getDownloadURL();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _saving = false);
+      return;
     }
 
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'name': _nameCtrl.text.trim(),
-      'username': _usernameCtrl.text.trim(),
-      'dob': _dob,
-      'gender': _gender ?? '',
-      'state': _state ?? '',
-      'email': user.email,
-      'totalRewards': 0,
-      'isCreator': false,
-      'isAdmin': false,
-      'dailyValidScoreLimit': 3,
-      'starsReceived': 0,
-      'bio': '',
-      'profileImageUrl': photoUrl,
-      'pageName': '',
-      'streakDay': 0,
-      'lastStreakDate': '',
-      'streakTimezone': 'Asia/Kolkata',
-      'followerCount': 0,
-      'followingCount': 0,
-      'referralCode': _generateReferralCode(),
-      'referredBy': '',
-      'referralBonusApplied': false,
-      'referralCount': 0,
-      'referralCompletedCount': 0,
-      'createdAt': Timestamp.now(),
-    });
-    if (!mounted) return;
-    Navigator.pushReplacement(
-        context, MaterialPageRoute(builder: (_) => const RulesScreen()));
+    try {
+      // Username uniqueness check
+      final username = _usernameCtrl.text.trim();
+      final existing = await FirebaseFirestore.instance
+          .collection('users')
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+      if (!mounted) return;
+      if (existing.docs.isNotEmpty) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Username already taken. Please choose another.')),
+        );
+        return;
+      }
+
+      String photoUrl = '';
+      if (_pickedImage != null) {
+        final ref = FirebaseStorage.instance.ref().child('profile_photos/${user.uid}');
+        await ref.putFile(_pickedImage!);
+        photoUrl = await ref.getDownloadURL();
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'name': _nameCtrl.text.trim(),
+        'username': username,
+        'dob': _dob,
+        'gender': _gender ?? '',
+        'state': _state ?? '',
+        'email': user.email,
+        'totalRewards': 0,
+        'isCreator': false,
+        'isAdmin': false,
+        'dailyValidScoreLimit': 3,
+        'starsReceived': 0,
+        'bio': '',
+        'profileImageUrl': photoUrl,
+        'pageName': '',
+        'streakDay': 0,
+        'lastStreakDate': '',
+        'streakTimezone': 'Asia/Kolkata',
+        'followerCount': 0,
+        'followingCount': 0,
+        'referralCode': _generateReferralCode(),
+        'referredBy': '',
+        'referralBonusApplied': false,
+        'referralCount': 0,
+        'referralCompletedCount': 0,
+        'createdAt': Timestamp.now(),
+      });
+      if (!mounted) return;
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const RulesScreen()));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save profile. Please try again.')),
+      );
+    }
   }
 
   @override

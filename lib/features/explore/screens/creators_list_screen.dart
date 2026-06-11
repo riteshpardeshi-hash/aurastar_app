@@ -10,8 +10,14 @@ class CreatorsListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Creators")),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('challenges').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('challenges')
+            .limit(200)
+            .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text('Failed to load creators.'));
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -20,7 +26,9 @@ class CreatorsListScreen extends StatelessWidget {
 
           final creatorsMap = <String, List<QueryDocumentSnapshot>>{};
           for (var doc in docs) {
-            final creatorId = doc['creatorId'];
+            final data = doc.data() as Map<String, dynamic>? ?? {};
+            final creatorId = data['creatorId'] as String? ?? '';
+            if (creatorId.isEmpty || creatorId == 'system') continue;
             creatorsMap.putIfAbsent(creatorId, () => []).add(doc);
           }
 

@@ -1,0 +1,165 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Reads the caller's role from Firestore (cached per request).
+    function callerData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerData().isAdmin == true;
+    }
+
+    function isCreator() {
+      return isSignedIn() && callerData().isCreator == true;
+    }
+
+    // ── users ─────────────────────────────────────────────────────────────────
+    // • Anyone authenticated can read any user profile (public leaderboard, explore).
+    // • A user can only write their own doc — and cannot self-elevate isAdmin/isCreator.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.isAdmin == false
+        && request.resource.data.isCreator == false;
+
+      allow update: if isOwner(uid)
+        // Prevent self-elevation of privileged flags
+        && request.resource.data.isAdmin == resource.data.isAdmin
+        && request.resource.data.isCreator == resource.data.isCreator;
+
+      // Admins can update any user (e.g., set isCreator after approving application)
+      allow update: if isAdmin();
+
+      allow delete: if isAdmin();
+
+      // saved_challenges sub-collection
+      match /saved_challenges/{challengeId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ── challenges ────────────────────────────────────────────────────────────
+    // • Everyone (even unauthenticated) can read challenges.
+    // • Only admins can create/update/delete challenges directly.
+    match /challenges/{challengeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── submissions ───────────────────────────────────────────────────────────
+    // • Any authenticated user can create their own submission.
+    // • Users can read their own submissions; admins can read all.
+    // • Only the Cloud Function (admin SDK) or an admin can approve/reject.
+    // • Users cannot set status, auraPoints, reviewedByAI themselves.
+    match /submissions/{submissionId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && !('auraPoints' in request.resource.data)
+        && !('aiScore' in request.resource.data)
+        && !('reviewedByAI' in request.resource.data);
+
+      // Users can update only the public/share fields on their own submissions
+      allow update: if isOwner(resource.data.userId)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['status', 'auraPoints', 'netAurasAwarded', 'aiScore', 'reviewedByAI', 'isDeleted']);
+
+      // Allow star updates from any authenticated user (starredBy, starsCount)
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['starredBy', 'starsCount']);
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── creator_requests ──────────────────────────────────────────────────────
+    // • Authenticated creators can create requests for their own account.
+    // • Admins can read and update all requests.
+    match /creator_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        resource.data.creatorId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isCreator()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── creator_applications ──────────────────────────────────────────────────
+    // • Any authenticated user can create their own application.
+    // • Only admins can update (approve/reject).
+    match /creator_applications/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.status == 'pending';
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── notifications ─────────────────────────────────────────────────────────
+    // • Users can only read/update (mark-read) their own notifications.
+    // • Only Cloud Functions (admin SDK) and admins can create notifications.
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // Allow marking as read
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+
+      allow write: if isAdmin();
+    }
+
+    // ── auraTransactions ──────────────────────────────────────────────────────
+    // • Users can read only their own transactions (wallet screen).
+    // • Only Cloud Functions (admin SDK) should write transactions.
+    match /auraTransactions/{txId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if isAdmin();
+    }
+
+    // ── follows ───────────────────────────────────────────────────────────────
+    // • Any authenticated user can create follows for themselves.
+    // • Only the follower can delete their own follow.
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.followerUserId == request.auth.uid;
+
+      allow delete: if isSignedIn()
+        && resource.data.followerUserId == request.auth.uid;
+    }
+
+    // ── referralCodes ─────────────────────────────────────────────────────────
+    match /referralCodes/{code} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

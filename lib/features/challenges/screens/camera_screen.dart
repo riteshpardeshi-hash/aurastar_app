@@ -53,17 +53,27 @@ class _CameraScreenState extends State<CameraScreen> {
     _cam?.dispose();
     _cam = CameraController(cameras[index], ResolutionPreset.high,
         enableAudio: true);
-    await _cam!.initialize();
-    if (mounted) setState(() => _camIndex = index);
+    try {
+      await _cam!.initialize();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _camIndex = index);
   }
 
   Future<void> _initGhost() async {
     _ghostCtrl =
         VideoPlayerController.networkUrl(Uri.parse(widget.referenceVideoUrl));
-    await _ghostCtrl!.initialize();
+    try {
+      await _ghostCtrl!.initialize();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
     _ghostCtrl!.setLooping(true);
     _ghostCtrl!.setVolume(0);
-    if (mounted) setState(() => _ghostReady = true);
+    setState(() => _ghostReady = true);
   }
 
   Future<void> _toggleRecord() async {
@@ -80,8 +90,9 @@ class _CameraScreenState extends State<CameraScreen> {
     _ghostCtrl?.play();
     _elapsed = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (!mounted) return;
       _elapsed++;
-      if (mounted) setState(() {});
+      setState(() {});
       if (_elapsed >= _maxSeconds) await _stopRecording();
     });
     setState(() {

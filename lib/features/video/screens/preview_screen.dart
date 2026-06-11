@@ -40,7 +40,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
     super.initState();
     _player = VideoPlayerController.file(File(widget.videoPath))
       ..initialize().then((_) {
-        if (mounted) setState(() => _playerReady = true);
+        if (!mounted) return;
+        setState(() => _playerReady = true);
         _player.play();
         _player.setLooping(true);
         setState(() => _isPlaying = true);
@@ -65,7 +66,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser!;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _uploadState = _UploadState.idle);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('You must be signed in to upload.')),
+          );
+        }
+        return;
+      }
       final file = File(widget.videoPath);
 
       // Fetch username

@@ -13,8 +13,6 @@ import '../explore/screens/explore_creators_screen.dart';
 import '../challenges/screens/category_challenges_screen.dart';
 import '../challenges/screens/trending_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
-import '../home/screens/home_feed_screen.dart';
-import '../video/screens/video_feed_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../account/screens/my_account_screen.dart';
@@ -59,6 +57,15 @@ class _DashboardState extends State<Dashboard> {
           .doc(user.uid)
           .snapshots(),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return Scaffold(
+            backgroundColor: _bg,
+            body: Center(
+              child: Text('Failed to load profile.',
+                  style: TextStyle(color: Colors.white54)),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const Scaffold(
             backgroundColor: _bg,
@@ -137,7 +144,6 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(child: _buildBrandAuraSection(context)),
                 SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                 SliverToBoxAdapter(child: _buildCategorySection(context)),
-                SliverToBoxAdapter(child: _buildUserVideosSection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
                 if (isBrand || isAdmin)
                   SliverToBoxAdapter(
@@ -1361,144 +1367,6 @@ class _DashboardState extends State<Dashboard> {
               );
             },
           ),
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  // ── User Videos ────────────────────────────────────────────────────────────
-  Widget _buildUserVideosSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('User Videos',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
-              GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const HomeFeedScreen())),
-                child: const Text('See All ›',
-                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('submissions')
-              .where('status',   isEqualTo: 'approved')
-              .where('isPublic', isEqualTo: true)
-              .orderBy('createdAt', descending: true)
-              .limit(8)
-              .snapshots(),
-          builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) return const SizedBox.shrink();
-
-            final submissions = docs
-                .map((d) => {'id': d.id, 'data': d.data() as Map<String, dynamic>})
-                .toList();
-
-            return SizedBox(
-              height: 160,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final data = docs[i].data() as Map<String, dynamic>;
-                  final videoUrl  = data['videoUrl']        as String? ?? '';
-                  final username  = data['username']        as String? ?? 'User';
-                  final aiScore   = (data['aiScore'] as num?)?.toInt();
-                  final challenge = data['challengeTitle']  as String? ?? '';
-
-                  return GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => VideoFeedScreen(submissions: submissions, initialIndex: i),
-                    )),
-                    child: Container(
-                      width: 110,
-                      margin: const EdgeInsets.only(right: 10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _VideoThumbnailWidget(
-                              videoUrl: videoUrl,
-                              fallbackAsset: 'assets/images/homescreen/challenge 1.png',
-                            ),
-                            Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.80)],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Play icon
-                            Center(
-                              child: Container(
-                                width: 30, height: 30,
-                                decoration: BoxDecoration(
-                                  color: _accent.withValues(alpha: 0.85),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
-                              ),
-                            ),
-                            // Score badge
-                            if (aiScore != null)
-                              Positioned(
-                                top: 6, right: 6,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _accent.withValues(alpha: 0.90),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text('$aiScore',
-                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
-                                ),
-                              ),
-                            // Username + challenge name
-                            Positioned(
-                              left: 6, right: 6, bottom: 6,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text('@$username',
-                                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                                  if (challenge.isNotEmpty)
-                                    Text(challenge,
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.white54, fontSize: 9)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            );
-          },
         ),
         const SizedBox(height: 24),
       ],

@@ -49,32 +49,27 @@ class _ReviewScreenState extends State<ReviewScreen> {
       }
 
       final points = int.tryParse(pointsController.text) ?? 0;
-      final userId = widget.submission['userId'];
-
       final data = widget.submission.data() as Map<String, dynamic>;
+      final userId = data['userId'] as String? ?? '';
       final previousPoints = (data['netAurasAwarded'] as num?)?.toInt()
           ?? (data['auraPoints'] as num?)?.toInt()
           ?? 0;
       final wasApproved = data['status'] == 'approved';
+      final delta = wasApproved ? (points - previousPoints) : points;
 
-      await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submission.id)
-          .update({
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+      batch.update(db.collection('submissions').doc(widget.submission.id), {
         'status': 'approved',
         'auraPoints': points,
         'netAurasAwarded': points,
         'reviewed': true,
       });
-
-      // If re-approving, adjust by the delta; otherwise add the full amount
-      final delta = wasApproved ? (points - previousPoints) : points;
-      if (delta != 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .update({'totalRewards': FieldValue.increment(delta)});
+      if (delta != 0 && userId.isNotEmpty) {
+        batch.update(db.collection('users').doc(userId),
+            {'totalRewards': FieldValue.increment(delta)});
       }
+      await batch.commit();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -190,22 +185,20 @@ class _ReviewScreenState extends State<ReviewScreen> {
         return;
       }
 
-      await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submission.id)
-          .update({
+      final userId = data['userId'] as String? ?? '';
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+      batch.update(db.collection('submissions').doc(widget.submission.id), {
         'isDeleted': true,
         'isPublic': false,
         'isArchived': false,
         'isCountedForDailyAuras': false,
       });
-
-      if (deduct > 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(data['userId'])
-            .update({'totalRewards': FieldValue.increment(-deduct)});
+      if (deduct > 0 && userId.isNotEmpty) {
+        batch.update(db.collection('users').doc(userId),
+            {'totalRewards': FieldValue.increment(-deduct)});
       }
+      await batch.commit();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -241,23 +234,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
       final previousPoints = (data['netAurasAwarded'] as num?)?.toInt()
           ?? (data['auraPoints'] as num?)?.toInt()
           ?? 0;
+      final userId = data['userId'] as String? ?? '';
 
-      await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submission.id)
-          .update({
+      final db = FirebaseFirestore.instance;
+      final batch = db.batch();
+      batch.update(db.collection('submissions').doc(widget.submission.id), {
         'status': 'rejected',
         'auraPoints': 0,
         'netAurasAwarded': 0,
         'reviewed': true,
       });
-
-      if (wasApproved && previousPoints > 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(data['userId'])
-            .update({'totalRewards': FieldValue.increment(-previousPoints)});
+      if (wasApproved && previousPoints > 0 && userId.isNotEmpty) {
+        batch.update(db.collection('users').doc(userId),
+            {'totalRewards': FieldValue.increment(-previousPoints)});
       }
+      await batch.commit();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

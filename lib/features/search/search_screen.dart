@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../explore/screens/creator_profile_screen.dart';
-import '../explore/screens/participant_profile_screen.dart';
 
 // ── Result model ──────────────────────────────────────────────────────────────
 
@@ -182,9 +181,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
           builder: (_) => CreatorProfileScreen(creatorId: r.id),
         ));
       case _Type.user:
-        Navigator.push(context, MaterialPageRoute(
-          builder: (_) => ParticipantProfileScreen(userId: r.id),
-        ));
+        break;
       case _Type.category:
         _ctrl.text = r.data['name'] as String;
         _search(_ctrl.text);

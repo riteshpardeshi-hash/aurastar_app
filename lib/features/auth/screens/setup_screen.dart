@@ -84,7 +84,11 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Future<void> _finish() async {
     setState(() => _saving = true);
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _saving = false);
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
 
     try {
@@ -107,15 +111,17 @@ class _SetupScreenState extends State<SetupScreen> {
           }
           return;
         }
-        // Valid — save city/interests then apply
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        // Valid — save city/interests and credit referrer atomically
+        final batch1 = FirebaseFirestore.instance.batch();
+        batch1.update(FirebaseFirestore.instance.collection('users').doc(uid), {
           'city': _city ?? '',
           'interests': _interests.toList(),
           'referredBy': referrerId,
         });
-        await FirebaseFirestore.instance.collection('users').doc(referrerId).update({
+        batch1.update(FirebaseFirestore.instance.collection('users').doc(referrerId), {
           'referralCount': FieldValue.increment(1),
         });
+        await batch1.commit();
         await prefs.remove('pending_referral_code');
       } else {
         // No manual code — save city/interests, apply deep-link code if present
@@ -126,12 +132,14 @@ class _SetupScreenState extends State<SetupScreen> {
         if (deepLinkCode.isNotEmpty) {
           final referrerId = await _lookupReferrerId(uid, deepLinkCode);
           if (referrerId != null) {
-            await FirebaseFirestore.instance.collection('users').doc(uid).update({
+            final batch2 = FirebaseFirestore.instance.batch();
+            batch2.update(FirebaseFirestore.instance.collection('users').doc(uid), {
               'referredBy': referrerId,
             });
-            await FirebaseFirestore.instance.collection('users').doc(referrerId).update({
+            batch2.update(FirebaseFirestore.instance.collection('users').doc(referrerId), {
               'referralCount': FieldValue.increment(1),
             });
+            await batch2.commit();
           }
           await prefs.remove('pending_referral_code');
         }

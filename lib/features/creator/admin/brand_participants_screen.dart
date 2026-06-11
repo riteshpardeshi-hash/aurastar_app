@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../explore/screens/participant_profile_screen.dart';
 
 class BrandParticipantsScreen extends StatelessWidget {
   final List<String> userIds;
@@ -41,14 +40,6 @@ class BrandParticipantsScreen extends StatelessWidget {
                         title: Text(name),
                         subtitle: Text("@$username"),
                         trailing: Text("$totalRewards pts"),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ParticipantProfileScreen(userId: userId),
-                            ),
-                          );
-                        },
                       ),
                     );
                   },

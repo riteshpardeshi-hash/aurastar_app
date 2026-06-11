@@ -8,7 +8,10 @@ class CreatorAdminScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser!;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      return const Scaffold(body: Center(child: Text('Not signed in.')));
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),

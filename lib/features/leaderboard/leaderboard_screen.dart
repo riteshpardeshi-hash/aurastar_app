@@ -135,7 +135,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
         });
       }
     } catch (_) {
-      if (mounted) setState(() { _loading = false; _initialLoading = false; });
+      if (mounted) setState(() { _loading = false; _initialLoading = false; _hasMore = false; });
     }
   }
 
@@ -216,19 +216,14 @@ class _CityBoard extends StatelessWidget {
                 stream: FirebaseFirestore.instance
                     .collection('users')
                     .where('city', isEqualTo: city)
+                    .orderBy('totalRewards', descending: true)
                     .limit(50)
                     .snapshots(),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator(color: _accent));
                   }
-                  // Sort client-side to avoid needing a composite index
-                  final docs = (snap.data?.docs ?? []).toList()
-                    ..sort((a, b) {
-                      final aS = ((a.data() as Map)['totalRewards'] as num?)?.toInt() ?? 0;
-                      final bS = ((b.data() as Map)['totalRewards'] as num?)?.toInt() ?? 0;
-                      return bS.compareTo(aS);
-                    });
+                  final docs = snap.data?.docs ?? [];
 
                   if (docs.isEmpty) {
                     return _emptyState(
@@ -365,11 +360,12 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                       child: CircularProgressIndicator(color: _accent));
                 }
 
-                // Filter: not deleted, has aiScore
+                // Filter: approved, not deleted, has aiScore
                 final all = (snap.data?.docs ?? []).where((d) {
                   final data = d.data() as Map<String, dynamic>;
                   return !(data['isDeleted'] as bool? ?? false) &&
-                      data['aiScore'] != null;
+                      data['aiScore'] != null &&
+                      (data['status'] as String? ?? '') == 'approved';
                 }).toList();
 
                 if (all.isEmpty) {

@@ -32,7 +32,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
     final doc = await FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -42,6 +43,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _usernameCtrl.text = data['username'] as String? ?? '';
     _bioCtrl.text = data['bio'] as String? ?? '';
     _currentPhotoUrl = data['profileImageUrl'] as String? ?? '';
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
@@ -111,7 +113,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
     setState(() => _saving = true);
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      setState(() => _saving = false);
+      return;
+    }
 
     String photoUrl = _currentPhotoUrl;
     if (_pickedImage != null) {

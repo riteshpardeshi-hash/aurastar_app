@@ -10,7 +10,12 @@ class ArchivedVideosScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const Scaffold(
+        body: Center(child: Text('Please sign in to view archived videos.')),
+      );
+    }
 
     return Scaffold(
       backgroundColor: _bg,

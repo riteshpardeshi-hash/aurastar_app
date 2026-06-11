@@ -35,8 +35,12 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
     }
 
     final data = widget.request;
+    final db = FirebaseFirestore.instance;
 
-    await FirebaseFirestore.instance.collection('challenges').add({
+    // Atomic: create challenge + mark request approved together
+    final batch = db.batch();
+    final challengeRef = db.collection('challenges').doc();
+    batch.set(challengeRef, {
       'title': data['title'],
       'description': data['description'],
       'instructions': data['instructions'],
@@ -45,11 +49,8 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
       'status': 'approved',
       'createdAt': Timestamp.now(),
     });
-
-    await FirebaseFirestore.instance
-        .collection('creator_requests')
-        .doc(data.id)
-        .update({'status': 'approved'});
+    batch.update(db.collection('creator_requests').doc(data.id), {'status': 'approved'});
+    await batch.commit();
 
     if (!mounted) return;
     Navigator.pop(context);

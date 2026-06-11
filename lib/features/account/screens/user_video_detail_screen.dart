@@ -61,7 +61,7 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   }
 
   Future<void> _toggleStar() async {
-    if (widget.submissionId.isEmpty || _starLoading) return;
+    if (widget.submissionId.isEmpty || _starLoading || _uid.isEmpty) return;
     setState(() => _starLoading = true);
 
     final ref = FirebaseFirestore.instance
