@@ -46,84 +46,102 @@ async function uploadVideoToGemini(fileManager, filePath, displayName) {
 // Only the highest score for a given challenge ever counts.
 // If the new score beats the previous best, the old best is archived (7-day delete).
 // Returns { isBestForChallenge, netAurasAwarded }.
+//
+// Uses a deterministic userChallengeProgress/{userId_challengeId} tracking doc so
+// the read+compare+write can be wrapped in a runTransaction — eliminating the race
+// condition where two concurrent approvals both read the same "no best yet" state
+// and double-credit Auras.
+//
+// Migration note: on first run after deploy, users with existing isBestForChallenge
+// submissions will have no tracking doc yet. Their next attempt will be treated as
+// a "first attempt" and credited in full. Run scripts/backfill_progress.js once to
+// pre-populate tracking docs from existing data if over-crediting is a concern.
 async function applyBestAttemptLogic(submissionId, userId, auraPoints, score, challengeId, challengeTitle) {
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   const sevenDaysFromNow = admin.firestore.Timestamp.fromDate(new Date(Date.now() + sevenDaysMs));
 
-  // Find the user's current best submission for this challenge
-  const bestSnap = await db.collection('submissions')
-    .where('userId', '==', userId)
-    .where('challengeId', '==', challengeId)
-    .where('isBestForChallenge', '==', true)
-    .limit(1)
-    .get();
+  const progressRef = db.collection('userChallengeProgress').doc(`${userId}_${challengeId}`);
+  const userRef = db.collection('users').doc(userId);
+
+  // Pre-allocate append-only doc refs; collection.add() is not allowed inside transactions.
+  const creditTxRef = db.collection('auraTransactions').doc();
 
   let isBestForChallenge = false;
   let netAurasAwarded = 0;
 
-  if (bestSnap.empty) {
-    // First scored attempt for this challenge — it is automatically the best
-    isBestForChallenge = true;
-    netAurasAwarded = auraPoints;
-  } else {
-    const prevDoc = bestSnap.docs[0];
-    const prevData = prevDoc.data();
-    const prevScore = prevData.aiScore || 0;
-    const prevAuras = prevData.auraPoints || 0;
+  await db.runTransaction(async (txn) => {
+    const progressDoc = await txn.get(progressRef);
 
-    if (score > prevScore) {
-      // New attempt beats the previous best
+    if (!progressDoc.exists) {
+      // First scored attempt for this challenge — automatically the best.
       isBestForChallenge = true;
-      netAurasAwarded = Math.max(0, auraPoints - prevAuras); // net improvement only
+      netAurasAwarded = auraPoints;
 
-      // Atomic: archive old doc + reverse old auras in one batch
-      const replaceBatch = db.batch();
-      replaceBatch.update(prevDoc.ref, {
-        isBestForChallenge: false,
-        isArchived: true,
-        isPublic: false,
-        archiveDeleteAt: sevenDaysFromNow,
-        archivedReason: 'lower_score',
+      txn.set(progressRef, {
+        bestScore: score,
+        bestAuras: auraPoints,
+        bestSubmissionId: submissionId,
+        userId,
+        challengeId,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      if (prevAuras > 0) {
-        replaceBatch.update(db.collection('users').doc(userId), {
-          totalRewards: admin.firestore.FieldValue.increment(-prevAuras),
-        });
-        const reverseTxRef = db.collection('auraTransactions').doc();
-        replaceBatch.set(reverseTxRef, {
-          userId,
-          amount: -prevAuras,
-          type: 'best_attempt_replaced',
-          sourceId: prevDoc.id,
-          description: `Previous best (${prevScore}/100) replaced by score ${score}/100 on "${challengeTitle}"`,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+
+      if (netAurasAwarded > 0) {
+        txn.update(userRef, {
+          totalRewards: admin.firestore.FieldValue.increment(netAurasAwarded),
         });
       }
-      await replaceBatch.commit();
-    }
-    // else: new score is not better — isBestForChallenge stays false, netAurasAwarded stays 0
-  }
+    } else {
+      const progress = progressDoc.data();
+      const prevScore = progress.bestScore || 0;
+      const prevAuras = progress.bestAuras || 0;
+      const prevSubmissionId = progress.bestSubmissionId || null;
 
-  // Atomic: credit Auras + write transaction record together
-  const creditBatch = db.batch();
-  if (netAurasAwarded > 0) {
-    creditBatch.update(db.collection('users').doc(userId), {
-      totalRewards: admin.firestore.FieldValue.increment(netAurasAwarded),
+      if (score > prevScore) {
+        // New attempt beats the previous best.
+        // Credit only the net improvement — the old auras stay in totalRewards.
+        isBestForChallenge = true;
+        netAurasAwarded = Math.max(0, auraPoints - prevAuras);
+
+        txn.update(progressRef, {
+          bestScore: score,
+          bestAuras: auraPoints,
+          bestSubmissionId: submissionId,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        if (prevSubmissionId) {
+          txn.update(db.collection('submissions').doc(prevSubmissionId), {
+            isBestForChallenge: false,
+            isArchived: true,
+            isPublic: false,
+            archiveDeleteAt: sevenDaysFromNow,
+            archivedReason: 'lower_score',
+          });
+        }
+
+        if (netAurasAwarded > 0) {
+          txn.update(userRef, {
+            totalRewards: admin.firestore.FieldValue.increment(netAurasAwarded),
+          });
+        }
+      }
+      // else: new score is not better — isBestForChallenge stays false, netAurasAwarded stays 0
+    }
+
+    // Always log the scoring event for the ledger.
+    txn.set(creditTxRef, {
+      userId,
+      amount: netAurasAwarded,
+      type: 'challenge_score',
+      sourceId: submissionId,
+      description: isBestForChallenge
+        ? `New best! ${score}/100 on "${challengeTitle}" — +${netAurasAwarded} Auras`
+        : `${score}/100 on "${challengeTitle}" — not your best, no Auras earned`,
+      isBestForChallenge,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-  }
-  const txRef = db.collection('auraTransactions').doc();
-  creditBatch.set(txRef, {
-    userId,
-    amount: netAurasAwarded,
-    type: 'challenge_score',
-    sourceId: submissionId,
-    description: isBestForChallenge
-      ? `New best! ${score}/100 on "${challengeTitle}" — +${netAurasAwarded} Auras`
-      : `${score}/100 on "${challengeTitle}" — not your best, no Auras earned`,
-    isBestForChallenge,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  await creditBatch.commit();
 
   console.log(`[applyBestAttemptLogic] ${submissionId}: best=${isBestForChallenge}, net=${netAurasAwarded}, score=${score}`);
   return { isBestForChallenge, netAurasAwarded };
@@ -253,75 +271,80 @@ Rules for the prompt:
 // ─────────────────────────────────────────────────────────────────────────────
 // STREAK: Called after every approved submission. Tracks the 7-day streak
 // and credits +50 Auras on Day 7, then resets the cycle.
+//
+// Uses runTransaction so two concurrent approvals for the same user on the same
+// day can't both pass the `lastStreakDate !== today` check and double-credit.
 // ─────────────────────────────────────────────────────────────────────────────
 async function applyStreakBonus(submissionId, userId) {
   try {
     const userRef = db.collection('users').doc(userId);
-    const userDoc = await userRef.get();
-    const userData = userDoc.data() || {};
 
-    const tz = userData.streakTimezone || 'Asia/Kolkata';
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+    await db.runTransaction(async (txn) => {
+      const userDoc = await txn.get(userRef);
+      const userData = userDoc.data() || {};
 
-    const lastStreakDate = userData.lastStreakDate || '';
-    if (lastStreakDate === today) return; // already qualified today
+      const tz = userData.streakTimezone || 'Asia/Kolkata';
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: tz });
 
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: tz });
+      const lastStreakDate = userData.lastStreakDate || '';
+      if (lastStreakDate === today) return; // already counted today — idempotent
 
-    let streakDay = typeof userData.streakDay === 'number' ? userData.streakDay : 0;
+      const yesterdayDate = new Date();
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterday = yesterdayDate.toLocaleDateString('en-CA', { timeZone: tz });
 
-    if (lastStreakDate === yesterday) {
-      streakDay += 1; // consecutive day
-    } else {
-      streakDay = 1;  // streak broken or first ever
-    }
+      let streakDay = typeof userData.streakDay === 'number' ? userData.streakDay : 0;
+      if (lastStreakDate === yesterday) {
+        streakDay += 1;
+      } else {
+        streakDay = 1;
+      }
 
-    if (streakDay >= 7) {
-      // Bonus day — credit +50 Auras and reset (atomic: user update + transaction)
-      const streakBatch = db.batch();
-      streakBatch.update(userRef, {
-        streakDay: 0,
-        lastStreakDate: today,
-        totalRewards: admin.firestore.FieldValue.increment(50),
-      });
-      const streakTxRef = db.collection('auraTransactions').doc();
-      streakBatch.set(streakTxRef, {
-        userId,
-        amount: 50,
-        type: 'streak_bonus',
-        sourceId: submissionId,
-        description: '🔥 7-Day Streak Bonus! +50 Auras',
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      await streakBatch.commit();
+      if (streakDay >= 7) {
+        // Pre-allocate refs — collection.add() is not allowed inside transactions.
+        const streakTxRef = db.collection('auraTransactions').doc();
+        const notifRef = db.collection('notifications').doc();
 
-      await db.collection('notifications').add({
-        userId,
-        type: 'streak_bonus',
-        message: '🔥 7-Day Streak complete! You earned +50 Auras. New cycle starts now.',
-        isRead: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      console.log(`[applyStreakBonus] ${userId}: Day 7 complete — +50 Auras, streak reset.`);
-    } else {
-      await userRef.update({ streakDay, lastStreakDate: today });
-
-      // Progress notification on days 3, 5, 6 only
-      if ([3, 5, 6].includes(streakDay)) {
-        await db.collection('notifications').add({
+        txn.update(userRef, {
+          streakDay: 0,
+          lastStreakDate: today,
+          totalRewards: admin.firestore.FieldValue.increment(50),
+        });
+        txn.set(streakTxRef, {
           userId,
-          type: 'streak_progress',
-          message: `🔥 Day ${streakDay}/7 — play tomorrow to keep your streak going!`,
+          amount: 50,
+          type: 'streak_bonus',
+          sourceId: submissionId,
+          description: '🔥 7-Day Streak Bonus! +50 Auras',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        txn.set(notifRef, {
+          userId,
+          type: 'streak_bonus',
+          message: '🔥 7-Day Streak complete! You earned +50 Auras. New cycle starts now.',
           isRead: false,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-      }
 
-      console.log(`[applyStreakBonus] ${userId}: Day ${streakDay}/7 streak.`);
-    }
+        console.log(`[applyStreakBonus] ${userId}: Day 7 complete — +50 Auras, streak reset.`);
+      } else {
+        txn.update(userRef, { streakDay, lastStreakDate: today });
+
+        // Progress notification on days 3, 5, 6 only
+        if ([3, 5, 6].includes(streakDay)) {
+          const notifRef = db.collection('notifications').doc();
+          txn.set(notifRef, {
+            userId,
+            type: 'streak_progress',
+            message: `🔥 Day ${streakDay}/7 — play tomorrow to keep your streak going!`,
+            isRead: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        console.log(`[applyStreakBonus] ${userId}: Day ${streakDay}/7 streak.`);
+      }
+    });
   } catch (err) {
     // Non-fatal — scoring still succeeds even if streak update fails
     console.error(`[applyStreakBonus] Error for ${userId}:`, err.message);
