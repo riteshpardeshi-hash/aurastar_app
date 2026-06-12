@@ -135,6 +135,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.done);
+      _player.pause();
 
       await showDialog<bool>(
         context: context,

@@ -157,24 +157,6 @@ class ArchivedVideosScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () =>
-                          _confirmShare(context, doc.id),
-                      style: TextButton.styleFrom(
-                        backgroundColor:
-                            _accent.withValues(alpha: 0.15),
-                        foregroundColor: const Color(0xFFD4A8FF),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                      ),
-                      child: const Text('Share',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
-                    ),
                   ],
                 ),
               );
@@ -196,41 +178,4 @@ class ArchivedVideosScreen extends StatelessWidget {
     return 'Deletes in $days days';
   }
 
-  Future<void> _confirmShare(
-      BuildContext context, String submissionId) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF12102A),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18)),
-        title: const Text('Share Publicly?',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
-        content: const Text(
-          'This will make your video visible in the community feed and eligible for leaderboards.',
-          style: TextStyle(color: Colors.white70, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Share',
-                style: TextStyle(
-                    color: Color(0xFF7B2CBF),
-                    fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(submissionId)
-        .update({'isPublic': true, 'isArchived': false});
-  }
 }

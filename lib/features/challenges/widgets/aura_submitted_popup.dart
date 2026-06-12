@@ -822,6 +822,27 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                         ),
                       ),
                       if (_resultStatus == 'approved') ..._buildParticles(),
+                      if (_resultStatus != null)
+                        Positioned(
+                          top: -14,
+                          right: -14,
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(context).pop(true),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A0050),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.5), blurRadius: 8),
+                                ],
+                              ),
+                              child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

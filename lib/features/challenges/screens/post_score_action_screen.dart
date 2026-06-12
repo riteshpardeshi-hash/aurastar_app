@@ -52,23 +52,6 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
-  Future<void> _share() async {
-    setState(() => _actioning = true);
-    try {
-      await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submissionId)
-          .update({'isPublic': true, 'isArchived': false});
-      _navigateToDashboard();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _actioning = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Action failed. Please try again.')),
-      );
-    }
-  }
-
   Future<void> _archive() async {
     final ok = await _confirm(
       title: 'Archive Video',
@@ -242,10 +225,10 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                     ),
                   ),
                 ),
-              Text(
-                isBest ? 'What do you want to do\nwith your video?' : 'Your video is archived',
+              const Text(
+                'What do you want to do\nwith your video?',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -253,15 +236,6 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              if (isBest)
-                _buildAction(
-                  label: 'Share Publicly',
-                  subtitle: 'Visible to the community. Eligible for leaderboards & stars.',
-                  icon: Icons.public_rounded,
-                  gradient: const [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
-                  onTap: _share,
-                ),
-              if (isBest) const SizedBox(height: 12),
               _buildAction(
                 label: 'Archive (Keep Private)',
                 subtitle: 'Only you can see it. Your Auras are kept.',
