@@ -17,7 +17,8 @@ import '../../shared/widgets/aura_action_sheet.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../account/screens/my_account_screen.dart';
 import '../creator/admin/creator_admin_screen.dart';
-import '../creator/screens/creator_home_screen.dart';
+import '../creator/screens/creator_dashboard_screen.dart';
+import '../creator/screens/brand_dashboard_screen.dart';
 import '../creator/screens/create_creator_profile_screen.dart';
 import '../admin/screens/admin_screen.dart';
 
@@ -45,6 +46,7 @@ class _DashboardState extends State<Dashboard> {
           points: 0,
           isAdmin: false,
           isBrand: false,
+          isCreator: false,
           userId: '',
           displayName: 'Guest',
           streakDay: 0,
@@ -75,7 +77,8 @@ class _DashboardState extends State<Dashboard> {
 
         final userData = snap.data!.data() as Map<String, dynamic>? ?? {};
         final isAdmin = userData['isAdmin'] as bool? ?? false;
-        final isBrand = userData['isCreator'] as bool? ?? false;
+        final isBrand = userData['isBrand'] as bool? ?? false;
+        final isCreator = userData['isCreator'] as bool? ?? false;
         final points = (userData['totalRewards'] ?? 0) as int;
         final level = _level(points);
         final displayName =
@@ -101,6 +104,7 @@ class _DashboardState extends State<Dashboard> {
           points: points,
           isAdmin: isAdmin,
           isBrand: isBrand,
+          isCreator: isCreator,
           userId: user.uid,
           displayName: displayName,
           streakDay: streakDay,
@@ -115,6 +119,7 @@ class _DashboardState extends State<Dashboard> {
     required int points,
     required bool isAdmin,
     required bool isBrand,
+    required bool isCreator,
     required String userId,
     required String displayName,
     required int streakDay,
@@ -145,6 +150,9 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                 SliverToBoxAdapter(child: _buildCategorySection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
+                if (isCreator)
+                  SliverToBoxAdapter(
+                      child: _buildCreatorTools(context, userId)),
                 if (isBrand || isAdmin)
                   SliverToBoxAdapter(
                       child: _buildBrandTools(context, userId, isBrand)),
@@ -1373,7 +1381,35 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Brand Tools (brand/admin only) ─────────────────────────────────────────
+  // ── Creator Tools (content creators only) ─────────────────────────────────
+  Widget _buildCreatorTools(BuildContext context, String userId) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Creator Tools',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'ClashDisplay')),
+          const SizedBox(height: 10),
+          _toolButton(
+            label: 'Creator Dashboard',
+            colors: const [Color(0xFF7B2FF7), Color(0xFFF107A3)],
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const CreatorDashboardScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Brand Tools (brands/admin only) ────────────────────────────────────────
   Widget _buildBrandTools(
       BuildContext context, String userId, bool isBrand) {
     return Padding(
@@ -1381,7 +1417,7 @@ class _DashboardState extends State<Dashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Your Tools',
+          const Text('Brand Tools',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
@@ -1392,7 +1428,7 @@ class _DashboardState extends State<Dashboard> {
             children: [
               Expanded(
                 child: _toolButton(
-                  label: isBrand ? 'Brand Home' : 'Start Brand Page',
+                  label: isBrand ? 'Brand Dashboard' : 'Start Brand Page',
                   colors: const [Color(0xFFF59E0B), Color(0xFFEF4444)],
                   onTap: () async {
                     final doc = await FirebaseFirestore.instance
@@ -1400,13 +1436,13 @@ class _DashboardState extends State<Dashboard> {
                         .doc(userId)
                         .get();
                     final alreadyBrand =
-                        (doc.data() ?? {})['isCreator'] ?? false;
+                        (doc.data() ?? {})['isBrand'] ?? false;
                     if (!context.mounted) return;
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => alreadyBrand
-                            ? const CreatorHomeScreen()
+                            ? const BrandDashboardScreen()
                             : const CreateCreatorProfileScreen(),
                       ),
                     );
@@ -1416,7 +1452,7 @@ class _DashboardState extends State<Dashboard> {
               const SizedBox(width: 10),
               Expanded(
                 child: _toolButton(
-                  label: 'Brand Admin',
+                  label: 'Brand Analytics',
                   colors: const [Color(0xFF5B2EFF), Color(0xFF9B4DFF)],
                   onTap: () => Navigator.push(
                     context,

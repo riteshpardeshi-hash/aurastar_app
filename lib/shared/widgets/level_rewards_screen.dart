@@ -139,13 +139,12 @@ class LevelRewardsScreen extends StatelessWidget {
                 final isUnlocked = currentLevel >= tier.minLevel;
                 final isCurrent = currentTier.minLevel == tier.minLevel;
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.only(bottom: 14),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     color: isCurrent
-                        ? tier.color.withValues(alpha: 0.13)
-                        : Colors.white.withValues(alpha: 0.04),
+                        ? tier.color.withValues(alpha: 0.10)
+                        : Colors.white.withValues(alpha: 0.03),
                     border: Border.all(
                       color: isCurrent
                           ? tier.color.withValues(alpha: 0.6)
@@ -154,78 +153,191 @@ class LevelRewardsScreen extends StatelessWidget {
                               : Colors.white12,
                     ),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isUnlocked
-                              ? tier.color.withValues(alpha: 0.18)
-                              : Colors.white.withValues(alpha: 0.05),
-                          border: Border.all(
-                            color: isUnlocked ? tier.color.withValues(alpha: 0.5) : Colors.white12,
-                          ),
-                        ),
-                        child: Center(
-                          child: Icon(
-                            isUnlocked ? Icons.lock_open_rounded : Icons.lock_outline,
-                            color: isUnlocked ? tier.color : Colors.white24,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      // ── Tier header ──────────────────────────────────────
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Text(
-                                  tier.name,
-                                  style: TextStyle(
-                                    color: isUnlocked ? tier.color : Colors.white38,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isUnlocked
+                                    ? tier.color.withValues(alpha: 0.18)
+                                    : Colors.white.withValues(alpha: 0.05),
+                                border: Border.all(
+                                  color: isUnlocked
+                                      ? tier.color.withValues(alpha: 0.5)
+                                      : Colors.white12,
                                 ),
-                                if (isCurrent) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: tier.color.withValues(alpha: 0.25),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'Current',
-                                      style: TextStyle(color: Colors.white, fontSize: 10),
+                              ),
+                              child: Center(
+                                child: Icon(
+                                  isUnlocked
+                                      ? Icons.lock_open_rounded
+                                      : Icons.lock_outline,
+                                  color: isUnlocked ? tier.color : Colors.white24,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        tier.name,
+                                        style: TextStyle(
+                                          color: isUnlocked
+                                              ? tier.color
+                                              : Colors.white38,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      if (isCurrent) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                tier.color.withValues(alpha: 0.25),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Text(
+                                            'Current',
+                                            style: TextStyle(
+                                                color: Colors.white, fontSize: 10),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    tier.unlock,
+                                    style: TextStyle(
+                                      color: isUnlocked
+                                          ? Colors.white60
+                                          : Colors.white24,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
-                            const SizedBox(height: 3),
                             Text(
-                              tier.unlock,
+                              'Lv ${tier.minLevel}',
                               style: TextStyle(
-                                color: isUnlocked ? Colors.white70 : Colors.white24,
-                                fontSize: 13,
+                                color:
+                                    isUnlocked ? Colors.white60 : Colors.white24,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        'Lv ${tier.minLevel}',
-                        style: TextStyle(
-                          color: isUnlocked ? Colors.white60 : Colors.white24,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      // ── Reward items ─────────────────────────────────────
+                      if (tier.rewards.isNotEmpty) ...[
+                        Divider(
+                            height: 1,
+                            color: Colors.white.withValues(alpha: 0.06)),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                          child: Column(
+                            children: tier.rewards.map((r) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: isUnlocked
+                                            ? tier.color.withValues(alpha: 0.15)
+                                            : Colors.white.withValues(alpha: 0.04),
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Icon(
+                                        r.icon,
+                                        color: isUnlocked
+                                            ? tier.color
+                                            : Colors.white24,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${r.brand} — ${r.title}',
+                                            style: TextStyle(
+                                              color: isUnlocked
+                                                  ? Colors.white
+                                                  : Colors.white30,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Text(
+                                            r.description,
+                                            style: TextStyle(
+                                              color: isUnlocked
+                                                  ? Colors.white.withValues(alpha: 0.45)
+                                                  : Colors.white.withValues(alpha: 0.15),
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: isUnlocked
+                                            ? tier.color.withValues(alpha: 0.18)
+                                            : Colors.white.withValues(alpha: 0.04),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isUnlocked
+                                              ? tier.color.withValues(alpha: 0.4)
+                                              : Colors.white12,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        isUnlocked ? r.code : '??????',
+                                        style: TextStyle(
+                                          color: isUnlocked
+                                              ? tier.color
+                                              : Colors.white24,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 );

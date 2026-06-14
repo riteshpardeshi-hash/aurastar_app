@@ -705,6 +705,7 @@ class MyAccountScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     _buildAuraPointsCard(totalRewards),
+                    _RewardsSection(level: _level(totalRewards)),
                     _buildReferralCard(
                         context,
                         userData['referralCode'] as String? ?? '',
@@ -936,6 +937,319 @@ class MyAccountScreen extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+// ── Rewards Section ────────────────────────────────────────────────────────────
+
+class _RewardsSection extends StatelessWidget {
+  final int level;
+  const _RewardsSection({required this.level});
+
+  static const _accent = Color(0xFF7B2CBF);
+
+  @override
+  Widget build(BuildContext context) {
+    final unlockedCount = auraTiers
+        .where((t) => level >= t.minLevel)
+        .expand((t) => t.rewards)
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'My Rewards',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const Spacer(),
+            if (unlockedCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$unlockedCount unlocked',
+                  style: const TextStyle(
+                    color: _accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Earn more Aura to unlock higher tier rewards',
+          style: TextStyle(fontSize: 12, color: Colors.black45),
+        ),
+        const SizedBox(height: 14),
+        ...auraTiers.map((tier) => _TierRewardCard(tier: tier, level: level)),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _TierRewardCard extends StatefulWidget {
+  final AuraTier tier;
+  final int level;
+  const _TierRewardCard({required this.tier, required this.level});
+
+  @override
+  State<_TierRewardCard> createState() => _TierRewardCardState();
+}
+
+class _TierRewardCardState extends State<_TierRewardCard> {
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-expand unlocked tiers
+    _expanded = widget.level >= widget.tier.minLevel;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isUnlocked = widget.level >= widget.tier.minLevel;
+    final tier = widget.tier;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isUnlocked
+              ? tier.color.withValues(alpha: 0.35)
+              : Colors.black.withValues(alpha: 0.07),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // ── Tier header ──────────────────────────────────────────────
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isUnlocked
+                          ? tier.color.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.05),
+                      border: Border.all(
+                        color: isUnlocked
+                            ? tier.color.withValues(alpha: 0.45)
+                            : Colors.black12,
+                      ),
+                    ),
+                    child: Icon(
+                      isUnlocked ? Icons.lock_open_rounded : Icons.lock_outline,
+                      color: isUnlocked ? tier.color : Colors.black26,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              tier.name,
+                              style: TextStyle(
+                                color: isUnlocked ? tier.color : Colors.black38,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isUnlocked
+                                    ? tier.color.withValues(alpha: 0.12)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isUnlocked ? 'Unlocked' : 'Lv ${tier.minLevel}',
+                                style: TextStyle(
+                                  color: isUnlocked ? tier.color : Colors.black38,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${tier.rewards.length} reward${tier.rewards.length != 1 ? 's' : ''} • ${tier.unlock}',
+                          style: TextStyle(
+                            color: isUnlocked ? Colors.black54 : Colors.black26,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: Colors.black26,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Reward items ─────────────────────────────────────────────
+          if (_expanded && tier.rewards.isNotEmpty) ...[
+            Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+              child: Column(
+                children: tier.rewards
+                    .map((r) => _RewardRow(
+                          reward: r,
+                          isUnlocked: isUnlocked,
+                          tierColor: tier.color,
+                        ))
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RewardRow extends StatelessWidget {
+  final LevelReward reward;
+  final bool isUnlocked;
+  final Color tierColor;
+  const _RewardRow(
+      {required this.reward,
+      required this.isUnlocked,
+      required this.tierColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: isUnlocked
+                  ? tierColor.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              reward.icon,
+              color: isUnlocked ? tierColor : Colors.black26,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${reward.brand} — ${reward.title}',
+                  style: TextStyle(
+                    color: isUnlocked ? Colors.black87 : Colors.black26,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  reward.description,
+                  style: TextStyle(
+                    color: isUnlocked ? Colors.black45 : Colors.black.withValues(alpha: 0.18),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: isUnlocked
+                ? () {
+                    Clipboard.setData(ClipboardData(text: reward.code));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Code "${reward.code}" copied!'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: isUnlocked
+                    ? tierColor.withValues(alpha: 0.10)
+                    : Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isUnlocked
+                      ? tierColor.withValues(alpha: 0.35)
+                      : Colors.black12,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isUnlocked ? reward.code : '??????',
+                    style: TextStyle(
+                      color: isUnlocked ? tierColor : Colors.black26,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  if (isUnlocked) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.copy_rounded, color: tierColor, size: 11),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
