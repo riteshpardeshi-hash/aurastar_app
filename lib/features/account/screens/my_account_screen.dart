@@ -117,6 +117,8 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
     final challengeId = widget.cardData['challengeId'] as String? ?? '';
     final auraPoints = (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
     final username = widget.cardData['username'] as String? ?? '';
+    final city = widget.cardData['city'] as String?;
+    final cityRank = (widget.cardData['cityRank'] as num?)?.toInt();
 
     return GestureDetector(
       onTap: _shareCard,
@@ -138,6 +140,8 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
                   challengeId: challengeId,
                   auraPoints: auraPoints,
                   username: username,
+                  city: city,
+                  cityRank: cityRank,
                 ),
               ),
             ),
@@ -620,6 +624,7 @@ class MyAccountScreen extends StatelessWidget {
             stream: FirebaseFirestore.instance
                 .collection('submissions')
                 .where('userId', isEqualTo: user.uid)
+                .where('isDeleted', isEqualTo: false)
                 .snapshots(),
             builder: (context, submissionSnapshot) {
               if (submissionSnapshot.hasError) {
@@ -741,6 +746,8 @@ class MyAccountScreen extends StatelessWidget {
                     _AchievementCardsSection(uid: user.uid),
                     const SizedBox(height: 16),
                     _SavedChallengesRow(uid: user.uid),
+                    const SizedBox(height: 12),
+                    _ClaimedOffersRow(uid: user.uid),
                     const SizedBox(height: 24),
                     const Text(
                       "My Videos",
@@ -1323,6 +1330,321 @@ class _SavedChallengesRow extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Claimed Offers row ────────────────────────────────────────────────────────
+
+class _ClaimedOffersRow extends StatelessWidget {
+  final String uid;
+  const _ClaimedOffersRow({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('offerClaims')
+          .limit(1)
+          .snapshots(),
+      builder: (context, snap) {
+        final hasClaims = (snap.data?.docs.length ?? 0) > 0;
+
+        return GestureDetector(
+          onTap: () => _showClaimedOffersSheet(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: hasClaims
+                  ? const Color(0xFFF59E0B).withValues(alpha: 0.07)
+                  : Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasClaims
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: hasClaims
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.06),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasClaims
+                        ? Icons.local_offer_rounded
+                        : Icons.local_offer_outlined,
+                    color: hasClaims
+                        ? const Color(0xFFF59E0B)
+                        : Colors.white38,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('My Offers',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasClaims
+                            ? 'Tap to view your claimed codes'
+                            : 'Complete challenges to unlock brand offers',
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: Colors.white24, size: 20),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showClaimedOffersSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF100A20),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _ClaimedOffersSheet(uid: uid),
+    );
+  }
+}
+
+class _ClaimedOffersSheet extends StatelessWidget {
+  final String uid;
+  const _ClaimedOffersSheet({required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      maxChildSize: 0.90,
+      builder: (_, ctrl) => Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            width: 36, height: 4,
+            decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text('My Claimed Offers',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'ClashDisplay')),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users').doc(uid)
+                  .collection('offerClaims')
+                  .orderBy('claimedAt', descending: true)
+                  .snapshots(),
+              builder: (context, snap) {
+                if (!snap.hasData) {
+                  return const Center(
+                      child: CircularProgressIndicator(
+                          color: Color(0xFF7B2CBF)));
+                }
+                final docs = snap.data!.docs;
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.local_offer_outlined,
+                            color: Colors.white24, size: 44),
+                        SizedBox(height: 10),
+                        Text('No offers claimed yet',
+                            style: TextStyle(
+                                color: Colors.white38, fontSize: 14)),
+                        SizedBox(height: 4),
+                        Text(
+                            'Complete challenges to unlock brand codes',
+                            style: TextStyle(
+                                color: Colors.white24, fontSize: 12)),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  controller: ctrl,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final d     = docs[i].data() as Map<String, dynamic>;
+                    final code  = d['code']       as String? ?? '—';
+                    final title = d['offerTitle'] as String? ?? 'Offer';
+                    final brand = d['brand']      as String? ?? '';
+                    final type  = d['type']       as String? ?? 'percent';
+                    final value = (d['value']     as num?)?.toInt() ?? 0;
+                    final ts    = d['claimedAt']  as Timestamp?;
+
+                    final typeDisplay = switch (type) {
+                      'percent' => '$value% off',
+                      'fixed'   => '₹$value off',
+                      _         => 'Free gift',
+                    };
+                    final typeColor = switch (type) {
+                      'percent' => const Color(0xFF06B6D4),
+                      'fixed'   => const Color(0xFF22C55E),
+                      _         => const Color(0xFFD4A8FF),
+                    };
+
+                    String dateStr = '';
+                    if (ts != null) {
+                      final dt = ts.toDate();
+                      dateStr = '${dt.day}/${dt.month}/${dt.year}';
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D0D1A),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFFF59E0B)
+                                .withValues(alpha: 0.22)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700)),
+                                    if (brand.isNotEmpty)
+                                      Text(brand,
+                                          style: TextStyle(
+                                              color: typeColor
+                                                  .withValues(alpha: 0.80),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: typeColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: typeColor
+                                          .withValues(alpha: 0.35)),
+                                ),
+                                child: Text(typeDisplay,
+                                    style: TextStyle(
+                                        color: typeColor,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: code));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Code "$code" copied!'),
+                                  backgroundColor:
+                                      const Color(0xFF1A0A2E),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(seconds: 2),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(10)),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: const Color(0xFF22C55E)
+                                        .withValues(alpha: 0.35)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                      Icons.confirmation_number_rounded,
+                                      color: Color(0xFF22C55E),
+                                      size: 14),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(code,
+                                        style: const TextStyle(
+                                            color: Color(0xFF22C55E),
+                                            fontSize: 13,
+                                            fontFamily: 'monospace',
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 1.2)),
+                                  ),
+                                  const Icon(Icons.copy_rounded,
+                                      color: Colors.white24, size: 13),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (dateStr.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text('Claimed $dateStr',
+                                  style: const TextStyle(
+                                      color: Colors.white24,
+                                      fontSize: 10)),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

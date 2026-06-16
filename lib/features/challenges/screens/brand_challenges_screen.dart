@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
+import '../../../core/utils/cdn_url.dart';
 import '../../search/search_screen.dart';
 import '../../leaderboard/leaderboard_screen.dart';
 import '../../account/screens/my_account_screen.dart';
@@ -239,6 +240,8 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     final creatorId = data['creatorId']  as String? ?? '';
     final isNew     = _isNew(data['createdAt']);
     final isHot     = _isHot(data);
+    final endLabel  = campaignEndLabel(data['endDate']);
+    final endColor  = campaignEndColor(data['endDate']);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
@@ -322,6 +325,22 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                               color: Colors.white,
                               fontSize: 20,
                               fontWeight: FontWeight.bold)),
+                      if (endLabel.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.timer_outlined,
+                                color: endColor, size: 13),
+                            const SizedBox(width: 4),
+                            Text(endLabel,
+                                style: TextStyle(
+                                    color: endColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -471,6 +490,8 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     final creatorId  = data['creatorId']  as String? ?? '';
     final isNew      = _isNew(data['createdAt']);
     final isHot      = _isHot(data);
+    final endLabel   = campaignEndLabel(data['endDate']);
+    final endColor   = campaignEndColor(data['endDate']);
 
     return GestureDetector(
       onTap: () => _openChallenge(context, doc),
@@ -576,6 +597,22 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                               fontWeight: FontWeight.w700)),
                     ],
                   ),
+                  if (endLabel.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.timer_outlined,
+                              color: endColor, size: 9),
+                          const SizedBox(width: 3),
+                          Text(endLabel,
+                              style: TextStyle(
+                                  color: endColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

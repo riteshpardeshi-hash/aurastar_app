@@ -7,6 +7,8 @@ class AchievementCardView extends StatelessWidget {
   final String challengeId;
   final int auraPoints;
   final String username;
+  final String? city;
+  final int? cityRank;
 
   const AchievementCardView({
     super.key,
@@ -14,6 +16,8 @@ class AchievementCardView extends StatelessWidget {
     required this.challengeId,
     required this.auraPoints,
     required this.username,
+    this.city,
+    this.cityRank,
   });
 
   @override
@@ -107,6 +111,35 @@ class AchievementCardView extends StatelessWidget {
               letterSpacing: 2.5,
             ),
           ),
+          if (cityRank != null && city != null && city!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF54A0FF).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: const Color(0xFF54A0FF).withValues(alpha: 0.40)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.location_city_rounded,
+                      color: Color(0xFF54A0FF), size: 11),
+                  const SizedBox(width: 4),
+                  Text(
+                    '#$cityRank in $city',
+                    style: const TextStyle(
+                      color: Color(0xFF54A0FF),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Divider(color: const Color(0xFF9B4DCA).withValues(alpha: 0.35), height: 1),
           const SizedBox(height: 12),

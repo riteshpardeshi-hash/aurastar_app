@@ -8,10 +8,13 @@ import 'package:path/path.dart' as path;
 import 'creator_challenge_submitted_screen.dart';
 
 class BrandPreviewScreen extends StatefulWidget {
-  final String videoPath;
-  final String challengeTitle;
-  final String description;
-  final String instructions;
+  final String       videoPath;
+  final String       challengeTitle;
+  final String       description;
+  final String       instructions;
+  final String       difficulty;
+  final List<String> instructionSteps;
+  final List<String> scoringChecklist;
 
   const BrandPreviewScreen({
     super.key,
@@ -19,6 +22,9 @@ class BrandPreviewScreen extends StatefulWidget {
     required this.challengeTitle,
     required this.description,
     required this.instructions,
+    this.difficulty       = 'Medium',
+    this.instructionSteps = const [],
+    this.scoringChecklist = const [],
   });
 
   @override
@@ -77,14 +83,17 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
       final videoUrl = await ref.getDownloadURL();
 
       await FirebaseFirestore.instance.collection('creator_requests').add({
-        'title': widget.challengeTitle,
-        'description': widget.description,
-        'instructions': widget.instructions,
-        'videoUrl': videoUrl,
-        'creatorId': user.uid,
-        'status': 'pending',
-        'rejectionReason': '',
-        'createdAt': Timestamp.now(),
+        'title':            widget.challengeTitle,
+        'description':      widget.description,
+        'instructions':     widget.instructions,
+        'difficulty':       widget.difficulty,
+        'instructionSteps': widget.instructionSteps,
+        'scoringChecklist': widget.scoringChecklist,
+        'videoUrl':         videoUrl,
+        'creatorId':        user.uid,
+        'status':           'pending',
+        'rejectionReason':  '',
+        'createdAt':        Timestamp.now(),
       });
 
       if (!mounted) return;

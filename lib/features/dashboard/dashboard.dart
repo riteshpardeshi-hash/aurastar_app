@@ -21,6 +21,10 @@ import '../creator/screens/creator_dashboard_screen.dart';
 import '../creator/screens/brand_dashboard_screen.dart';
 import '../creator/screens/create_creator_profile_screen.dart';
 import '../admin/screens/admin_screen.dart';
+import '../video/screens/preview_screen.dart';
+import '../../core/services/upload_queue_service.dart';
+import '../arcade/screens/arcade_screen.dart';
+import '../arcade/services/arcade_progress_service.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -31,6 +35,8 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   int? _lastKnownLevel;
+  bool _atRiskAlertShown = false;
+  int _arcadeKey = 0;
 
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
@@ -99,6 +105,48 @@ class _DashboardState extends State<Dashboard> {
         }
         _lastKnownLevel = level;
 
+        // At-risk streak alert: show once per session after 7 pm
+        if (!_atRiskAlertShown && streakDay > 0 && DateTime.now().hour >= 19) {
+          final now = DateTime.now();
+          final todayStr =
+              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+          if (lastStreakDate != todayStr) {
+            _atRiskAlertShown = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Text('⚠️', style: TextStyle(fontSize: 18)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Your streak ends at midnight — play now to save it!',
+                            style: TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF2D1800),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    duration: const Duration(seconds: 5),
+                    action: SnackBarAction(
+                      label: 'Play',
+                      textColor: Colors.amber,
+                      onPressed: () {},
+                    ),
+                  ),
+                );
+            });
+          }
+        }
+
         return _buildScaffold(
           context,
           points: points,
@@ -143,6 +191,18 @@ class _DashboardState extends State<Dashboard> {
                 ),
                 SliverToBoxAdapter(
                     child: _buildStreakBanner(streakDay, lastStreakDate)),
+                SliverToBoxAdapter(
+                    child: _ArcadeTeaserBanner(
+                      key: ValueKey(_arcadeKey),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ArcadeScreen()),
+                      ).then((_) {
+                        if (mounted) setState(() => _arcadeKey++);
+                      }),
+                    )),
+                const SliverToBoxAdapter(child: _PendingUploadBanner()),
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
                 SliverToBoxAdapter(
                     child: _buildAuraArenaNewSection(context)),
@@ -150,12 +210,16 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                 SliverToBoxAdapter(child: _buildCategorySection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
+                if (!isCreator && !isBrand && !isAdmin)
+                  SliverToBoxAdapter(
+                      child:
+                          _buildBecomeCreatorBanner(context, userId, points)),
                 if (isCreator)
                   SliverToBoxAdapter(
                       child: _buildCreatorTools(context, userId)),
                 if (isBrand || isAdmin)
                   SliverToBoxAdapter(
-                      child: _buildBrandTools(context, userId, isBrand)),
+                      child: _buildBrandTools(context, userId, isBrand, points)),
                 if (isAdmin)
                   SliverToBoxAdapter(child: _buildAdminButton(context)),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -283,68 +347,143 @@ class _DashboardState extends State<Dashboard> {
     final now = DateTime.now();
     final todayStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final qualifiedToday = lastStreakDate == todayStr;
+    final yesterday = now.subtract(const Duration(days: 1));
+    final yesterdayStr =
+        '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+
+    final qualifiedToday    = lastStreakDate == todayStr;
+    final qualifiedYesterday = lastStreakDate == yesterdayStr;
     final bonusJustCredited = streakDay == 0 && qualifiedToday;
 
-    // Hide if no streak is active and no bonus was just credited
+    // Broken: had an active streak but missed at least one full day
+    final broken = streakDay > 0 &&
+        !qualifiedToday &&
+        !qualifiedYesterday &&
+        lastStreakDate.isNotEmpty;
+
+    // At risk: after 7 pm, streak active, haven't played today yet
+    final atRisk = !broken && streakDay > 0 && !qualifiedToday && now.hour >= 19;
+
     if (streakDay == 0 && !bonusJustCredited) return const SizedBox.shrink();
 
     final displayDay = bonusJustCredited ? 7 : streakDay;
-    final streakColor = const Color(0xFFFF6B35);
+    const streakColor = Color(0xFFFF6B35);
 
-    String label;
-    if (bonusJustCredited) {
-      label = '🎉 7-Day Streak complete! +50 Auras awarded';
+    // State-driven appearance
+    late Color borderColor;
+    late Color labelColor;
+    late String emoji;
+    late String label;
+
+    if (broken) {
+      borderColor = const Color(0xFFFF4444).withValues(alpha: 0.45);
+      labelColor  = const Color(0xFFFF6B6B);
+      emoji       = '💔';
+      label       = 'Streak broken — play today to start a new one!';
+    } else if (bonusJustCredited) {
+      borderColor = streakColor.withValues(alpha: 0.50);
+      labelColor  = streakColor;
+      emoji       = '🎉';
+      label       = '7-Day Streak complete! +50 Auras awarded';
+    } else if (atRisk) {
+      borderColor = Colors.amber.withValues(alpha: 0.65);
+      labelColor  = Colors.amber;
+      emoji       = '⚠️';
+      label       = 'Streak ends at midnight — play now to save it!';
     } else if (qualifiedToday) {
-      label = 'Day $displayDay/7 — keep it up!';
+      borderColor = streakColor.withValues(alpha: 0.40);
+      labelColor  = streakColor;
+      emoji       = '🔥';
+      label       = 'Day $displayDay/7 — keep it up!';
     } else {
-      label = 'Day $displayDay/7 — play a challenge to continue';
+      borderColor = streakColor.withValues(alpha: 0.20);
+      labelColor  = Colors.white54;
+      emoji       = '🔥';
+      label       = 'Day $displayDay/7 — play a challenge to continue';
     }
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0820),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: streakColor.withValues(alpha: 0.35)),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
-          Text(
-            bonusJustCredited ? '🎉' : '🔥',
-            style: const TextStyle(fontSize: 20),
-          ),
+          Text(emoji, style: const TextStyle(fontSize: 22)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 7 progress bars
+                // ── Day dot tracker ──────────────────────────────────────
                 Row(
                   children: List.generate(7, (i) {
-                    final filled = i < displayDay;
+                    final dayNum = i + 1;
+                    final isCompleted = broken
+                        ? false
+                        : (dayNum < displayDay ||
+                            (dayNum == displayDay && (qualifiedToday || bonusJustCredited)));
+                    final isCurrent =
+                        !broken && !bonusJustCredited && dayNum == displayDay && !qualifiedToday;
+                    final isPast = broken && dayNum <= displayDay;
+
+                    Color dotBg;
+                    Border? dotBorder;
+                    Widget dotChild;
+
+                    if (isPast) {
+                      dotBg = const Color(0xFFFF4444).withValues(alpha: 0.18);
+                      dotChild = const Icon(Icons.close_rounded,
+                          color: Color(0xFFFF6B6B), size: 11);
+                    } else if (isCompleted) {
+                      dotBg = streakColor;
+                      dotChild = const Icon(Icons.local_fire_department_rounded,
+                          color: Colors.white, size: 12);
+                    } else if (isCurrent) {
+                      dotBg     = Colors.transparent;
+                      dotBorder = Border.all(
+                          color: atRisk ? Colors.amber : streakColor, width: 1.5);
+                      dotChild  = Text(
+                        '$dayNum',
+                        style: TextStyle(
+                          color: atRisk ? Colors.amber : streakColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      );
+                    } else {
+                      dotBg    = Colors.white.withValues(alpha: 0.06);
+                      dotChild = Text(
+                        '$dayNum',
+                        style: const TextStyle(
+                            color: Colors.white24,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600),
+                      );
+                    }
+
                     return Expanded(
                       child: Container(
-                        margin: EdgeInsets.only(right: i < 6 ? 3 : 0),
-                        height: 6,
+                        margin: EdgeInsets.only(right: i < 6 ? 4 : 0),
+                        height: 28,
                         decoration: BoxDecoration(
-                          color: filled
-                              ? streakColor
-                              : Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(3),
+                          color: dotBg,
+                          shape: BoxShape.circle,
+                          border: dotBorder,
                         ),
+                        child: Center(child: dotChild),
                       ),
                     );
                   }),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 7),
                 Text(
                   label,
                   style: TextStyle(
-                    color: qualifiedToday
-                        ? streakColor
-                        : Colors.white.withValues(alpha: 0.55),
+                    color: labelColor,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     fontFamily: 'SpaceGrotesk',
@@ -1381,6 +1520,88 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  // ── Become Creator banner (regular users only) ─────────────────────────────
+  Widget _buildBecomeCreatorBanner(
+      BuildContext context, String userId, int points) {
+    return GestureDetector(
+      onTap: () {
+        if (points < 500) {
+          _showCreatorGateSheet(context, points);
+          return;
+        }
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => const CreateCreatorProfileScreen()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A0A30), Color(0xFF0A1630)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border:
+              Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.star_rounded,
+                  color: Color(0xFFD4A8FF), size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Become a Creator',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'ClashDisplay',
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    points >= 500
+                        ? 'You qualify! Launch challenges & grow your brand'
+                        : '${500 - points} Aura to unlock — keep playing!',
+                    style: TextStyle(
+                      color: points >= 500
+                          ? const Color(0xFFD4A8FF)
+                          : Colors.white38,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              points >= 500
+                  ? Icons.arrow_forward_ios_rounded
+                  : Icons.lock_outline_rounded,
+              color: points >= 500 ? Colors.white54 : Colors.white24,
+              size: 15,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Creator Tools (content creators only) ─────────────────────────────────
   Widget _buildCreatorTools(BuildContext context, String userId) {
     return Padding(
@@ -1409,9 +1630,117 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  // ── Creator gate modal ─────────────────────────────────────────────────────
+  void _showCreatorGateSheet(BuildContext context, int currentPoints) {
+    const required = 500;
+    final progress = (currentPoints / required).clamp(0.0, 1.0);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF100A20),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 5,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(3)),
+            ),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+                border:
+                    Border.all(color: _accent.withValues(alpha: 0.40), width: 1.5),
+              ),
+              child:
+                  const Icon(Icons.lock_outline_rounded, color: _accent, size: 30),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              '500 Aura Required',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'ClashDisplay'),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
+              textAlign: TextAlign.center,
+              style:
+                  TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            // Progress bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '$currentPoints Aura',
+                  style: const TextStyle(
+                      color: Color(0xFFD4A8FF),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  '${required - currentPoints.clamp(0, required)} to go',
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: progress),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOutCubic,
+              builder: (_, v, __) => ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: v,
+                  minHeight: 10,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  valueColor:
+                      const AlwaysStoppedAnimation<Color>(Color(0xFF7B2CBF)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  textStyle: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+                child: const Text('Keep Playing'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Brand Tools (brands/admin only) ────────────────────────────────────────
   Widget _buildBrandTools(
-      BuildContext context, String userId, bool isBrand) {
+      BuildContext context, String userId, bool isBrand, int points) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
       child: Column(
@@ -1435,9 +1764,15 @@ class _DashboardState extends State<Dashboard> {
                         .collection('users')
                         .doc(userId)
                         .get();
-                    final alreadyBrand =
-                        (doc.data() ?? {})['isBrand'] ?? false;
+                    final data = doc.data() ?? {};
+                    final alreadyBrand = data['isBrand'] as bool? ?? false;
+                    final currentPoints =
+                        (data['totalRewards'] as num?)?.toInt() ?? 0;
                     if (!context.mounted) return;
+                    if (!alreadyBrand && currentPoints < 500) {
+                      _showCreatorGateSheet(context, currentPoints);
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -1572,13 +1907,15 @@ class _DashboardState extends State<Dashboard> {
                         onTap: () {},
                       ),
                       _navItem(
-                        icon: Icons.flag_rounded,
-                        label: 'Challenges',
+                        icon: Icons.sports_esports_rounded,
+                        label: 'Arcade',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const AllGeneralChallengesScreen()),
-                        ),
+                              builder: (_) => const ArcadeScreen()),
+                        ).then((_) {
+                          if (mounted) setState(() => _arcadeKey++);
+                        }),
                       ),
                       const SizedBox(width: 58),
                       _navItem(
@@ -1683,6 +2020,118 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
+// ── Arcade Teaser Banner ──────────────────────────────────────────────────────
+
+class _ArcadeTeaserBanner extends StatefulWidget {
+  final VoidCallback onTap;
+  const _ArcadeTeaserBanner({super.key, required this.onTap});
+
+  @override
+  State<_ArcadeTeaserBanner> createState() => _ArcadeTeaserBannerState();
+}
+
+class _ArcadeTeaserBannerState extends State<_ArcadeTeaserBanner> {
+  ArcadeProgress? _progress;
+
+  @override
+  void initState() {
+    super.initState();
+    ArcadeProgressService.load().then((p) {
+      if (mounted) setState(() => _progress = p);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const violet = Color(0xFF7B2CBF);
+    const cyan = Color(0xFF48D7FF);
+    const textMuted = Color(0xFF9CA8C7);
+
+    final completed = _progress?.completedToday.length ?? 0;
+    final streak = _progress?.streak ?? 0;
+    final allDone = completed == 3;
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF120828), Color(0xFF0A1020)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: violet.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: violet.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Icon(Icons.sports_esports_rounded,
+                    color: Color(0xFFD4A8FF), size: 22),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Aura Arcade',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'ClashDisplay',
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _progress == null
+                        ? 'Daily Arcade · 3 games'
+                        : '$completed/3 complete today'
+                            '${streak > 0 ? ' · $streak day streak' : ''}',
+                    style: TextStyle(
+                      color: allDone ? cyan : textMuted,
+                      fontSize: 12,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: violet,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Play',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'SpaceGrotesk',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Video Thumbnail Widget ─────────────────────────────────────────────────
 class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
@@ -1752,4 +2201,111 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
     );
   }
 
+}
+
+// ── Pending upload recovery banner ────────────────────────────────────────────
+
+class _PendingUploadBanner extends StatefulWidget {
+  const _PendingUploadBanner();
+
+  @override
+  State<_PendingUploadBanner> createState() => _PendingUploadBannerState();
+}
+
+class _PendingUploadBannerState extends State<_PendingUploadBanner> {
+  PendingUpload? _pending;
+  bool _dismissed = false;
+  bool _checked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final p = await UploadQueueService.getPending();
+    if (mounted) setState(() { _pending = p; _checked = true; });
+  }
+
+  Future<void> _retry() async {
+    final p = _pending;
+    if (p == null) return;
+    setState(() => _dismissed = true);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PreviewScreen(
+          videoPath:      p.videoPath,
+          challengeId:    p.challengeId,
+          challengeTitle: p.challengeTitle,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_checked || _pending == null || _dismissed) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.40)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 14),
+          const Icon(Icons.upload_outlined, color: Colors.amber, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Upload pending',
+                    style: TextStyle(
+                      color: Colors.amber,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    _pending!.challengeTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _retry,
+            child: const Text(
+              'Retry',
+              style: TextStyle(
+                color: Colors.amber,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white38, size: 18),
+            onPressed: () async {
+              await UploadQueueService.clear();
+              setState(() => _dismissed = true);
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }

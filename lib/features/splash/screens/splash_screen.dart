@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../auth/screens/auth_choice_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -14,6 +17,10 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   int _slide = 0; // 0=logo  1=see-it  2=your-moves  3=climb-board
+
+  // Version check (runs in parallel with splash animation)
+  _VersionStatus _versionStatus = _VersionStatus.ok;
+  String _storeUrl = '';
 
   late final List<AnimationController> _ctrl;
   late final AnimationController _orbPulse;
@@ -48,6 +55,7 @@ class _SplashScreenState extends State<SplashScreen>
         vsync: this, duration: const Duration(seconds: 8))
       ..repeat();
     _startSequence();
+    _checkVersion();
   }
 
   void _startSequence() {
@@ -69,9 +77,19 @@ class _SplashScreenState extends State<SplashScreen>
     }
   }
 
-  void _goToApp() {
+  Future<void> _goToApp() async {
     for (final t in _timers) { t.cancel(); }
     if (!mounted) return;
+
+    if (_versionStatus == _VersionStatus.forceUpdate) {
+      _showForceUpdateDialog();
+      return; // Stay on splash — user must update
+    }
+    if (_versionStatus == _VersionStatus.softUpdate && mounted) {
+      await _showSoftUpdateDialog();
+    }
+    if (!mounted) return;
+
     final user = FirebaseAuth.instance.currentUser;
     Navigator.of(context).pushReplacement(PageRouteBuilder<void>(
       transitionDuration: const Duration(milliseconds: 600),
@@ -80,6 +98,120 @@ class _SplashScreenState extends State<SplashScreen>
       transitionsBuilder: (_, anim, __, child) =>
           FadeTransition(opacity: anim, child: child),
     ));
+  }
+
+  // ── Version check ───────────────────────────────────────────────────────────
+
+  static const _currentBuild = 12;
+
+  Future<void> _checkVersion() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('appConfig')
+          .doc('version')
+          .get();
+      if (!mounted || !doc.exists) return;
+      final data = doc.data()!;
+      final minBuild = (data['minBuildNumber'] as num?)?.toInt() ?? 0;
+      final recBuild = (data['recommendedBuildNumber'] as num?)?.toInt() ?? 0;
+      _storeUrl = Platform.isIOS
+          ? (data['iosStoreUrl'] as String? ?? 'https://apps.apple.com/')
+          : (data['androidStoreUrl'] as String? ?? 'https://play.google.com/');
+      if (_currentBuild < minBuild) {
+        setState(() => _versionStatus = _VersionStatus.forceUpdate);
+      } else if (_currentBuild < recBuild) {
+        setState(() => _versionStatus = _VersionStatus.softUpdate);
+      }
+    } catch (_) {
+      // Non-fatal: version check failure must never block app launch
+    }
+  }
+
+  void _showForceUpdateDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF100A20),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Update Required',
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w800),
+          ),
+          content: const Text(
+            'A critical update is required to continue using Aura Arena. Please update to the latest version.',
+            style: TextStyle(color: Colors.white70, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => _launchStoreUrl(),
+              child: const Text(
+                'Update Now',
+                style: TextStyle(
+                    color: Color(0xFF7B2CBF),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSoftUpdateDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF100A20),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Update Available',
+          style:
+              TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+        content: const Text(
+          'A new version of Aura Arena is available with improvements and new features.',
+          style: TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Later',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 14),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _launchStoreUrl();
+            },
+            child: const Text(
+              'Update',
+              style: TextStyle(
+                  color: Color(0xFF7B2CBF),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchStoreUrl() async {
+    final uri = Uri.tryParse(_storeUrl);
+    if (uri != null) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   @override
@@ -724,3 +856,5 @@ class _SplashScreenState extends State<SplashScreen>
       Tween<double>(begin: 0.0, end: 1.0).animate(
           CurvedAnimation(parent: c, curve: const Interval(0.60, 1.0, curve: Curves.easeOut)));
 }
+
+enum _VersionStatus { ok, softUpdate, forceUpdate }

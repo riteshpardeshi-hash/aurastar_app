@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path/path.dart' as path;
+import '../../../core/services/upload_queue_service.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
 
@@ -34,6 +36,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
   // Upload state
   _UploadState _uploadState = _UploadState.idle;
   double _progress = 0; // 0.0 – 1.0
+  Timer? _retryTimer;
+  int _retryIntervalSeconds = 5;
 
   @override
   void initState() {
@@ -53,13 +57,62 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _player.dispose();
     super.dispose();
   }
 
   // ── Upload ──────────────────────────────────────────────────────────────────
 
-  Future<void> _upload() async {
+  void _startAutoRetry() {
+    _retryTimer?.cancel();
+    _retryIntervalSeconds = 5;
+    _retryTimer = Timer.periodic(
+      Duration(seconds: _retryIntervalSeconds),
+      (_) async {
+        if (_uploadState != _UploadState.failed) {
+          _retryTimer?.cancel();
+          return;
+        }
+        final online = await UploadQueueService.hasInternet();
+        if (online && mounted && _uploadState == _UploadState.failed) {
+          _retryTimer?.cancel();
+          _upload(isAutoRetry: true);
+        } else {
+          // Exponential backoff: 5 → 10 → 20 → 30s cap
+          _retryIntervalSeconds = (_retryIntervalSeconds * 2).clamp(5, 30);
+          _retryTimer?.cancel();
+          _startAutoRetry();
+        }
+      },
+    );
+  }
+
+  Future<void> _upload({bool isAutoRetry = false}) async {
+    // Connectivity pre-check
+    final online = await UploadQueueService.hasInternet();
+    if (!online) {
+      if (!mounted) return;
+      setState(() => _uploadState = _UploadState.failed);
+      // Persist so dashboard can offer recovery after app restart
+      await UploadQueueService.save(
+        videoPath:      widget.videoPath,
+        challengeId:    widget.challengeId,
+        challengeTitle: widget.challengeTitle,
+      );
+      _startAutoRetry();
+      if (!isAutoRetry && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No internet. We\'ll retry automatically when you\'re back online.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    _retryTimer?.cancel();
     setState(() {
       _uploadState = _UploadState.uploading;
       _progress = 0;
@@ -133,6 +186,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
         'createdAt': Timestamp.now(),
       });
 
+      // Upload succeeded — clear any persisted queue entry
+      await UploadQueueService.clear();
+
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.done);
       _player.pause();
@@ -162,6 +218,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.failed);
+      // Persist and begin auto-retry
+      await UploadQueueService.save(
+        videoPath:      widget.videoPath,
+        challengeId:    widget.challengeId,
+        challengeTitle: widget.challengeTitle,
+      );
+      _startAutoRetry();
     }
   }
 
@@ -382,7 +445,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         ),
       );
 
-  // Failed — retry button, local file preserved
+  // Failed — retry button, local file preserved, auto-retry running
   Widget _failedView() => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
         child: Column(
@@ -399,11 +462,27 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         color: Colors.redAccent,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.35)),
+                  ),
+                  child: const Text('Auto-retry on',
+                      style: TextStyle(
+                          color: Colors.amber,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600)),
+                ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              'Your attempt was not consumed. Tap retry when you\'re back online.',
+              'Your video is saved. We\'ll retry automatically when you\'re back online.',
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
             ),

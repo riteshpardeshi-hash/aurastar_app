@@ -38,6 +38,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   bool _starLoading = false;
   String _ownerId = '';
 
+  int _netAurasAwarded = 0;
+  bool _isCountedForDailyAuras = false;
+  String _challengeId = '';
+  bool _deleting = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,10 +58,15 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     if (!doc.exists || !mounted) return;
     final data = doc.data()!;
     final starredBy = List<String>.from(data['starredBy'] ?? []);
+    final aura = (data['auraPoints'] as num?)?.toInt() ?? 0;
+    final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? aura;
     setState(() {
       _starred = starredBy.contains(_uid);
       _starsCount = (data['starsCount'] as num?)?.toInt() ?? starredBy.length;
       _ownerId = data['userId'] as String? ?? '';
+      _netAurasAwarded = netAwarded;
+      _isCountedForDailyAuras = data['isCountedForDailyAuras'] as bool? ?? false;
+      _challengeId = data['challengeId'] as String? ?? '';
     });
   }
 
@@ -101,13 +111,97 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     Share.share('Check out my video submission on Aura! 🌟\n${widget.videoUrl}');
   }
 
+  Future<void> _delete() async {
+    final deduct = _isCountedForDailyAuras && _netAurasAwarded > 0 ? _netAurasAwarded : 0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Video'),
+        content: Text(
+          deduct > 0
+              ? 'This will permanently remove your video and deduct $deduct Aura Points from your balance.'
+              : 'This will permanently remove your video. Your Aura Points are kept.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    final db = FirebaseFirestore.instance;
+    try {
+      await db.runTransaction((txn) async {
+        final subRef = db.collection('submissions').doc(widget.submissionId);
+        txn.update(subRef, {
+          'isDeleted': true,
+          'isPublic': false,
+          'isArchived': false,
+          'isCountedForDailyAuras': false,
+          'deletedAt': Timestamp.now(),
+        });
+        if (deduct > 0 && _uid.isNotEmpty) {
+          txn.update(db.collection('users').doc(_uid), {
+            'totalRewards': FieldValue.increment(-deduct),
+          });
+          txn.set(db.collection('auraTransactions').doc(), {
+            'userId': _uid,
+            'amount': -deduct,
+            'type': 'video_deleted',
+            'sourceId': widget.submissionId,
+            'description': 'Video deleted — $deduct Auras reversed',
+            'createdAt': Timestamp.now(),
+          });
+          if (_challengeId.isNotEmpty) {
+            final progressRef = db
+                .collection('userChallengeProgress')
+                .doc('${_uid}_$_challengeId');
+            txn.delete(progressRef);
+          }
+        }
+      });
+      if (mounted) Navigator.pop(context, 'deleted');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete failed. Please try again.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isApproved = widget.status == 'approved';
     final isPending = widget.status == 'pending';
 
     return Scaffold(
-      appBar: AppBar(title: Text("Video ${widget.videoNumber}")),
+      appBar: AppBar(
+        title: Text("Video ${widget.videoNumber}"),
+        actions: [
+          if (_deleting)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              tooltip: 'Delete video',
+              onPressed: _delete,
+            ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

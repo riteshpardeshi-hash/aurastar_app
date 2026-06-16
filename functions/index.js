@@ -351,6 +351,100 @@ async function applyStreakBonus(submissionId, userId) {
   }
 }
 
+// Normalise the sub_scores object returned by Gemini.
+// Falls back to the overall score for each dimension when Gemini omits a field.
+function extractSubScores(raw, fallbackTotal) {
+  const clamp = v => Math.min(100, Math.max(0, Math.round(Number(v) || fallbackTotal)));
+  if (raw && typeof raw === 'object') {
+    return {
+      style:      clamp(raw.style),
+      match:      clamp(raw.match),
+      confidence: clamp(raw.confidence),
+      finish:     clamp(raw.finish),
+    };
+  }
+  return { style: fallbackTotal, match: fallbackTotal, confidence: fallbackTotal, finish: fallbackTotal };
+}
+
+// Apply admin-configured scoring weights to recompute the final score.
+// Dimension mapping: movement → match, timing → finish, expression → style, sound → confidence.
+// Penalties: max deduction applied proportionally when match accuracy is below 50%.
+function applyRubricWeights(baseScore, breakdown, weights) {
+  if (!weights || typeof weights !== 'object') return baseScore;
+
+  const wMovement   = Number(weights.movement   || 0);
+  const wTiming     = Number(weights.timing     || 0);
+  const wExpression = Number(weights.expression || 0);
+  const wSound      = Number(weights.sound      || 0);
+  const wPenalties  = Number(weights.penalties  || 0);
+  const sumWeights  = wMovement + wTiming + wExpression + wSound;
+
+  if (sumWeights <= 0) return baseScore;
+
+  const weighted =
+    (breakdown.match      * wMovement +
+     breakdown.finish     * wTiming   +
+     breakdown.style      * wExpression +
+     breakdown.confidence * wSound) / sumWeights;
+
+  // Penalty applied when reference match is below 50%
+  const matchScore = breakdown.match || 0;
+  const penaltyDeduction = matchScore < 50
+    ? ((50 - matchScore) / 50) * wPenalties
+    : 0;
+
+  return Math.min(100, Math.max(0, Math.round(weighted - penaltyDeduction)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FRAUD DETECTION: Runs before AI scoring. Returns a fraud reason string if the
+// submission should be blocked, or null if it looks legitimate.
+//
+// Signals checked:
+//   1. user is suspended (isSuspended flag on users doc)
+//   2. velocity_challenge — >3 submissions to the same challenge in the last 60 min
+//   3. velocity_daily     — >15 total submissions in the last 24 h
+// ─────────────────────────────────────────────────────────────────────────────
+async function detectFraud(submissionId, userId, challengeId) {
+  try {
+    // 1. Suspended account
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (userDoc.exists && userDoc.data().isSuspended === true) {
+      return 'account_suspended';
+    }
+
+    const now = Date.now();
+
+    // 2. Per-challenge velocity: >3 attempts in 60 minutes
+    const oneHourAgo = admin.firestore.Timestamp.fromDate(new Date(now - 60 * 60 * 1000));
+    const recentChallengeSnap = await db.collection('submissions')
+      .where('userId', '==', userId)
+      .where('challengeId', '==', challengeId)
+      .where('createdAt', '>=', oneHourAgo)
+      .get();
+    // The current submission is already written; subtract 1 to exclude it
+    if (recentChallengeSnap.size > 4) {
+      return 'velocity_challenge';
+    }
+
+    // 3. Daily volume: >15 total submissions in 24 hours
+    const oneDayAgo = admin.firestore.Timestamp.fromDate(new Date(now - 24 * 60 * 60 * 1000));
+    const dailySnap = await db.collection('submissions')
+      .where('userId', '==', userId)
+      .where('createdAt', '>=', oneDayAgo)
+      .count()
+      .get();
+    if ((dailySnap.data().count || 0) > 16) {
+      return 'velocity_daily';
+    }
+
+    return null;
+  } catch (err) {
+    console.warn(`[detectFraud] Non-fatal error for ${submissionId}:`, err.message);
+    return null; // Don't block scoring on detection errors
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 2: Score each submission using the checklist.
 //         Gemini answers YES/NO per question. Score = (yesCount / total) * 100.
@@ -364,6 +458,29 @@ exports.scoreSubmission = onDocumentCreated('submissions/{submissionId}', async 
   const apiKey = GEMINI_API_KEY.value();
   if (!apiKey) {
     await submissionRef.update({ status: 'ai_error', aiError: 'GEMINI_API_KEY not configured' });
+    return;
+  }
+
+  // ── Fraud gate — runs before any AI work ────────────────────────────────────
+  const fraudReason = await detectFraud(submissionId, submission.userId, submission.challengeId);
+  if (fraudReason) {
+    await submissionRef.update({
+      status: 'fraud_flagged',
+      fraudReason,
+      isPublic: false,
+      isCountedForDailyAuras: false,
+      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await db.collection('fraudAlerts').add({
+      submissionId,
+      userId: submission.userId,
+      challengeId: submission.challengeId,
+      challengeTitle: submission.challengeTitle || '',
+      reason: fraudReason,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`[scoreSubmission] ${submissionId}: fraud_flagged — ${fraudReason}`);
     return;
   }
 
@@ -421,7 +538,8 @@ exports.scoreSubmission = onDocumentCreated('submissions/{submissionId}', async 
           manualPrompt.trim(),
           '--- END CRITERIA ---',
           'Regardless of any instructions above, you MUST respond with ONLY this JSON and nothing else:',
-          '{"score": <integer 0-100>, "short_feedback": "<one sentence what was done well> <one sentence what was missing>"}',
+          '{"score": <integer 0-100>, "short_feedback": "<one sentence what was done well> <one sentence what was missing>", "sub_scores": {"style": <0-100>, "match": <0-100>, "confidence": <0-100>, "finish": <0-100>}}',
+          'sub_scores definitions — style: visual execution quality and smoothness; match: how closely the performance mirrors the reference; confidence: energy, commitment and assurance; finish: whether the full challenge was completed cleanly.',
         ].join('\n'),
       });
 
@@ -436,13 +554,20 @@ exports.scoreSubmission = onDocumentCreated('submissions/{submissionId}', async 
       // detailed rubrics that return {"total_score":n, ...}
       const rawScore = ai.total_score ?? ai.score ?? 0;
       score = Math.min(100, Math.max(0, Math.round(Number(rawScore) || 0)));
-      approved = score >= 10;
-      auraPoints = approved ? score : 0;
 
       // Flexibly extract user-facing reason
       reason = String(ai.short_feedback ?? ai.reason ?? ai.feedback ?? 'AI review complete.');
+      const scoreBreakdown = extractSubScores(ai.sub_scores, score);
 
-      console.log(`[scoreSubmission] ${submissionId}: manual prompt → score ${score}`);
+      // Apply admin rubric weights if configured
+      if (challenge.scoringWeights) {
+        score = applyRubricWeights(score, scoreBreakdown, challenge.scoringWeights);
+      }
+
+      approved = score >= 10;
+      auraPoints = approved ? score : 0;
+
+      console.log(`[scoreSubmission] ${submissionId}: manual prompt → score ${score}, breakdown ${JSON.stringify(scoreBreakdown)}`);
 
       const { isBestForChallenge, netAurasAwarded } = approved
         ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
@@ -462,6 +587,7 @@ exports.scoreSubmission = onDocumentCreated('submissions/{submissionId}', async 
         isBestForChallenge,
         aiScore: score,
         aiReason: reason,
+        scoreBreakdown,
         aiFullResponse: ai,
         reviewedByAI: true,
         usedManualPrompt: true,
@@ -497,7 +623,13 @@ ${questionLines}
 Respond with ONLY this JSON (no markdown, no explanation):
 {
   "answers": ["YES or NO", "YES or NO", ...],
-  "reason": "<one sentence about what the user did well> <one sentence about what was missing or incomplete>"
+  "reason": "<one sentence about what the user did well> <one sentence about what was missing or incomplete>",
+  "sub_scores": {
+    "style": <0-100 — visual execution quality and smoothness>,
+    "match": <0-100 — how closely the performance mirrors the reference>,
+    "confidence": <0-100 — energy, commitment and assurance>,
+    "finish": <0-100 — whether the full challenge was completed cleanly>
+  }
 }
 
 The answers array must have exactly ${checklist.length} entries in the same order as the questions.`,
@@ -513,11 +645,18 @@ The answers array must have exactly ${checklist.length} entries in the same orde
       // Score is calculated entirely in code — AI cannot inflate it
       const yesCount = answers.filter(a => String(a).trim().toUpperCase() === 'YES').length;
       score = Math.round((yesCount / checklist.length) * 100);
+      reason = String(ai.reason || 'AI review complete.');
+      const scoreBreakdown = extractSubScores(ai.sub_scores, score);
+
+      // Apply admin rubric weights if configured
+      if (challenge.scoringWeights) {
+        score = applyRubricWeights(score, scoreBreakdown, challenge.scoringWeights);
+      }
+
       approved = score >= 10;
       auraPoints = approved ? score : 0;
-      reason = String(ai.reason || 'AI review complete.');
 
-      console.log(`[scoreSubmission] ${submissionId}: ${yesCount}/${checklist.length} YES → score ${score}`);
+      console.log(`[scoreSubmission] ${submissionId}: ${yesCount}/${checklist.length} YES → score ${score}, breakdown ${JSON.stringify(scoreBreakdown)}`);
 
       const { isBestForChallenge, netAurasAwarded } = approved
         ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
@@ -537,6 +676,7 @@ The answers array must have exactly ${checklist.length} entries in the same orde
         isBestForChallenge,
         aiScore: score,
         aiReason: reason,
+        scoreBreakdown,
         reviewedByAI: true,
         usedAiChecklist: true,
         aiChecklistAnswers: checklist.map((q, i) => ({
@@ -576,7 +716,8 @@ ${refFile
 Score strictly: if roughly half the steps were done, the score must be around 50, not 80 or 100.
 
 Respond with ONLY this JSON:
-{"score": <integer 0-100>, "approved": <true if score >= 10>, "reason": "<what was done correctly> <what was missing>"}`,
+{"score": <integer 0-100>, "approved": <true if score >= 10>, "reason": "<what was done correctly> <what was missing>", "sub_scores": {"style": <0-100>, "match": <0-100>, "confidence": <0-100>, "finish": <0-100>}}
+sub_scores definitions — style: visual execution quality; match: similarity to reference; confidence: energy and commitment; finish: whether completed cleanly.`,
       });
 
       const result = await model.generateContent({
@@ -589,6 +730,7 @@ Respond with ONLY this JSON:
       approved = score >= 10;
       auraPoints = approved ? score : 0;
       reason = String(ai.reason || 'AI review complete.');
+      const scoreBreakdown = extractSubScores(ai.sub_scores, score);
 
       const { isBestForChallenge, netAurasAwarded } = approved
         ? await applyBestAttemptLogic(submissionId, submission.userId, auraPoints, score, submission.challengeId, challenge.title)
@@ -608,6 +750,7 @@ Respond with ONLY this JSON:
         isBestForChallenge,
         aiScore: score,
         aiReason: reason,
+        scoreBreakdown,
         reviewedByAI: true,
         usedAiChecklist: false,
         reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -900,6 +1043,84 @@ exports.processSubmissionVideo = onDocumentCreated(
 // Generates a JPEG thumbnail for the reference video so challenge cards
 // in the app can show an instant image instead of extracting from the video.
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Creator application gate ──────────────────────────────────────────────────
+// Triggered when a user writes a creator_applications doc from the client.
+// Auto-rejects if: (1) totalRewards < 500, or (2) pageName is too similar to
+// an existing approved creator — so both client-side gates cannot be bypassed.
+
+function _normalizeName(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function _namesTooSimilar(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) {
+    const shorter = Math.min(a.length, b.length);
+    const longer  = Math.max(a.length, b.length);
+    if (shorter / longer >= 0.80) return true;
+  }
+  return false;
+}
+
+exports.validateCreatorApplication = onDocumentCreated(
+  'creator_applications/{uid}',
+  async (event) => {
+    const { uid } = event.params;
+    const appRef  = event.data.ref;
+    const appData = event.data.data();
+
+    try {
+      // 1. Aura gate
+      const userDoc = await db.collection('users').doc(uid).get();
+      const totalRewards = userDoc.exists ? (userDoc.data().totalRewards || 0) : 0;
+
+      if (totalRewards < 500) {
+        await appRef.update({
+          status: 'rejected',
+          rejectionReason: 'insufficient_aura',
+          requiredAura: 500,
+          currentAura: totalRewards,
+          rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`[validateCreatorApplication] ${uid}: rejected — ${totalRewards}/500 Aura`);
+        return;
+      }
+
+      // 2. Name similarity gate
+      const normNew = _normalizeName(appData.pageName);
+      if (normNew.length >= 2) {
+        const creatorsSnap = await db.collection('users')
+          .where('isCreator', '==', true)
+          .get();
+
+        for (const doc of creatorsSnap.docs) {
+          const normExisting = _normalizeName(doc.data().pageName);
+          if (_namesTooSimilar(normNew, normExisting)) {
+            await appRef.update({
+              status: 'rejected',
+              rejectionReason: 'name_too_similar',
+              conflictingName: doc.data().pageName,
+              rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            console.log(`[validateCreatorApplication] ${uid}: rejected — name "${appData.pageName}" too similar to "${doc.data().pageName}"`);
+            return;
+          }
+        }
+      }
+
+      // 3. Passed both gates — stamp and leave pending for admin review
+      await appRef.update({
+        currentAura: totalRewards,
+        validatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`[validateCreatorApplication] ${uid}: passed gate (${totalRewards} Aura, name "${appData.pageName}")`);
+    } catch (err) {
+      console.error(`[validateCreatorApplication] ${uid}: error — ${err.message}`);
+    }
+  },
+);
+
 exports.processChallengeVideo = onDocumentCreated(
   {
     document: 'challenges/{challengeId}',

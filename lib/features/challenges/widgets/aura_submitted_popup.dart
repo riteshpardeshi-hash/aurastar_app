@@ -37,7 +37,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   StreamSubscription<DocumentSnapshot>? _sub;
 
   String _username = '';
+  String _city = '';
+  int? _cityRank;
   bool _isSharingCard = false;
+  bool _isInstagramSharing = false;
   bool _cardSaved = false;
   final _cardKey = GlobalKey();
 
@@ -123,7 +126,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           _countCtrl.forward();
           _particleCtrl.forward();
           if (reason.isNotEmpty) _explanationCtrl.forward();
-          _saveCardToProfile();
+          _fetchCityRankAndSaveCard();
           _triggerReferralBonusIfEligible();
         } else {
           // auto-close rejected/error after 8 seconds
@@ -178,6 +181,42 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     }
   }
 
+  Future<void> _fetchCityRankAndSaveCard() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      await _saveCardToProfile();
+      return;
+    }
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final city = userDoc.data()?['city'] as String? ?? '';
+      final totalRewards =
+          (userDoc.data()?['totalRewards'] as num?)?.toInt() ?? 0;
+
+      if (city.isNotEmpty) {
+        final countSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('city', isEqualTo: city)
+            .where('totalRewards', isGreaterThan: totalRewards)
+            .count()
+            .get();
+        final rank = (countSnap.count ?? 0) + 1;
+        if (mounted) {
+          setState(() {
+            _city = city;
+            _cityRank = rank;
+          });
+        }
+      }
+    } catch (_) {
+      // city rank is best-effort — proceed without it
+    }
+    await _saveCardToProfile();
+  }
+
   Future<void> _saveCardToProfile() async {
     if (_cardSaved) return;
     _cardSaved = true;
@@ -194,6 +233,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       'challengeTitle': widget.challengeTitle,
       'auraPoints': _netAurasAwarded,
       'username': _username,
+      if (_city.isNotEmpty) 'city': _city,
+      if (_cityRank != null) 'cityRank': _cityRank,
       'createdAt': Timestamp.now(),
     });
   }
@@ -229,6 +270,31 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       // share cancelled or failed — ignore
     } finally {
       if (mounted) setState(() => _isSharingCard = false);
+    }
+  }
+
+  Future<void> _shareToInstagramStory() async {
+    if (_isInstagramSharing) return;
+    setState(() => _isInstagramSharing = true);
+    try {
+      Uint8List? bytes;
+      final boundary =
+          _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData =
+            await image.toByteData(format: ui.ImageByteFormat.png);
+        bytes = byteData?.buffer.asUint8List();
+      }
+      if (bytes != null) {
+        await Share.shareXFiles(
+          [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
+        );
+      }
+    } catch (_) {
+      // share cancelled or failed — ignore
+    } finally {
+      if (mounted) setState(() => _isInstagramSharing = false);
     }
   }
 
@@ -573,6 +639,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               challengeId: widget.challengeId,
               auraPoints: _netAurasAwarded,
               username: _username,
+              city: _city.isNotEmpty ? _city : null,
+              cityRank: _cityRank,
             ),
           ),
           const SizedBox(height: 8),
@@ -609,6 +677,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               _buildContinueButton(),
             ],
           ),
+          const SizedBox(height: 10),
+          _buildInstagramStoryButton(),
         ],
       ),
     );
@@ -668,6 +738,53 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           'Continue',
           style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInstagramStoryButton() {
+    return GestureDetector(
+      onTap: _isInstagramSharing ? null : _shareToInstagramStory,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          gradient: _isInstagramSharing
+              ? const LinearGradient(
+                  colors: [Color(0xFF4A1070), Color(0xFF1E2050)],
+                )
+              : const LinearGradient(
+                  colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFFCAF45)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: _isInstagramSharing
+            ? const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2),
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.camera_alt_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Share to Instagram Story',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

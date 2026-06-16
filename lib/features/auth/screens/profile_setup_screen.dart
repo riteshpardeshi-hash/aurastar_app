@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'rules_screen.dart';
+import 'city_interests_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -182,11 +182,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         'referralBonusApplied': false,
         'referralCount': 0,
         'referralCompletedCount': 0,
+        'city': '',
+        'interests': <String>[],
         'createdAt': Timestamp.now(),
       });
       if (!mounted) return;
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const RulesScreen()));
+          context, MaterialPageRoute(builder: (_) => const CityInterestsScreen()));
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

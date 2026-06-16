@@ -31,7 +31,6 @@ class BrandDashboardScreen extends StatelessWidget {
               stream: FirebaseFirestore.instance
                   .collection('challenges')
                   .where('creatorId', isEqualTo: uid)
-                  .where('status', isEqualTo: 'approved')
                   .snapshots(),
               builder: (context, challengeSnap) {
                 final challenges = challengeSnap.data?.docs ?? [];
@@ -70,7 +69,41 @@ class BrandDashboardScreen extends StatelessWidget {
     final username = userData['username'] as String? ?? '';
     final bio = userData['bio'] as String? ?? '';
 
-    final totalChallenges = challenges.length;
+    // Only count live/paused challenges (not pending/rejected requests)
+    final activeChallenges = challenges.where((d) {
+      final s = (d.data() as Map<String, dynamic>)['status'] as String? ?? '';
+      return s == 'approved' || s == 'paused';
+    }).toList();
+
+    // Sort active challenges by approvedAt (oldest first) to assign slot numbers
+    final sortedChallenges = [...activeChallenges]..sort((a, b) {
+        final aTs = (a.data() as Map<String, dynamic>)['approvedAt'] as Timestamp?;
+        final bTs = (b.data() as Map<String, dynamic>)['approvedAt'] as Timestamp?;
+        if (aTs == null) return 1;
+        if (bTs == null) return -1;
+        return aTs.compareTo(bTs);
+      });
+
+    // Gate: challenge N+1 requires N*100 unique approved participants on challenge N
+    final int gateTarget = sortedChallenges.length * 100;
+    int gateProgress = 0;
+    bool gateCleared = sortedChallenges.isEmpty; // first challenge is always allowed
+    if (!gateCleared) {
+      final latestId = sortedChallenges.last.id;
+      gateProgress = submissions
+          .where((s) {
+            final d = s.data() as Map<String, dynamic>;
+            return d['challengeId'] == latestId && d['status'] == 'approved';
+          })
+          .map((s) => (s.data() as Map<String, dynamic>)['userId']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .length;
+      gateCleared = gateProgress >= gateTarget;
+    }
+    final nextChallengeNumber = sortedChallenges.length + 1;
+
+    final totalChallenges = activeChallenges.length;
     final totalSubmissions = submissions.length;
     final uniqueUserIds = submissions
         .map((d) => (d.data() as Map<String, dynamic>)['userId']?.toString() ?? '')
@@ -150,7 +183,9 @@ class BrandDashboardScreen extends StatelessWidget {
           ),
         ),
         SliverToBoxAdapter(child: _buildHeader(context, uid, pageName, username, bio)),
-        SliverToBoxAdapter(child: _buildQuickActions(context, uid)),
+        SliverToBoxAdapter(
+            child: _buildQuickActions(context, uid, gateCleared, gateProgress,
+                gateTarget, nextChallengeNumber)),
         SliverToBoxAdapter(
           child: _buildMetrics(
             context,
@@ -169,8 +204,13 @@ class BrandDashboardScreen extends StatelessWidget {
         if (pendingCount > 0)
           SliverToBoxAdapter(
               child: _buildPendingSubmissionsBanner(context, pendingCount, uniqueUserIds)),
+        if (!gateCleared)
+          SliverToBoxAdapter(
+              child: _buildGateSection(context, gateProgress, gateTarget,
+                  nextChallengeNumber, sortedChallenges.last.id)),
         SliverToBoxAdapter(child: _buildPendingRequestsSection(uid)),
-        SliverToBoxAdapter(child: _buildActiveChallenges(context, challenges, submissions)),
+        SliverToBoxAdapter(
+            child: _buildActiveChallenges(context, sortedChallenges, submissions)),
         SliverToBoxAdapter(child: _buildRecentActivity(context, recentSubs, challengeMap)),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
@@ -251,19 +291,56 @@ class BrandDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickActions(BuildContext context, String uid) {
+  Widget _buildQuickActions(
+    BuildContext context,
+    String uid,
+    bool gateCleared,
+    int gateProgress,
+    int gateTarget,
+    int nextChallengeNumber,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Row(
         children: [
           Expanded(
-            child: _actionBtn(
-              label: 'Create Challenge',
-              icon: Icons.add_circle_outline,
-              gradient: const [Color(0xFF7B2CBF), Color(0xFF9B4DFF)],
-              onTap: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const CreateChallenge())),
-            ),
+            child: gateCleared
+                ? _actionBtn(
+                    label: 'Create Challenge',
+                    icon: Icons.add_circle_outline,
+                    gradient: const [Color(0xFF7B2CBF), Color(0xFF9B4DFF)],
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CreateChallenge())),
+                  )
+                : GestureDetector(
+                    onTap: () => _showGateLockedSheet(
+                        context, gateProgress, gateTarget, nextChallengeNumber),
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.12)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.lock_outline_rounded,
+                              color: Colors.white38, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Challenge $nextChallengeNumber Locked',
+                            style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -276,6 +353,80 @@ class BrandDashboardScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showGateLockedSheet(
+      BuildContext context, int progress, int target, int nextNumber) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF100A20),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 24),
+            const Icon(Icons.lock_outline_rounded,
+                color: Color(0xFF9B4DFF), size: 40),
+            const SizedBox(height: 14),
+            Text('Challenge $nextNumber is Locked',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'ClashDisplay')),
+            const SizedBox(height: 8),
+            Text(
+              'Get $target unique participants on Challenge ${nextNumber - 1} to unlock your next slot.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+            const SizedBox(height: 24),
+            // Progress bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$progress / $target participants',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text(
+                    '${((progress / target).clamp(0.0, 1.0) * 100).toInt()}%',
+                    style: const TextStyle(
+                        color: Color(0xFF9B4DFF), fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: (progress / target).clamp(0.0, 1.0)),
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeOut,
+              builder: (_, v, __) => ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: v,
+                  minHeight: 10,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF7B2CBF)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Share Challenge 1 to grow your audience and clear the gate faster.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -598,6 +749,86 @@ class BrandDashboardScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildGateSection(
+    BuildContext context,
+    int progress,
+    int target,
+    int nextNumber,
+    String latestChallengeId,
+  ) {
+    final ratio = (progress / target).clamp(0.0, 1.0);
+    final remaining = target - progress;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0820),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF7B2CBF).withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lock_outline_rounded,
+                    color: Color(0xFF9B4DFF), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Challenge $nextNumber — Locked',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'ClashDisplay',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Get $remaining more approved participant${remaining == 1 ? '' : 's'} '
+              'on Challenge ${nextNumber - 1} to unlock your next challenge slot.',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$progress / $target',
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+                Text('${(ratio * 100).toInt()}%',
+                    style: const TextStyle(
+                        color: Color(0xFF9B4DFF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: ratio),
+              duration: const Duration(milliseconds: 900),
+              curve: Curves.easeOut,
+              builder: (_, v, __) => ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: v,
+                  minHeight: 8,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF7B2CBF)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPendingRequestsSection(String uid) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -693,8 +924,9 @@ class BrandDashboardScreen extends StatelessWidget {
             itemCount: challenges.length,
             itemBuilder: (context, i) {
               final data = challenges[i].data() as Map<String, dynamic>;
-              final title = data['title'] as String? ?? 'Challenge';
+              final title       = data['title']  as String? ?? 'Challenge';
               final challengeId = challenges[i].id;
+              final isPaused    = (data['status'] as String? ?? '') == 'paused';
 
               final subCount = submissions.where((s) =>
                   (s.data() as Map<String, dynamic>)['challengeId'] ==
@@ -706,24 +938,57 @@ class BrandDashboardScreen extends StatelessWidget {
               }).length;
 
               return Container(
-                width: 165,
+                width: 175,
                 margin: EdgeInsets.only(right: i < challenges.length - 1 ? 12 : 0),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
+                  color: isPaused
+                      ? const Color(0xFF1A1200)
+                      : const Color(0xFF1A1A1A),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                  border: Border.all(
+                    color: isPaused
+                        ? Colors.amber.withValues(alpha: 0.30)
+                        : Colors.white.withValues(alpha: 0.06),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
+                    // Title + paused badge
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13)),
+                        ),
+                        if (isPaused) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.50)),
+                            ),
+                            child: const Text('PAUSED',
+                                style: TextStyle(
+                                    color: Colors.amber,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5)),
+                          ),
+                        ],
+                      ],
+                    ),
                     const Spacer(),
                     Row(
                       children: [
@@ -734,21 +999,59 @@ class BrandDashboardScreen extends StatelessWidget {
                             style: const TextStyle(
                                 color: Colors.white70, fontSize: 12)),
                         if (pendingCount > 0) ...[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                                horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0xFF7B2CBF),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text('$pendingCount pending',
+                            child: Text('$pendingCount',
                                 style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600)),
                           ),
                         ],
+                        const Spacer(),
+                        // Pause / Resume toggle
+                        GestureDetector(
+                          onTap: () async {
+                            final newStatus =
+                                isPaused ? 'approved' : 'paused';
+                            await FirebaseFirestore.instance
+                                .collection('challenges')
+                                .doc(challengeId)
+                                .update({'status': newStatus});
+                          },
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: isPaused
+                                  ? const Color(0xFF22C55E)
+                                      .withValues(alpha: 0.15)
+                                  : Colors.amber.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isPaused
+                                    ? const Color(0xFF22C55E)
+                                        .withValues(alpha: 0.50)
+                                    : Colors.amber.withValues(alpha: 0.40),
+                              ),
+                            ),
+                            child: Icon(
+                              isPaused
+                                  ? Icons.play_arrow_rounded
+                                  : Icons.pause_rounded,
+                              color: isPaused
+                                  ? const Color(0xFF22C55E)
+                                  : Colors.amber,
+                              size: 16,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],

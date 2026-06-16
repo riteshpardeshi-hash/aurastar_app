@@ -20,7 +20,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -53,6 +53,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               fontWeight: FontWeight.w500, fontSize: 13, fontFamily: 'SpaceGrotesk'),
           tabs: const [
             Tab(text: 'Global'),
+            Tab(text: 'Country'),
             Tab(text: 'City'),
             Tab(text: 'Challenge'),
           ],
@@ -62,6 +63,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         controller: _tabs,
         children: const [
           _GlobalBoard(),
+          _CountryBoard(),
           _CityBoard(),
           _ChallengeBoard(),
         ],
@@ -228,6 +230,93 @@ class _CityBoard extends StatelessWidget {
                   if (docs.isEmpty) {
                     return _emptyState(
                         'No players in $city yet', 'Be the first to compete!');
+                  }
+                  final userInList = docs.any((d) => d.id == uid);
+                  return _BoardList(
+                    docs: docs,
+                    currentUid: uid,
+                    scoreField: 'totalRewards',
+                    scoreSuffix: 'Auras',
+                    showCurrentUserFooter: !userInList,
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Country Board ──────────────────────────────────────────────────────────────
+
+class _CountryBoard extends StatelessWidget {
+  const _CountryBoard();
+
+  static const _accent = Color(0xFF7B2CBF);
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: uid.isEmpty
+          ? null
+          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      builder: (context, userSnap) {
+        if (uid.isEmpty || !userSnap.hasData) {
+          return const Center(child: CircularProgressIndicator(color: _accent));
+        }
+        final userData = userSnap.data?.data() as Map<String, dynamic>? ?? {};
+        final country = (userData['country'] as String?)?.trim() ?? '';
+
+        if (country.isEmpty) {
+          return _emptyState(
+            'No country set',
+            'Update your profile to join the country board',
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.public_rounded, color: _accent, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    country,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .where('country', isEqualTo: country)
+                    .orderBy('totalRewards', descending: true)
+                    .limit(50)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                        child: CircularProgressIndicator(color: _accent));
+                  }
+                  final docs = snap.data?.docs ?? [];
+
+                  if (docs.isEmpty) {
+                    return _emptyState(
+                        'No players in $country yet', 'Be the first to compete!');
                   }
                   final userInList = docs.any((d) => d.id == uid);
                   return _BoardList(
@@ -420,6 +509,9 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                             score: aiScore,
                             stars: stars,
                             isCurrentUser: userId == uid,
+                            onTap: userId == uid
+                                ? null
+                                : () => _showPrivateProfile(context),
                           );
                         },
                       ),
@@ -520,6 +612,9 @@ class _BoardList extends StatelessWidget {
             score: score,
             scoreSuffix: scoreSuffix,
             isCurrentUser: doc.id == currentUid,
+            onTap: doc.id == currentUid
+                ? null
+                : () => _showPrivateProfile(context),
           );
         }
 
@@ -590,6 +685,7 @@ class _BoardList extends StatelessWidget {
               scoreSuffix: scoreSuffix,
               isCurrentUser: true,
               rankLabel: '>${docs.length}',
+              onTap: null,
             );
           },
         );
@@ -608,6 +704,7 @@ class _PlayerRow extends StatelessWidget {
   final String scoreSuffix;
   final bool isCurrentUser;
   final String? rankLabel;
+  final VoidCallback? onTap;
 
   static const _accent = Color(0xFF7B2CBF);
 
@@ -619,6 +716,7 @@ class _PlayerRow extends StatelessWidget {
     required this.scoreSuffix,
     required this.isCurrentUser,
     this.rankLabel,
+    this.onTap,
   });
 
   @override
@@ -631,7 +729,7 @@ class _PlayerRow extends StatelessWidget {
                 ? const Color(0xFFCD7F32)
                 : null;
 
-    return Container(
+    final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -747,6 +845,9 @@ class _PlayerRow extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return card;
+    return GestureDetector(onTap: onTap, child: card);
   }
 
   String _fmt(int n) {
@@ -764,6 +865,7 @@ class _SubmissionRow extends StatelessWidget {
   final int score;
   final int stars;
   final bool isCurrentUser;
+  final VoidCallback? onTap;
 
   static const _accent = Color(0xFF7B2CBF);
 
@@ -773,6 +875,7 @@ class _SubmissionRow extends StatelessWidget {
     required this.score,
     required this.stars,
     required this.isCurrentUser,
+    this.onTap,
   });
 
   @override
@@ -785,7 +888,7 @@ class _SubmissionRow extends StatelessWidget {
                 ? const Color(0xFFCD7F32)
                 : null;
 
-    return Container(
+    final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -891,12 +994,42 @@ class _SubmissionRow extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return card;
+    return GestureDetector(onTap: onTap, child: card);
   }
 
   String _fmt(int n) {
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return '$n';
   }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
+void _showPrivateProfile(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, color: Colors.white70, size: 16),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Player profiles are private — keep playing to climb the board!',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E1E2E),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
 }
 
 // ── Shared empty state ─────────────────────────────────────────────────────────

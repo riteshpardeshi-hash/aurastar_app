@@ -4,15 +4,21 @@ import '../../../core/globals.dart';
 import 'brand_preview_screen.dart';
 
 class BrandCameraScreen extends StatefulWidget {
-  final String challengeTitle;
-  final String description;
-  final String instructions;
+  final String       challengeTitle;
+  final String       description;
+  final String       instructions;
+  final String       difficulty;
+  final List<String> instructionSteps;
+  final List<String> scoringChecklist;
 
   const BrandCameraScreen({
     super.key,
     required this.challengeTitle,
     required this.description,
     required this.instructions,
+    this.difficulty       = 'Medium',
+    this.instructionSteps = const [],
+    this.scoringChecklist = const [],
   });
 
   @override
@@ -162,10 +168,13 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
                               context,
                               MaterialPageRoute(
                                 builder: (_) => BrandPreviewScreen(
-                                  videoPath: videoFile!.path,
-                                  challengeTitle: widget.challengeTitle,
-                                  description: widget.description,
-                                  instructions: widget.instructions,
+                                  videoPath:        videoFile!.path,
+                                  challengeTitle:   widget.challengeTitle,
+                                  description:      widget.description,
+                                  instructions:     widget.instructions,
+                                  difficulty:       widget.difficulty,
+                                  instructionSteps: widget.instructionSteps,
+                                  scoringChecklist: widget.scoringChecklist,
                                 ),
                               ),
                             );

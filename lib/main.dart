@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
 import 'firebase_options.dart';
 import 'features/challenges/screens/challenge_detail.dart';
+import 'features/dashboard/dashboard.dart';
 import 'features/splash/screens/splash_screen.dart';
 
 void main() async {
@@ -109,7 +110,9 @@ class _MyAppState extends State<MyApp> {
           labelSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
         ),
       ),
-      home: const SplashScreen(),
+      home: FirebaseAuth.instance.currentUser != null
+          ? const Dashboard()
+          : const SplashScreen(),
     );
   }
 }
