@@ -41,7 +41,31 @@ const kArcadeGames = [
     eyebrow: 'FOCUS',
     description: 'Read the signal and swipe in the correct direction.',
     accent: Color(0xFFFF62B7),
-    available: false,
+    available: true,
+  ),
+  GameCardData(
+    id: 'pattern-rush',
+    title: 'Pattern Rush',
+    eyebrow: 'IQ',
+    description: 'Spot the hidden rule. Pick the next number.',
+    accent: Color(0xFFFFCE67),
+    available: true,
+  ),
+  GameCardData(
+    id: 'blink-memory',
+    title: 'Blink Memory',
+    eyebrow: 'IQ',
+    description: 'Memorise the lit cells. Recall them before time runs out.',
+    accent: Color(0xFF36DCA2),
+    available: true,
+  ),
+  GameCardData(
+    id: 'rule-breaker',
+    title: 'Rule Breaker',
+    eyebrow: 'IQ',
+    description: 'Four numbers share a rule. One breaks it — find it fast.',
+    accent: Color(0xFFFF6577),
+    available: true,
   ),
 ];
 

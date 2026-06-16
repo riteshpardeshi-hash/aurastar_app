@@ -3,6 +3,10 @@ import '../services/arcade_progress_service.dart';
 import '../widgets/game_card.dart';
 import '../games/aura_flash_tap_game.dart';
 import '../games/catch_the_aura_game.dart';
+import '../games/swipe_direction_rush_game.dart';
+import '../games/pattern_rush_game.dart';
+import '../games/blink_memory_game.dart';
+import '../games/rule_breaker_game.dart';
 
 class ArcadeScreen extends StatefulWidget {
   const ArcadeScreen({super.key});
@@ -62,6 +66,38 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           onFinish: (score) => _recordScore(gameId, score),
         ),
       );
+    } else if (gameId == 'swipe-direction-rush') {
+      route = MaterialPageRoute(
+        builder: (_) => SwipeDirectionRushGame(
+          bestScore: best,
+          onBack: () => Navigator.pop(context),
+          onFinish: (score) => _recordScore(gameId, score),
+        ),
+      );
+    } else if (gameId == 'pattern-rush') {
+      route = MaterialPageRoute(
+        builder: (_) => PatternRushGame(
+          bestScore: best,
+          onBack: () => Navigator.pop(context),
+          onFinish: (score) => _recordScore(gameId, score),
+        ),
+      );
+    } else if (gameId == 'blink-memory') {
+      route = MaterialPageRoute(
+        builder: (_) => BlinkMemoryGame(
+          bestScore: best,
+          onBack: () => Navigator.pop(context),
+          onFinish: (score) => _recordScore(gameId, score),
+        ),
+      );
+    } else if (gameId == 'rule-breaker') {
+      route = MaterialPageRoute(
+        builder: (_) => RuleBreakerGame(
+          bestScore: best,
+          onBack: () => Navigator.pop(context),
+          onFinish: (score) => _recordScore(gameId, score),
+        ),
+      );
     } else {
       return;
     }
@@ -88,6 +124,12 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Back button ─────────────────────────────────────────────────
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, color: _violet, size: 22),
+              ),
+              const SizedBox(height: 18),
               // ── Header ──────────────────────────────────────────────────────
               const Text(
                 'AURA ARENA',
@@ -112,7 +154,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Three quick challenges. One sharper you.',
+                'Six quick challenges. One sharper you.',
                 style: TextStyle(
                   color: _textMuted,
                   fontSize: 16,
