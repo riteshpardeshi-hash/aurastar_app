@@ -7,6 +7,7 @@ class GameCardData {
   final String description;
   final Color accent;
   final bool available;
+  final String category; // 'Aura Arcade' or 'Aura IQ'
 
   const GameCardData({
     required this.id,
@@ -15,6 +16,7 @@ class GameCardData {
     required this.description,
     required this.accent,
     required this.available,
+    required this.category,
   });
 }
 
@@ -26,6 +28,7 @@ const kArcadeGames = [
     description: 'Wait for the aura. Tap the instant it flashes.',
     accent: Color(0xFF8C6CFF),
     available: true,
+    category: 'Aura Arcade',
   ),
   GameCardData(
     id: 'catch-the-aura',
@@ -34,6 +37,7 @@ const kArcadeGames = [
     description: 'Catch shifting aura orbs before they disappear.',
     accent: Color(0xFF48D7FF),
     available: true,
+    category: 'Aura Arcade',
   ),
   GameCardData(
     id: 'swipe-direction-rush',
@@ -42,6 +46,7 @@ const kArcadeGames = [
     description: 'Read the signal and swipe in the correct direction.',
     accent: Color(0xFFFF62B7),
     available: true,
+    category: 'Aura Arcade',
   ),
   GameCardData(
     id: 'pattern-rush',
@@ -50,6 +55,7 @@ const kArcadeGames = [
     description: 'Spot the hidden rule. Pick the next number.',
     accent: Color(0xFFFFCE67),
     available: true,
+    category: 'Aura IQ',
   ),
   GameCardData(
     id: 'blink-memory',
@@ -58,6 +64,7 @@ const kArcadeGames = [
     description: 'Memorise the lit cells. Recall them before time runs out.',
     accent: Color(0xFF36DCA2),
     available: true,
+    category: 'Aura IQ',
   ),
   GameCardData(
     id: 'rule-breaker',
@@ -66,6 +73,7 @@ const kArcadeGames = [
     description: 'Four numbers share a rule. One breaks it — find it fast.',
     accent: Color(0xFFFF6577),
     available: true,
+    category: 'Aura IQ',
   ),
 ];
 

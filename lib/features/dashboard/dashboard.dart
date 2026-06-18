@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,7 +10,6 @@ import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../explore/screens/explore_creators_screen.dart';
-import '../challenges/screens/category_challenges_screen.dart';
 import '../challenges/screens/trending_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
@@ -23,8 +22,6 @@ import '../creator/screens/create_creator_profile_screen.dart';
 import '../admin/screens/admin_screen.dart';
 import '../video/screens/preview_screen.dart';
 import '../../core/services/upload_queue_service.dart';
-import '../arcade/screens/arcade_screen.dart';
-import '../arcade/services/arcade_progress_service.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -36,7 +33,6 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   int? _lastKnownLevel;
   bool _atRiskAlertShown = false;
-  int _arcadeKey = 0;
 
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
@@ -191,24 +187,11 @@ class _DashboardState extends State<Dashboard> {
                 ),
                 SliverToBoxAdapter(
                     child: _buildStreakBanner(streakDay, lastStreakDate)),
-                SliverToBoxAdapter(
-                    child: _ArcadeTeaserBanner(
-                      key: ValueKey(_arcadeKey),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ArcadeScreen()),
-                      ).then((_) {
-                        if (mounted) setState(() => _arcadeKey++);
-                      }),
-                    )),
                 const SliverToBoxAdapter(child: _PendingUploadBanner()),
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
-                SliverToBoxAdapter(
-                    child: _buildAuraArenaNewSection(context)),
-                SliverToBoxAdapter(child: _buildBrandAuraSection(context)),
+                SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
                 SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
-                SliverToBoxAdapter(child: _buildCategorySection(context)),
+                SliverToBoxAdapter(child: _buildBannersSection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
                 if (!isCreator && !isBrand && !isAdmin)
                   SliverToBoxAdapter(
@@ -537,10 +520,11 @@ class _DashboardState extends State<Dashboard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Auto-generated video thumbnail
                   _VideoThumbnailWidget(
                     videoUrl: videoUrl,
-                    fallbackAsset: 'assets/images/homescreen/hero banner.png',
+                    thumbnailUrl: docs.isNotEmpty
+                        ? (docs.first.data() as Map<String, dynamic>)['thumbnailUrl'] as String? ?? ''
+                        : '',
                   ),
                   // Bottom-to-top dark gradient for text readability
                   Container(
@@ -565,10 +549,8 @@ class _DashboardState extends State<Dashboard> {
                         // Aura points row
                         Row(
                           children: [
-                            Image.asset(
-                              'assets/images/homescreen/separate elements/coin icon.png',
-                              height: 24,
-                            ),
+                            const Icon(Icons.diamond_rounded,
+                                color: Color(0xFFD4A8FF), size: 22),
                             const SizedBox(width: 6),
                             Text(
                               '$auraPoints',
@@ -655,15 +637,8 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Aura Arena New ─────────────────────────────────────────────────────────
-  Widget _buildAuraArenaNewSection(BuildContext context) {
-    const staticImages = [
-      'assets/images/homescreen/challenge 1.png',
-      'assets/images/homescreen/challenge 2.png',
-      'assets/images/homescreen/challenge 3.png',
-    ];
-    const fallbackTitles = ['Book on Head', 'Perfect Circle', 'Sunglass Challenge'];
-
+  // ── Brand Videos ──────────────────────────────────────────────────────────
+  Widget _buildBrandVideosSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -672,26 +647,20 @@ class _DashboardState extends State<Dashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Aura Arena New',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay',
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AllGeneralChallengesScreen()),
-                ),
-                child: const Text(
-                  '>>>',
+              const Text('Brand Videos',
                   style: TextStyle(
-                      color: Colors.white38, fontSize: 13, letterSpacing: 2),
-                ),
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'ClashDisplay')),
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AllGeneralChallengesScreen())),
+                child: const Text('See All >',
+                    style: TextStyle(
+                        color: Color(0xFF9B4DCA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -699,43 +668,268 @@ class _DashboardState extends State<Dashboard> {
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('challenges')
-              .where('creatorId', isEqualTo: 'system')
+              .limit(5)
+              .snapshots(),
+          builder: (context, snap) {
+            final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox.shrink();
+
+            return Column(
+              children: [
+                // Top row: 3 square thumbnails
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: List.generate(docs.length.clamp(0, 3), (i) {
+                      final data = docs[i].data() as Map<String, dynamic>;
+                      final title = data['title'] as String? ?? '';
+                      final videoUrl = data['videoUrl'] as String? ?? '';
+                      final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
+                      final challengeId = docs[i].id;
+                      final instructions = data['instructions'] as String? ?? '';
+                      final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
+
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                          child: GestureDetector(
+                            onTap: () => Navigator.push(context,
+                                MaterialPageRoute(builder: (_) => ChallengeDetail(
+                                  title: title,
+                                  instructions: instructions,
+                                  videoUrl: videoUrl,
+                                  challengeId: challengeId,
+                                ))),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SizedBox(
+                                height: 122,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    _VideoThumbnailWidget(
+                                        videoUrl: videoUrl,
+                                        thumbnailUrl: thumbnailUrl),
+                                    if (brandLogoUrl.isNotEmpty)
+                                      Positioned(
+                                        top: 6,
+                                        right: 6,
+                                        child: ClipOval(
+                                          child: Image.network(brandLogoUrl,
+                                              width: 22,
+                                              height: 22,
+                                              fit: BoxFit.cover),
+                                        ),
+                                      ),
+                                    Positioned(
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(6, 18, 6, 7),
+                                        decoration: const BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [Colors.transparent, Colors.black87],
+                                          ),
+                                        ),
+                                        child: Text(title,
+                                            textAlign: TextAlign.center,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              fontFamily: 'SpaceGrotesk',
+                                              height: 1.3,
+                                            )),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                // Bottom row: 2 feature cards
+                if (docs.length > 3) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: List.generate(
+                          (docs.length - 3).clamp(0, 2), (i) {
+                        final doc = docs[3 + i];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final title = data['title'] as String? ?? '';
+                        final description = data['instructions'] as String? ?? '';
+                        final auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 0;
+                        final videoUrl = data['videoUrl'] as String? ?? '';
+                        final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
+                        final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
+                        final challengeId = doc.id;
+
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
+                            child: GestureDetector(
+                              onTap: () => Navigator.push(context,
+                                  MaterialPageRoute(builder: (_) => ChallengeDetail(
+                                    title: title,
+                                    instructions: description,
+                                    videoUrl: videoUrl,
+                                    challengeId: challengeId,
+                                  ))),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: SizedBox(
+                                  height: 132,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      _VideoThumbnailWidget(
+                                          videoUrl: videoUrl,
+                                          thumbnailUrl: thumbnailUrl),
+                                      Container(color: Colors.black.withValues(alpha: 0.45)),
+                                      if (brandLogoUrl.isNotEmpty)
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: ClipOval(
+                                            child: Image.network(brandLogoUrl,
+                                                width: 26,
+                                                height: 26,
+                                                fit: BoxFit.cover),
+                                          ),
+                                        ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(10),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            Text(title.toUpperCase(),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w900,
+                                                  letterSpacing: 0.3,
+                                                  fontFamily: 'ClashDisplay',
+                                                )),
+                                            const SizedBox(height: 3),
+                                            Text(description,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  color: Colors.white60,
+                                                  fontSize: 9,
+                                                  height: 1.35,
+                                                  fontFamily: 'SpaceGrotesk',
+                                                )),
+                                            const SizedBox(height: 6),
+                                            Row(children: [
+                                              const Icon(Icons.diamond_rounded,
+                                                  color: Color(0xFFD4A8FF), size: 13),
+                                              const SizedBox(width: 3),
+                                              Text('$auraPoints',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontFamily: 'SpaceGrotesk',
+                                                  )),
+                                            ]),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  // ── Trending ───────────────────────────────────────────────────────────────
+  Widget _buildTrendingSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Trending videos',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'ClashDisplay')),
+              GestureDetector(
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TrendingScreen())),
+                child: const Text('See All >',
+                    style: TextStyle(
+                        color: Color(0xFF9B4DCA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('challenges')
               .limit(3)
               .snapshots(),
           builder: (context, snap) {
             final docs = snap.data?.docs ?? [];
+            if (docs.isEmpty) return const SizedBox.shrink();
+
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
-                children: List.generate(3, (i) {
-                  final hasDoc = i < docs.length;
-                  final doc = hasDoc ? docs[i] : null;
-                  final data =
-                      doc != null ? doc.data() as Map<String, dynamic> : null;
-                  final title =
-                      data?['title'] as String? ?? fallbackTitles[i];
-                  final videoUrl = data?['videoUrl'] as String? ?? '';
-                  final instructions =
-                      data?['instructions'] as String? ?? '';
-                  final challengeId = doc?.id ?? '';
+                children: List.generate(docs.length.clamp(0, 3), (i) {
+                  final data = docs[i].data() as Map<String, dynamic>;
+                  final title = data['title'] as String? ?? '';
+                  final videoUrl = data['videoUrl'] as String? ?? '';
+                  final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
+                  final challengeId = docs[i].id;
+                  final instructions = data['instructions'] as String? ?? '';
+                  final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
 
                   return Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
                       child: GestureDetector(
-                        onTap: challengeId.isNotEmpty
-                            ? () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => ChallengeDetail(
-                                      title: title,
-                                      instructions: instructions,
-                                      videoUrl: videoUrl,
-                                      challengeId: challengeId,
-                                    ),
-                                  ),
-                                )
-                            : null,
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => ChallengeDetail(
+                              title: title,
+                              instructions: instructions,
+                              videoUrl: videoUrl,
+                              challengeId: challengeId,
+                            ))),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: SizedBox(
@@ -744,40 +938,43 @@ class _DashboardState extends State<Dashboard> {
                               fit: StackFit.expand,
                               children: [
                                 _VideoThumbnailWidget(
-                                  videoUrl: videoUrl,
-                                  fallbackAsset: staticImages[i],
-                                ),
-                                // Bottom gradient + label
+                                    videoUrl: videoUrl,
+                                    thumbnailUrl: thumbnailUrl),
+                                if (brandLogoUrl.isNotEmpty)
+                                  Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: ClipOval(
+                                      child: Image.network(brandLogoUrl,
+                                          width: 22,
+                                          height: 22,
+                                          fit: BoxFit.cover),
+                                    ),
+                                  ),
                                 Positioned(
                                   bottom: 0,
                                   left: 0,
                                   right: 0,
                                   child: Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                        6, 18, 6, 7),
+                                    padding: const EdgeInsets.fromLTRB(6, 18, 6, 7),
                                     decoration: const BoxDecoration(
                                       gradient: LinearGradient(
                                         begin: Alignment.topCenter,
                                         end: Alignment.bottomCenter,
-                                        colors: [
-                                          Colors.transparent,
-                                          Colors.black87,
-                                        ],
+                                        colors: [Colors.transparent, Colors.black87],
                                       ),
                                     ),
-                                    child: Text(
-                                      title,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        fontFamily: 'SpaceGrotesk',
-                                        height: 1.3,
-                                      ),
-                                    ),
+                                    child: Text(title,
+                                        textAlign: TextAlign.center,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          fontFamily: 'SpaceGrotesk',
+                                          height: 1.3,
+                                        )),
                                   ),
                                 ),
                               ],
@@ -792,570 +989,8 @@ class _DashboardState extends State<Dashboard> {
             );
           },
         ),
-        const SizedBox(height: 10),
-        _buildPromoBanner(),
         const SizedBox(height: 24),
       ],
-    );
-  }
-
-  Widget _buildPromoBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          height: 120,
-          width: double.infinity,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Full-width background image, anchored to show figures on the right
-              Image.asset(
-                'assets/images/homescreen/separate elements/leaderboard.png',
-                fit: BoxFit.cover,
-                alignment: Alignment.centerRight,
-              ),
-              // Left-to-right dark gradient so text is readable
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    stops: [0.0, 0.5, 0.75],
-                    colors: [
-                      Colors.black,
-                      Color(0xDD000000),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-              // Text left side
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 175, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text(
-                      'Lorem\nipsum dolor',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w900,
-                        height: 1.15,
-                        fontFamily: 'ClashDisplay',
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      'Lorem ipsum dolor sit amet,\nLorem ipsum dolor sit amet,',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
-                        height: 1.5,
-                        fontFamily: 'SpaceGrotesk',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Brand Aura ─────────────────────────────────────────────────────────────
-  Widget _buildBrandAuraSection(BuildContext context) {
-    const gridImages = [
-      'assets/images/homescreen/brand challenge 1.png',
-      'assets/images/homescreen/brand challenge 2.png',
-      'assets/images/homescreen/brand challenge 3.png',
-    ];
-    const gridFallbackTitles = [
-      'Plank Challenge',
-      'Bollywood Walk',
-      'Zero Mess Challenge'
-    ];
-    const featureImages = [
-      'assets/images/homescreen/brand challenge 4.png',
-      'assets/images/homescreen/brand challenge 5.png',
-    ];
-    const featureFallbackTitles = ['FLIP THE CAN', 'FASHION WALK'];
-    const featureFallbackDesc = [
-      'Land the perfect can flip\nand earn Aura.',
-      'Own the walk.\nEarn Aura with every pose.',
-    ];
-    const featureFallbackPoints = [150, 250];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Brand Aura',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay',
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ExploreCreatorsScreen()),
-                ),
-                child: const Text(
-                  '>>>',
-                  style: TextStyle(
-                      color: Colors.white38, fontSize: 13, letterSpacing: 2),
-                ),
-              ),
-            ],
-          ),
-        ),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('challenges')
-              .limit(5)
-              .snapshots(),
-          builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
-
-            return Column(
-              children: [
-                // 3-column grid
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: List.generate(3, (i) {
-                      final hasDoc = i < docs.length;
-                      final doc = hasDoc ? docs[i] : null;
-                      final data = doc != null
-                          ? doc.data() as Map<String, dynamic>
-                          : null;
-                      final title = data?['title'] as String? ??
-                          gridFallbackTitles[i];
-                      final videoUrl = data?['videoUrl'] as String? ?? '';
-                      final instructions =
-                          data?['instructions'] as String? ?? '';
-                      final challengeId = doc?.id ?? '';
-
-                      return Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
-                          child: GestureDetector(
-                            onTap: challengeId.isNotEmpty
-                                ? () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ChallengeDetail(
-                                          title: title,
-                                          instructions: instructions,
-                                          videoUrl: videoUrl,
-                                          challengeId: challengeId,
-                                        ),
-                                      ),
-                                    )
-                                : null,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: SizedBox(
-                                height: 122,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    _VideoThumbnailWidget(
-                                      videoUrl: videoUrl,
-                                      fallbackAsset: gridImages[i],
-                                    ),
-                                    Positioned(
-                                      bottom: 0,
-                                      left: 0,
-                                      right: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            6, 18, 6, 7),
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [
-                                              Colors.transparent,
-                                              Colors.black87,
-                                            ],
-                                          ),
-                                        ),
-                                        child: Text(
-                                          title,
-                                          textAlign: TextAlign.center,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            fontFamily: 'SpaceGrotesk',
-                                            height: 1.3,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-                // 2 feature cards
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: List.generate(2, (i) {
-                      final docIndex = 3 + i;
-                      final hasDoc = docIndex < docs.length;
-                      final doc = hasDoc ? docs[docIndex] : null;
-                      final data = doc != null
-                          ? doc.data() as Map<String, dynamic>
-                          : null;
-                      final title = data?['title'] as String? ??
-                          featureFallbackTitles[i];
-                      final description =
-                          data?['instructions'] as String? ??
-                              featureFallbackDesc[i];
-                      final auraPoints =
-                          (data?['auraPoints'] as num?)?.toInt() ??
-                              featureFallbackPoints[i];
-                      final videoUrl = data?['videoUrl'] as String? ?? '';
-                      final challengeId = doc?.id ?? '';
-
-                      return Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
-                          child: GestureDetector(
-                            onTap: challengeId.isNotEmpty
-                                ? () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ChallengeDetail(
-                                          title: title,
-                                          instructions: description,
-                                          videoUrl: videoUrl,
-                                          challengeId: challengeId,
-                                        ),
-                                      ),
-                                    )
-                                : null,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: SizedBox(
-                                height: 132,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    _VideoThumbnailWidget(
-                                      videoUrl: videoUrl,
-                                      fallbackAsset: featureImages[i],
-                                    ),
-                                    Container(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.45)),
-                                    Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            title.toUpperCase(),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 0.3,
-                                              fontFamily: 'ClashDisplay',
-                                            ),
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            description,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white60,
-                                              fontSize: 9,
-                                              height: 1.35,
-                                              fontFamily: 'SpaceGrotesk',
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              Image.asset(
-                                                'assets/images/homescreen/separate elements/coin icon.png',
-                                                height: 14,
-                                              ),
-                                              const SizedBox(width: 3),
-                                              Text(
-                                                '$auraPoints',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontFamily: 'SpaceGrotesk',
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 24),
-      ],
-    );
-  }
-
-  // ── Trending ───────────────────────────────────────────────────────────────
-  Widget _buildTrendingSection(BuildContext context) {
-    const trendingImages = [
-      'assets/images/homescreen/challenge 1.png',
-      'assets/images/homescreen/brand challenge 2.png',
-      'assets/images/homescreen/challenge 2.png',
-      'assets/images/homescreen/brand challenge 3.png',
-    ];
-    const fallbackTitles = [
-      'Yoga Pose Challenge',
-      'Rock Star Challenge',
-      'Street Dance Challenge',
-      'Mirror Challenge',
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Trending',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay',
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const TrendingScreen())),
-                child: const Text('See All ›',
-                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('challenges')
-              .limit(4)
-              .snapshots(),
-          builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
-            final count = docs.isEmpty ? 2 : docs.length;
-
-            return Column(
-              children: List.generate(count, (i) {
-                final hasDoc = i < docs.length;
-                final doc = hasDoc ? docs[i] : null;
-                final data =
-                    doc != null ? doc.data() as Map<String, dynamic> : null;
-                final title =
-                    data?['title'] as String? ?? fallbackTitles[i % fallbackTitles.length];
-                final challengeId = doc?.id ?? '';
-                final videoUrl = data?['videoUrl'] as String? ?? '';
-                final views = (data?['views'] as num?)?.toInt() ?? 0;
-                final auraPoints =
-                    (data?['auraPoints'] as num?)?.toInt() ?? 150;
-                final instructions =
-                    data?['instructions'] as String? ?? '';
-
-                return _buildTrendingCard(
-                  context: context,
-                  imagePath: trendingImages[i % trendingImages.length],
-                  title: title,
-                  views: views,
-                  auraPoints: auraPoints,
-                  challengeId: challengeId,
-                  videoUrl: videoUrl,
-                  instructions: instructions,
-                );
-              }),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTrendingCard({
-    required BuildContext context,
-    required String imagePath,
-    required String title,
-    required int views,
-    required int auraPoints,
-    required String challengeId,
-    required String videoUrl,
-    required String instructions,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: GestureDetector(
-        onTap: challengeId.isNotEmpty
-            ? () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChallengeDetail(
-                      title: title,
-                      instructions: instructions,
-                      videoUrl: videoUrl,
-                      challengeId: challengeId,
-                    ),
-                  ),
-                )
-            : null,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            height: 240,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _VideoThumbnailWidget(
-                  videoUrl: videoUrl,
-                  fallbackAsset: imagePath,
-                ),
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.40, 1.0],
-                      colors: [Colors.transparent, Colors.black],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 14,
-                  left: 14,
-                  right: 14,
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.remove_red_eye_outlined,
-                        color: Colors.white60,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _fmt(views),
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontFamily: 'SpaceGrotesk',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Image.asset(
-                        'assets/images/homescreen/separate elements/like.png',
-                        height: 15,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$auraPoints',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'SpaceGrotesk',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (challengeId.isNotEmpty)
-                        GestureDetector(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChallengeDetail(
-                                title: title,
-                                instructions: instructions,
-                                videoUrl: videoUrl,
-                                challengeId: challengeId,
-                              ),
-                            ),
-                          ),
-                          child: Image.asset(
-                            'assets/images/homescreen/separate elements/button.png',
-                            height: 32,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -1391,7 +1026,7 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
             SizedBox(
-              height: 88,
+              height: 148,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1400,18 +1035,18 @@ class _DashboardState extends State<Dashboard> {
                   final data     = docs[i].data() as Map<String, dynamic>;
                   final pageName = data['pageName'] as String? ?? data['name'] as String? ?? 'Creator';
                   final imgUrl   = data['profileImageUrl'] as String? ?? '';
-                  final followers = (data['followerCount'] as num?)?.toInt() ?? 0;
 
                   return GestureDetector(
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
                     child: Container(
-                      width: 72,
-                      margin: const EdgeInsets.only(right: 12),
+                      width: 90,
+                      margin: const EdgeInsets.only(right: 14),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 52, height: 52,
+                            width: 74, height: 74,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
@@ -1419,25 +1054,40 @@ class _DashboardState extends State<Dashboard> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              border: Border.all(color: _accent.withValues(alpha: 0.45), width: 1.5),
+                              border: Border.all(color: _accent.withValues(alpha: 0.6), width: 2),
                             ),
                             child: imgUrl.isNotEmpty
                                 ? ClipOval(child: Image.network(imgUrl, fit: BoxFit.cover))
                                 : Center(
                                     child: Text(
                                       pageName.isNotEmpty ? pageName[0].toUpperCase() : 'C',
-                                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
                                     ),
                                   ),
                           ),
-                          const SizedBox(height: 5),
+                          const SizedBox(height: 6),
                           Text(pageName, maxLines: 1, overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600,
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600,
                                   fontFamily: 'SpaceGrotesk')),
-                          if (followers > 0)
-                            Text('${_fmt(followers)} followers',
-                                style: const TextStyle(color: Colors.white38, fontSize: 9, fontFamily: 'SpaceGrotesk')),
+                          const SizedBox(height: 8),
+                          Container(
+                            height: 28,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: _accent,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Center(
+                              child: Text('Follow',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    fontFamily: 'SpaceGrotesk',
+                                  )),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1452,71 +1102,138 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Category Videos ───────────────────────────────────────────────────────
-  Widget _buildCategorySection(BuildContext context) {
-    const categories = [
-      ('Dance',   Icons.music_note_rounded,        Color(0xFF4B6EF6)),
-      ('Fitness', Icons.fitness_center_rounded,    Color(0xFF22C55E)),
-      ('Fashion', Icons.checkroom_rounded,         Color(0xFFFF6B9D)),
-      ('Sports',  Icons.sports_basketball_rounded, Color(0xFFF97316)),
-      ('Comedy',  Icons.mood_rounded,              Color(0xFFEAB308)),
-      ('Skill',   Icons.psychology_rounded,        Color(0xFF06B6D4)),
-    ];
+  // ── Banners ────────────────────────────────────────────────────────────────
+  Widget _buildBannersSection(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('challenges')
+          .limit(3)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (!snap.hasData) return const SizedBox.shrink();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Category Videos',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
-              GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const AllGeneralChallengesScreen())),
-                child: const Text('See All ›',
-                    style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+        // If no backend data yet, show a static placeholder banner
+        final count = docs.isEmpty ? 1 : docs.length;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Text('Banners',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'ClashDisplay')),
+            ),
+            SizedBox(
+              height: 160,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: count,
+                itemBuilder: (_, i) {
+                  final hasDoc = i < docs.length;
+                  final data = hasDoc ? docs[i].data() as Map<String, dynamic> : null;
+                  final title = data?['title'] as String? ?? 'Featured Challenge';
+                  final description = data?['instructions'] as String? ?? 'Complete this challenge to earn Aura points.';
+                  final auraPoints = (data?['auraPoints'] as num?)?.toInt() ?? 150;
+                  final videoUrl = data?['videoUrl'] as String? ?? '';
+                  final thumbnailUrl = data?['thumbnailUrl'] as String? ?? '';
+                  final challengeId = hasDoc ? docs[i].id : '';
+
+                  return GestureDetector(
+                    onTap: challengeId.isNotEmpty
+                        ? () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => ChallengeDetail(
+                              title: title,
+                              instructions: description,
+                              videoUrl: videoUrl,
+                              challengeId: challengeId,
+                            )))
+                        : null,
+                    child: Container(
+                      width: MediaQuery.of(context).size.width - 24,
+                      margin: EdgeInsets.only(right: i < count - 1 ? 12 : 0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _VideoThumbnailWidget(
+                                videoUrl: videoUrl,
+                                thumbnailUrl: thumbnailUrl),
+                            // left-to-right dark gradient
+                            Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  stops: [0.0, 0.55, 0.80],
+                                  colors: [
+                                    Color(0xEE000000),
+                                    Color(0xBB000000),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(title.toUpperCase(),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w900,
+                                        height: 1.1,
+                                        fontFamily: 'ClashDisplay',
+                                      )),
+                                  const SizedBox(height: 6),
+                                  Text(description,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white60,
+                                        fontSize: 11,
+                                        height: 1.4,
+                                        fontFamily: 'SpaceGrotesk',
+                                      )),
+                                  const SizedBox(height: 10),
+                                  Row(children: [
+                                    const Icon(Icons.diamond_rounded,
+                                        color: Color(0xFFD4A8FF), size: 16),
+                                    const SizedBox(width: 4),
+                                    Text('$auraPoints+',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                          fontFamily: 'SpaceGrotesk',
+                                        )),
+                                  ]),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 88,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: categories.length,
-            itemBuilder: (_, i) {
-              final (name, icon, color) = categories[i];
-              return GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => CategoryChallengesScreen(category: name))),
-                child: Container(
-                  width: 78,
-                  margin: const EdgeInsets.only(right: 10),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: color.withValues(alpha: 0.30)),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, color: color, size: 26),
-                      const SizedBox(height: 6),
-                      Text(name,
-                          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700, fontFamily: 'SpaceGrotesk')),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+            ),
+            const SizedBox(height: 24),
+          ],
+        );
+      },
     );
   }
 
@@ -1901,21 +1618,23 @@ class _DashboardState extends State<Dashboard> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _navItem(
-                        icon: Icons.home_rounded,
-                        label: 'Home',
+                        icon: Icons.emoji_events_rounded,
+                        label: 'Challenges',
                         active: true,
-                        onTap: () {},
-                      ),
-                      _navItem(
-                        icon: Icons.sports_esports_rounded,
-                        label: 'Arcade',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const ArcadeScreen()),
-                        ).then((_) {
-                          if (mounted) setState(() => _arcadeKey++);
-                        }),
+                              builder: (_) => const AllGeneralChallengesScreen()),
+                        ),
+                      ),
+                      _navItem(
+                        icon: Icons.storefront_rounded,
+                        label: 'Brand',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ExploreCreatorsScreen()),
+                        ),
                       ),
                       const SizedBox(width: 58),
                       _navItem(
@@ -2012,134 +1731,16 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  String _fmt(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
-  }
-}
-
-// ── Arcade Teaser Banner ──────────────────────────────────────────────────────
-
-class _ArcadeTeaserBanner extends StatefulWidget {
-  final VoidCallback onTap;
-  const _ArcadeTeaserBanner({super.key, required this.onTap});
-
-  @override
-  State<_ArcadeTeaserBanner> createState() => _ArcadeTeaserBannerState();
-}
-
-class _ArcadeTeaserBannerState extends State<_ArcadeTeaserBanner> {
-  ArcadeProgress? _progress;
-
-  @override
-  void initState() {
-    super.initState();
-    ArcadeProgressService.load().then((p) {
-      if (mounted) setState(() => _progress = p);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const violet = Color(0xFF7B2CBF);
-    const cyan = Color(0xFF48D7FF);
-    const textMuted = Color(0xFF9CA8C7);
-
-    final completed = _progress?.completedToday.length ?? 0;
-    final streak = _progress?.streak ?? 0;
-    final allDone = completed == 3;
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF120828), Color(0xFF0A1020)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: violet.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: violet.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Center(
-                child: Icon(Icons.sports_esports_rounded,
-                    color: Color(0xFFD4A8FF), size: 22),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Aura Arcade',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'ClashDisplay',
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    _progress == null
-                        ? 'Daily Arcade · 3 games'
-                        : '$completed/3 complete today'
-                            '${streak > 0 ? ' · $streak day streak' : ''}',
-                    style: TextStyle(
-                      color: allDone ? cyan : textMuted,
-                      fontSize: 12,
-                      fontFamily: 'SpaceGrotesk',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: violet,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Play',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'SpaceGrotesk',
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // ── Video Thumbnail Widget ─────────────────────────────────────────────────
 class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
-  final String fallbackAsset;
+  final String? thumbnailUrl; // direct image URL from backend
 
   const _VideoThumbnailWidget({
     required this.videoUrl,
-    required this.fallbackAsset,
+    this.thumbnailUrl,
   });
 
   @override
@@ -2158,15 +1759,16 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
   @override
   void didUpdateWidget(_VideoThumbnailWidget old) {
     super.didUpdateWidget(old);
-    if (old.videoUrl != widget.videoUrl) {
+    if (old.videoUrl != widget.videoUrl || old.thumbnailUrl != widget.thumbnailUrl) {
       setState(() => _thumb = null);
       _load();
     }
   }
 
   Future<void> _load() async {
+    // If backend provides a direct image URL, no video decode needed
+    if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty) return;
     if (widget.videoUrl.isEmpty) return;
-    // Check shared in-memory cache first
     if (videoThumbnailCache.containsKey(widget.videoUrl)) {
       if (mounted) setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
       return;
@@ -2185,22 +1787,34 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Always show fallback immediately; overlay the real thumbnail once ready
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Image.asset(widget.fallbackAsset, fit: BoxFit.cover),
-        if (_thumb != null)
-          Image.memory(
-            _thumb!,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-          ),
-      ],
-    );
+    final thumbUrl = widget.thumbnailUrl;
+    if (thumbUrl != null && thumbUrl.isNotEmpty) {
+      return Image.network(
+        thumbUrl,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => _placeholder(),
+      );
+    }
+    if (_thumb != null) {
+      return Image.memory(
+        _thumb!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+    return _placeholder();
   }
 
+  Widget _placeholder() => Container(
+        color: const Color(0xFF0F0F1A),
+        child: const Center(
+          child: Icon(Icons.play_circle_outline_rounded,
+              color: Colors.white12, size: 40),
+        ),
+      );
 }
 
 // ── Pending upload recovery banner ────────────────────────────────────────────

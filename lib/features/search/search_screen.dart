@@ -1,25 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../challenges/screens/challenge_detail.dart';
-import '../explore/screens/creator_profile_screen.dart';
-
-// ── Result model ──────────────────────────────────────────────────────────────
-
-enum _Type { challenge, brand, user, category }
-
-class _Result {
-  final _Type type;
-  final String id;
-  final Map<String, dynamic> data;
-  _Result(this.type, this.id, this.data);
-}
-
-// ── Categories ────────────────────────────────────────────────────────────────
-
-const _kCategories = ['Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill'];
-
-// ── Screen ────────────────────────────────────────────────────────────────────
+import '../challenges/screens/category_challenges_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -28,591 +12,585 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderStateMixin {
-  static const _bg    = Color(0xFF000000);
-  static const _card  = Color(0xFF0E0E1A);
+class _SearchScreenState extends State<SearchScreen> {
+  static const _bg = Color(0xFF080810);
   static const _accent = Color(0xFF7B2CBF);
-  static const _prefsKey = 'search_recent';
+  static const _surface = Color(0xFF12122A);
 
-  final _ctrl = TextEditingController();
-  late final TabController _tabCtrl;
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  String _query = '';
+  String _filter = 'All';
+  List<_RecentItem> _recent = [];
+  List<QueryDocumentSnapshot> _results = [];
+  bool _searching = false;
 
-  List<String> _recent = [];
-  Map<_Type, List<_Result>> _results = {};
-  bool _loading = false;
-  bool _searched = false;
-
-  static const _tabs = ['All', 'Challenges', 'Brands', 'Users', 'Categories'];
+  static const _filters = ['All', 'Challenges', 'Brands', 'Creators'];
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: _tabs.length, vsync: this);
     _loadRecent();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
-    _tabCtrl.dispose();
+    _controller.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
-  // ── Recent searches ───────────────────────────────────────────────────────
-
   Future<void> _loadRecent() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() => _recent = prefs.getStringList(_prefsKey) ?? []);
+    final raw = prefs.getStringList('recent_search_items') ?? [];
+    setState(() {
+      _recent = raw
+          .map((s) {
+            try {
+              return _RecentItem.fromJson(
+                  jsonDecode(s) as Map<String, dynamic>);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<_RecentItem>()
+          .toList();
+    });
   }
 
-  Future<void> _saveRecent(String term) async {
-    final updated = [term, ..._recent.where((r) => r != term)].take(6).toList();
+  Future<void> _saveRecent(_RecentItem item) async {
+    final updated = [item, ..._recent.where((r) => r.id != item.id)]
+        .take(20)
+        .toList();
+    setState(() => _recent = updated);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_prefsKey, updated);
-    if (mounted) setState(() => _recent = updated);
+    await prefs.setStringList('recent_search_items',
+        updated.map((r) => jsonEncode(r.toJson())).toList());
   }
 
-  Future<void> _removeRecent(String term) async {
-    final updated = _recent.where((r) => r != term).toList();
+  Future<void> _clearRecent() async {
+    setState(() => _recent = []);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_prefsKey, updated);
-    if (mounted) setState(() => _recent = updated);
+    await prefs.remove('recent_search_items');
   }
 
-  // ── Search logic ──────────────────────────────────────────────────────────
-
-  Future<void> _search(String query) async {
-    final q = query.trim();
-    if (q.isEmpty) {
-      setState(() { _results = {}; _searched = false; });
+  Future<void> _search(String q) async {
+    if (q.trim().isEmpty) {
+      setState(() {
+        _results = [];
+        _searching = false;
+      });
       return;
     }
+    setState(() => _searching = true);
+    final qLower = q.toLowerCase();
+    final db = FirebaseFirestore.instance;
+    final List<QueryDocumentSnapshot> docs = [];
 
-    setState(() { _loading = true; _searched = true; });
-    _saveRecent(q);
-
-    final end = '$q';
-
-    try {
-      final futures = await Future.wait([
-        // Challenges
-        FirebaseFirestore.instance
-            .collection('challenges')
-            .where('status', isEqualTo: 'approved')
-            .where('title', isGreaterThanOrEqualTo: q)
-            .where('title', isLessThanOrEqualTo: end)
-            .limit(10)
-            .get(),
-        // Brands (isCreator users) — search by pageName
-        FirebaseFirestore.instance
-            .collection('users')
-            .where('isCreator', isEqualTo: true)
-            .where('pageName', isGreaterThanOrEqualTo: q)
-            .where('pageName', isLessThanOrEqualTo: end)
-            .limit(8)
-            .get(),
-        // Users — search by username
-        FirebaseFirestore.instance
-            .collection('users')
-            .where('username', isGreaterThanOrEqualTo: q)
-            .where('username', isLessThanOrEqualTo: end)
-            .limit(8)
-            .get(),
-      ]);
-
-      final challenges = futures[0].docs
-          .map((d) => _Result(_Type.challenge, d.id, d.data()))
-          .toList();
-
-      final brands = futures[1].docs
-          .map((d) => _Result(_Type.brand, d.id, d.data()))
-          .toList();
-
-      // Users: exclude creators to avoid duplicates
-      final users = futures[2].docs
-          .where((d) {
-            final data = d.data();
-            return data['isCreator'] != true && data['isAdmin'] != true;
-          })
-          .map((d) => _Result(_Type.user, d.id, d.data()))
-          .toList();
-
-      final matchedCategories = _kCategories
-          .where((c) => c.toLowerCase().startsWith(q.toLowerCase()))
-          .map((c) => _Result(_Type.category, c, {'name': c}))
-          .toList();
-
-      if (!mounted) return;
-      setState(() {
-        _results = {
-          _Type.challenge: challenges,
-          _Type.brand: brands,
-          _Type.user: users,
-          _Type.category: matchedCategories,
-        };
-        _loading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    if (_filter == 'All' || _filter == 'Challenges') {
+      final snap = await db.collection('challenges').limit(20).get();
+      docs.addAll(snap.docs.where((d) {
+        final t = (d['title'] as String? ?? '').toLowerCase();
+        return t.contains(qLower);
+      }));
     }
+    if (_filter == 'All' || _filter == 'Brands') {
+      final snap = await db
+          .collection('users')
+          .where('isCreator', isEqualTo: true)
+          .limit(20)
+          .get();
+      docs.addAll(snap.docs.where((d) {
+        final n = (d['name'] as String? ?? '').toLowerCase();
+        final u = (d['username'] as String? ?? '').toLowerCase();
+        return n.contains(qLower) || u.contains(qLower);
+      }));
+    }
+    if (_filter == 'All' || _filter == 'Creators') {
+      final snap = await db.collection('users').limit(20).get();
+      docs.addAll(snap.docs.where((d) {
+        final n = (d['name'] as String? ?? '').toLowerCase();
+        final u = (d['username'] as String? ?? '').toLowerCase();
+        return n.contains(qLower) || u.contains(qLower);
+      }));
+    }
+
+    setState(() {
+      _results = docs;
+      _searching = false;
+    });
   }
 
-  void _clear() {
-    _ctrl.clear();
-    setState(() { _results = {}; _searched = false; });
-  }
+  void _onResultTap(QueryDocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final isChallenge =
+        data.containsKey('videoUrl') && data.containsKey('title');
+    final isUser =
+        data.containsKey('name') && data.containsKey('username');
+    final isBrand = isUser && (data['isCreator'] == true);
 
-  // ── Navigation ────────────────────────────────────────────────────────────
+    final item = _RecentItem(
+      id: doc.id,
+      type: isChallenge ? 'Challenge' : isBrand ? 'Brand' : 'Creator',
+      title: isChallenge
+          ? data['title'] as String? ?? ''
+          : data['name'] as String? ?? '',
+      subtitle: isChallenge
+          ? '${data['auraPoints'] ?? 0} Aura'
+          : '@${data['username'] ?? ''}',
+      imageUrl: isChallenge
+          ? data['thumbnailUrl'] as String? ?? ''
+          : data['profileImageUrl'] as String? ?? '',
+    );
+    _saveRecent(item);
 
-  void _openResult(BuildContext context, _Result r) {
-    switch (r.type) {
-      case _Type.challenge:
-        Navigator.push(context, MaterialPageRoute(
+    if (isChallenge) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
           builder: (_) => ChallengeDetail(
-            title: r.data['title'] as String? ?? '',
-            instructions: r.data['instructions'] as String? ?? '',
-            videoUrl: r.data['videoUrl'] as String? ?? '',
-            challengeId: r.id,
+            title: data['title'] as String? ?? '',
+            instructions: data['instructions'] as String? ?? '',
+            videoUrl: data['videoUrl'] as String? ?? '',
+            challengeId: doc.id,
           ),
-        ));
-      case _Type.brand:
-        Navigator.push(context, MaterialPageRoute(
-          builder: (_) => CreatorProfileScreen(creatorId: r.id),
-        ));
-      case _Type.user:
-        break;
-      case _Type.category:
-        _ctrl.text = r.data['name'] as String;
-        _search(_ctrl.text);
+        ),
+      );
     }
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg,
-        foregroundColor: Colors.white,
-        titleSpacing: 0,
-        title: Container(
-          margin: const EdgeInsets.only(right: 16),
-          decoration: BoxDecoration(
-            color: _card,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white12),
-          ),
-          child: TextField(
-            controller: _ctrl,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white, fontSize: 15),
-            cursorColor: _accent,
-            textInputAction: TextInputAction.search,
-            onSubmitted: _search,
-            onChanged: (v) {
-              if (v.isEmpty) setState(() { _results = {}; _searched = false; });
-            },
-            decoration: InputDecoration(
-              hintText: 'Search Aura Arena…',
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.30), fontSize: 15),
-              prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.40), size: 20),
-              suffixIcon: _ctrl.text.isNotEmpty
-                  ? IconButton(
-                      icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.40), size: 18),
-                      onPressed: _clear,
-                    )
-                  : null,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(44),
-          child: TabBar(
-            controller: _tabCtrl,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            indicatorColor: _accent,
-            indicatorSize: TabBarIndicatorSize.label,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white38,
-            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            dividerColor: Colors.white10,
-            tabs: _tabs.map((t) => Tab(text: t)).toList(),
-          ),
-        ),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _accent))
-          : TabBarView(
-              controller: _tabCtrl,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _searched ? _buildAllResults() : _buildSuggestions(),
-                _searched ? _buildTypeList(_Type.challenge) : _buildSuggestions(),
-                _searched ? _buildTypeList(_Type.brand) : _buildSuggestions(),
-                _searched ? _buildTypeList(_Type.user) : _buildSuggestions(),
-                _buildCategoriesTab(),
-              ],
-            ),
-    );
-  }
-
-  // ── Suggestions (pre-search) ──────────────────────────────────────────────
-
-  Widget _buildSuggestions() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-      children: [
-        if (_recent.isNotEmpty) ...[
-          Row(
-            children: [
-              const Text('Recent', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
-              const Spacer(),
-              GestureDetector(
-                onTap: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.remove(_prefsKey);
-                  if (mounted) setState(() => _recent = []);
-                },
-                child: const Text('Clear all', style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 12)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...(_recent.map((term) => _recentTile(term))),
-          const SizedBox(height: 20),
-        ],
-        const Text('Browse categories', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
-        const SizedBox(height: 12),
-        _buildCategoryChips(),
-        const SizedBox(height: 20),
-        const Text('Try searching for', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: ['Ramp Walk', 'Dance', 'Yoga', 'Fashion', 'Flip']
-              .map((tag) => GestureDetector(
-                    onTap: () { _ctrl.text = tag; _search(tag); },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: _accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _accent.withValues(alpha: 0.30)),
-                      ),
-                      child: Text(tag, style: const TextStyle(color: Color(0xFFD4A8FF), fontSize: 13)),
-                    ),
-                  ))
-              .toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _recentTile(String term) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: ListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        leading: const Icon(Icons.history_rounded, color: Colors.white30, size: 18),
-        title: Text(term, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-        trailing: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white24, size: 16),
-          onPressed: () => _removeRecent(term),
-        ),
-        onTap: () { _ctrl.text = term; _search(term); },
-      ),
-    );
-  }
-
-  Widget _buildCategoryChips() {
-    final colors = [
-      const Color(0xFF4B6EF6),
-      const Color(0xFFFF6B9D),
-      Colors.greenAccent,
-      Colors.orange,
-      const Color(0xFFFFD700),
-      const Color(0xFF06B6D4),
-    ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: List.generate(_kCategories.length, (i) {
-        final c = colors[i % colors.length];
-        return GestureDetector(
-          onTap: () { _ctrl.text = _kCategories[i]; _search(_kCategories[i]); },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: c.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: c.withValues(alpha: 0.35)),
-            ),
-            child: Text(_kCategories[i], style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w600)),
-          ),
-        );
-      }),
-    );
-  }
-
-  // ── All results (grouped) ─────────────────────────────────────────────────
-
-  Widget _buildAllResults() {
-    final allEmpty = _results.values.every((l) => l.isEmpty);
-    if (allEmpty) return _buildEmpty();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        if ((_results[_Type.challenge] ?? []).isNotEmpty) ...[
-          _sectionHeader('Challenges', _results[_Type.challenge]!.length),
-          ...(_results[_Type.challenge]!.map((r) => _challengeTile(r))),
-          const SizedBox(height: 16),
-        ],
-        if ((_results[_Type.brand] ?? []).isNotEmpty) ...[
-          _sectionHeader('Brands', _results[_Type.brand]!.length),
-          ...(_results[_Type.brand]!.map((r) => _brandTile(r))),
-          const SizedBox(height: 16),
-        ],
-        if ((_results[_Type.user] ?? []).isNotEmpty) ...[
-          _sectionHeader('Users', _results[_Type.user]!.length),
-          ...(_results[_Type.user]!.map((r) => _userTile(r))),
-          const SizedBox(height: 16),
-        ],
-        if ((_results[_Type.category] ?? []).isNotEmpty) ...[
-          _sectionHeader('Categories', _results[_Type.category]!.length),
-          ...(_results[_Type.category]!.map((r) => _categoryTile(r))),
-        ],
-      ],
-    );
-  }
-
-  // ── Per-type list ─────────────────────────────────────────────────────────
-
-  Widget _buildTypeList(_Type type) {
-    final list = _results[type] ?? [];
-    if (list.isEmpty) return _buildEmpty();
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: list.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) => _tileFor(list[i]),
-    );
-  }
-
-  Widget _tileFor(_Result r) {
-    switch (r.type) {
-      case _Type.challenge: return _challengeTile(r);
-      case _Type.brand:     return _brandTile(r);
-      case _Type.user:      return _userTile(r);
-      case _Type.category:  return _categoryTile(r);
-    }
-  }
-
-  // ── Categories tab ────────────────────────────────────────────────────────
-
-  Widget _buildCategoriesTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: [
-        const Text('All Categories', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
-        const SizedBox(height: 14),
-        ..._kCategories.map((cat) {
-          final r = _Result(_Type.category, cat, {'name': cat});
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _categoryTile(r),
-          );
-        }),
-      ],
-    );
-  }
-
-  // ── Section header ────────────────────────────────────────────────────────
-
-  Widget _sectionHeader(String label, int count) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text('$count', style: const TextStyle(color: Color(0xFFD4A8FF), fontSize: 10, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Tile builders ─────────────────────────────────────────────────────────
-
-  Widget _challengeTile(_Result r) {
-    final aura = (r.data['auraPoints'] as num?)?.toInt() ?? 0;
-    final category = r.data['category'] as String? ?? '';
-    final isSystem = (r.data['creatorId'] as String? ?? '') == 'system';
-    return _baseTile(
-      onTap: () => _openResult(context, r),
-      icon: isSystem ? Icons.auto_awesome_rounded : Icons.store_outlined,
-      iconColor: _accent,
-      title: r.data['title'] as String? ?? 'Challenge',
-      subtitle: category.isNotEmpty ? category : (isSystem ? 'Aura Arena' : 'Brand Challenge'),
-      trailing: aura > 0
-          ? Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.diamond, color: Color(0xFF7B2CBF), size: 13),
-              const SizedBox(width: 3),
-              Text('$aura', style: const TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w700)),
-            ])
-          : null,
-    );
-  }
-
-  Widget _brandTile(_Result r) {
-    final pageName = r.data['pageName'] as String? ?? r.data['name'] as String? ?? 'Brand';
-    final followers = (r.data['followerCount'] as num?)?.toInt() ?? 0;
-    return _baseTile(
-      onTap: () => _openResult(context, r),
-      icon: Icons.store_rounded,
-      iconColor: const Color(0xFF4B6EF6),
-      title: pageName,
-      subtitle: followers > 0 ? '${_fmt(followers)} followers' : 'Brand',
-      badge: 'Brand',
-      badgeColor: const Color(0xFF4B6EF6),
-    );
-  }
-
-  Widget _userTile(_Result r) {
-    final username = r.data['username'] as String? ?? 'user';
-    final aura = (r.data['totalRewards'] as num?)?.toInt() ?? 0;
-    return _baseTile(
-      onTap: () => _openResult(context, r),
-      icon: Icons.person_outline_rounded,
-      iconColor: const Color(0xFFFF6B9D),
-      title: '@$username',
-      subtitle: aura > 0 ? '${_fmt(aura)} Aura' : 'Player',
-    );
-  }
-
-  Widget _categoryTile(_Result r) {
-    final name = r.data['name'] as String? ?? '';
-    final colorMap = {
-      'Dance': const Color(0xFF4B6EF6),
-      'Fitness': Colors.greenAccent,
-      'Fashion': const Color(0xFFFF6B9D),
-      'Sports': Colors.orange,
-      'Comedy': const Color(0xFFFFD700),
-      'Skill': const Color(0xFF06B6D4),
-    };
-    final c = colorMap[name] ?? _accent;
-    return _baseTile(
-      onTap: () => _openResult(context, r),
-      icon: Icons.category_outlined,
-      iconColor: c,
-      title: name,
-      subtitle: 'Browse $name challenges',
-      badge: 'Category',
-      badgeColor: c,
-    );
-  }
-
-  Widget _baseTile({
-    required VoidCallback onTap,
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    Widget? trailing,
-    String? badge,
-    Color? badgeColor,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: iconColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 18, 18, 6),
+              child: Row(
                 children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Flexible(child: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white38, fontSize: 12))),
-                      if (badge != null) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: (badgeColor ?? _accent).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(badge, style: TextStyle(color: badgeColor ?? _accent, fontSize: 10, fontWeight: FontWeight.w600)),
-                        ),
-                      ],
-                    ],
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 12),
+                      child: Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                  ),
+                  const Text(
+                    'Search',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'ClashDisplay',
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            trailing ?? const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
+            _buildSearchBar(),
+            _buildFilterPills(),
+            Expanded(
+              child: _query.isEmpty ? _buildRecent() : _buildResults(),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ── Empty state ───────────────────────────────────────────────────────────
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  // ── Search bar ─────────────────────────────────────────────────────────────
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
         children: [
-          const Icon(Icons.search_off_rounded, color: Colors.white24, size: 52),
-          const SizedBox(height: 14),
-          const Text('No results found', style: TextStyle(color: Colors.white38, fontSize: 15)),
-          const SizedBox(height: 6),
-          Text('Try a different search term', style: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 12)),
+          const Padding(
+            padding: EdgeInsets.only(left: 14),
+            child: Icon(Icons.search_rounded,
+                color: Colors.white54, size: 20),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              focusNode: _focus,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontFamily: 'SpaceGrotesk'),
+              decoration: InputDecoration(
+                hintText: 'Search challenges, brands, creators...',
+                hintStyle: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontSize: 15,
+                    fontFamily: 'SpaceGrotesk'),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 14),
+              ),
+              onChanged: (v) {
+                setState(() => _query = v);
+                _search(v);
+              },
+            ),
+          ),
+          if (_query.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                _controller.clear();
+                setState(() {
+                  _query = '';
+                  _results = [];
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 14),
+                child: Icon(Icons.close_rounded,
+                    color: Colors.white.withValues(alpha: 0.50),
+                    size: 18),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  String _fmt(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
-    return '$n';
+  // ── Filter pills ───────────────────────────────────────────────────────────
+  Widget _buildFilterPills() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+      child: Row(
+        children: _filters.map((f) {
+          final active = f == _filter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _filter = f);
+                if (_query.isNotEmpty) _search(_query);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 18, vertical: 8),
+                decoration: BoxDecoration(
+                  color: active ? _accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: active
+                        ? _accent
+                        : Colors.white.withValues(alpha: 0.20),
+                  ),
+                ),
+                child: Text(
+                  f,
+                  style: TextStyle(
+                    color: active ? Colors.white : Colors.white60,
+                    fontSize: 13,
+                    fontWeight: active
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    fontFamily: 'SpaceGrotesk',
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
+
+  // ── Recent section ─────────────────────────────────────────────────────────
+  Widget _buildRecent() {
+    if (_recent.isEmpty) {
+      return Center(
+        child: Text(
+          'Start typing to search',
+          style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.30),
+              fontSize: 15,
+              fontFamily: 'SpaceGrotesk'),
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Recent',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'ClashDisplay')),
+            GestureDetector(
+              onTap: _clearRecent,
+              child: const Text('Clear all',
+                  style: TextStyle(
+                      color: Color(0xFF9B4DCA),
+                      fontSize: 13,
+                      fontFamily: 'SpaceGrotesk')),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ..._recent.map((item) => _RecentRow(
+              item: item,
+              onTap: () => _openRecentItem(item),
+            )),
+      ],
+    );
+  }
+
+  void _openRecentItem(_RecentItem item) {
+    if (item.type == 'Challenge') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChallengeDetail(
+            title: item.title,
+            instructions: item.subtitle,
+            videoUrl: item.imageUrl,
+            challengeId: item.id,
+          ),
+        ),
+      );
+    } else if (item.type == 'Category') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              CategoryChallengesScreen(category: item.title),
+        ),
+      );
+    }
+  }
+
+  // ── Results section ────────────────────────────────────────────────────────
+  Widget _buildResults() {
+    if (_searching) {
+      return const Center(
+          child: CircularProgressIndicator(color: _accent));
+    }
+    if (_results.isEmpty) {
+      return Center(
+        child: Text(
+          'No results for "$_query"',
+          style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.40),
+              fontFamily: 'SpaceGrotesk'),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      itemCount: _results.length,
+      itemBuilder: (context, i) {
+        final doc = _results[i];
+        final data = doc.data() as Map<String, dynamic>;
+        final isChallenge =
+            data.containsKey('videoUrl') && data.containsKey('title');
+        final isUser =
+            data.containsKey('name') && data.containsKey('username');
+        final isBrand = isUser && (data['isCreator'] == true);
+
+        final type = isChallenge
+            ? 'Challenge'
+            : isBrand
+                ? 'Brand'
+                : 'Creator';
+        final title = isChallenge
+            ? data['title'] as String? ?? ''
+            : data['name'] as String? ?? '';
+        final subtitle = isChallenge
+            ? '${data['auraPoints'] ?? 0} Aura'
+            : '@${data['username'] ?? ''}';
+        final imageUrl = isChallenge
+            ? data['thumbnailUrl'] as String? ?? ''
+            : data['profileImageUrl'] as String? ?? '';
+
+        final item = _RecentItem(
+            id: doc.id,
+            type: type,
+            title: title,
+            subtitle: subtitle,
+            imageUrl: imageUrl);
+
+        return _RecentRow(
+          item: item,
+          onTap: () => _onResultTap(doc),
+        );
+      },
+    );
+  }
+}
+
+// ── Recent item model ──────────────────────────────────────────────────────────
+class _RecentItem {
+  final String id, type, title, subtitle, imageUrl;
+  const _RecentItem({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+  });
+
+  factory _RecentItem.fromJson(Map<String, dynamic> j) => _RecentItem(
+        id: j['id'] as String? ?? '',
+        type: j['type'] as String? ?? '',
+        title: j['title'] as String? ?? '',
+        subtitle: j['subtitle'] as String? ?? '',
+        imageUrl: j['imageUrl'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'title': title,
+        'subtitle': subtitle,
+        'imageUrl': imageUrl,
+      };
+}
+
+// ── Recent row widget ─────────────────────────────────────────────────────────
+class _RecentRow extends StatelessWidget {
+  final _RecentItem item;
+  final VoidCallback onTap;
+
+  const _RecentRow({required this.item, required this.onTap});
+
+  Color get _badgeColor {
+    switch (item.type) {
+      case 'Challenge':
+        return const Color(0xFF7B2CBF);
+      case 'Brand':
+        return const Color(0xFF1B7A4A);
+      case 'Creator':
+        return const Color(0xFFB03080);
+      case 'Category':
+        return const Color(0xFFB03080);
+      default:
+        return const Color(0xFF7B2CBF);
+    }
+  }
+
+  Color get _badgeTextColor {
+    if (item.type == 'Brand') return const Color(0xFF44E896);
+    return Colors.white;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F0F1E),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 54,
+                height: 54,
+                child: item.imageUrl.isNotEmpty
+                    ? Image.network(
+                        item.imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            const _SearchPlaceholder(),
+                      )
+                    : const _SearchPlaceholder(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${item.type} · ${item.subtitle}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 12,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Type badge
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _badgeColor.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: _badgeColor.withValues(alpha: 0.55)),
+              ),
+              child: Text(
+                item.type,
+                style: TextStyle(
+                  color: _badgeTextColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'SpaceGrotesk',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Icon placeholder ──────────────────────────────────────────────────────────
+class _SearchPlaceholder extends StatelessWidget {
+  const _SearchPlaceholder();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: const Color(0xFF1A1A2E),
+        child: const Center(
+          child: Icon(Icons.image_not_supported_outlined,
+              color: Colors.white12, size: 22),
+        ),
+      );
 }

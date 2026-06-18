@@ -9,7 +9,8 @@ import '../games/blink_memory_game.dart';
 import '../games/rule_breaker_game.dart';
 
 class ArcadeScreen extends StatefulWidget {
-  const ArcadeScreen({super.key});
+  final String? initialCategory;
+  const ArcadeScreen({super.key, this.initialCategory});
 
   @override
   State<ArcadeScreen> createState() => _ArcadeScreenState();
@@ -116,6 +117,23 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       );
     }
 
+    final category = widget.initialCategory;
+    final visibleGames = category == null
+        ? kArcadeGames
+        : kArcadeGames.where((g) => g.category == category).toList();
+
+    final completedVisible =
+        visibleGames.where((g) => _progress.completedToday.contains(g.id)).length;
+
+    final headerAccent = category == 'Aura IQ' ? _cyan : _violet;
+    final eyebrow = category ?? 'AURA ARENA';
+    final title = category ?? 'Daily Arcade';
+    final subtitle = category == 'Aura Arcade'
+        ? 'Three reflex games. One sharper you.'
+        : category == 'Aura IQ'
+            ? 'Three brain games. Train your mind daily.'
+            : 'Six quick challenges. One sharper you.';
+
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -127,14 +145,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               // ── Back button ─────────────────────────────────────────────────
               GestureDetector(
                 onTap: () => Navigator.pop(context),
-                child: const Icon(Icons.arrow_back_ios_new_rounded, color: _violet, size: 22),
+                child: Icon(Icons.arrow_back_ios_new_rounded, color: headerAccent, size: 22),
               ),
               const SizedBox(height: 18),
               // ── Header ──────────────────────────────────────────────────────
-              const Text(
-                'AURA ARENA',
+              Text(
+                eyebrow.toUpperCase(),
                 style: TextStyle(
-                  color: _violet,
+                  color: headerAccent,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 3,
@@ -142,9 +160,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Daily Arcade',
-                style: TextStyle(
+              Text(
+                title,
+                style: const TextStyle(
                   color: _text,
                   fontSize: 38,
                   fontWeight: FontWeight.w900,
@@ -153,9 +171,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Six quick challenges. One sharper you.',
-                style: TextStyle(
+              Text(
+                subtitle,
+                style: const TextStyle(
                   color: _textMuted,
                   fontSize: 16,
                   fontFamily: 'SpaceGrotesk',
@@ -178,10 +196,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'DAILY PULSE',
                           style: TextStyle(
-                            color: _cyan,
+                            color: headerAccent,
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 1.8,
@@ -190,7 +208,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                         ),
                         const SizedBox(height: 7),
                         Text(
-                          '${_progress.completedToday.length} / ${kArcadeGames.length} complete',
+                          '$completedVisible / ${visibleGames.length} complete',
                           style: const TextStyle(
                             color: _text,
                             fontSize: 17,
@@ -237,7 +255,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
               // ── Game list ───────────────────────────────────────────────────
               const SizedBox(height: 18),
-              ...kArcadeGames.map(
+              ...visibleGames.map(
                 (game) => Padding(
                   padding: const EdgeInsets.only(bottom: 14),
                   child: GameCard(
