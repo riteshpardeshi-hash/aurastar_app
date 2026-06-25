@@ -184,8 +184,27 @@ workflows:
           </plist>
           PLIST
 
+          echo "=== Xcode version ==="
+          xcodebuild -version
+
+          echo "=== alwaysOutOfDate count BEFORE patch ==="
+          grep -c "alwaysOutOfDate" ios/Runner.xcodeproj/project.pbxproj || echo "0"
+
           sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
-          sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
+
+          python3 << 'PYEOF'
+          pbxproj = 'ios/Runner.xcodeproj/project.pbxproj'
+          with open(pbxproj) as f:
+              content = f.read()
+          count = content.count('alwaysOutOfDate = 1;')
+          content = content.replace('alwaysOutOfDate = 1;', '')
+          with open(pbxproj, 'w') as f:
+              f.write(content)
+          print('Removed ' + str(count) + ' occurrences of alwaysOutOfDate = 1;')
+          PYEOF
+
+          echo "=== alwaysOutOfDate count AFTER patch (expect 0) ==="
+          grep -c "alwaysOutOfDate" ios/Runner.xcodeproj/project.pbxproj || echo "0"
 
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
