@@ -158,9 +158,6 @@ workflows:
       - name: Install CocoaPods
         script: find . -name "Podfile" -execdir pod install \;
 
-      - name: Fix Xcode 15.3 script phase error
-        script: sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
-
       - name: Flutter build iOS
         script: flutter build ios --release --no-codesign
 
