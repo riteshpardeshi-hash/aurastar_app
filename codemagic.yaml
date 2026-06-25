@@ -189,7 +189,13 @@ workflows:
 
           flutter build ipa \
             --release \
-            --export-options-plist=/tmp/export_options.plist
+            --export-options-plist=/tmp/export_options.plist \
+            -- \
+            CODE_SIGN_STYLE=Manual \
+            "CODE_SIGN_IDENTITY=Apple Distribution" \
+            DEVELOPMENT_TEAM=RMATK329X8 \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
 
     artifacts:
       - build/ios/ipa/*.ipa
