@@ -151,7 +151,7 @@ workflows:
         script: |
           sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Aura Arena Prototype'" ios/Runner/Info.plist
-          echo "ENABLE_USER_SCRIPT_SANDBOXING = NO" >> ios/Flutter/Release.xcconfig
+          sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
 
       - name: Get Flutter packages
         script: flutter pub get
