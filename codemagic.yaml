@@ -72,6 +72,8 @@ workflows:
           </plist>
           PLIST
 
+          sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
+
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
             -scheme "$XCODE_SCHEME" \
@@ -143,7 +145,6 @@ workflows:
 
       - name: Patch bundle ID and app name
         script: |
-          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Aura Arena Prototype'" ios/Runner/Info.plist
 
       - name: Get Flutter packages
@@ -182,6 +183,9 @@ workflows:
           </dict>
           </plist>
           PLIST
+
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
 
           xcodebuild \
             -workspace "$XCODE_WORKSPACE" \
