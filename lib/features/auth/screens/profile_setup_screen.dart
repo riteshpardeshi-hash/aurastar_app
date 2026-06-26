@@ -2,10 +2,10 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/services/api_client.dart';
 import 'city_interests_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -127,14 +127,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       return;
     }
     setState(() => _saving = true);
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
+
+    final uid = await ApiClient().userId;
+    if (uid == null) {
       setState(() => _saving = false);
       return;
     }
 
     try {
-      // Username uniqueness check
       final username = _usernameCtrl.text.trim();
       final existing = await FirebaseFirestore.instance
           .collection('users')
@@ -152,18 +152,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
       String photoUrl = '';
       if (_pickedImage != null) {
-        final ref = FirebaseStorage.instance.ref().child('profile_photos/${user.uid}');
+        final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
         await ref.putFile(_pickedImage!);
         photoUrl = await ref.getDownloadURL();
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': _nameCtrl.text.trim(),
         'username': username,
         'dob': _dob,
         'gender': _gender ?? '',
         'state': _state ?? '',
-        'email': user.email,
         'totalRewards': 0,
         'isCreator': false,
         'isAdmin': false,
@@ -193,7 +192,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save profile. Please try again.')),
+        const SnackBar(content: Text('Failed to save profile. Please try again.')),
       );
     }
   }

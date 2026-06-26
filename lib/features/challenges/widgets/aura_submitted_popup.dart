@@ -3,21 +3,23 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/challenges_service.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'achievement_card.dart';
 
 class AuraSubmittedPopup extends StatefulWidget {
   final String submissionId;
   final String challengeTitle;
   final String challengeId;
+  final Map<String, dynamic>? initialResult;
 
   const AuraSubmittedPopup({
     super.key,
     required this.submissionId,
     required this.challengeTitle,
     required this.challengeId,
+    this.initialResult,
   });
 
   @override
@@ -34,14 +36,13 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   bool _showExplanation = false;
   bool _timedOut = false;
   Timer? _timeoutTimer;
-  StreamSubscription<DocumentSnapshot>? _sub;
+  Timer? _pollTimer;
 
   String _username = '';
   String _city = '';
   int? _cityRank;
   bool _isSharingCard = false;
   bool _isInstagramSharing = false;
-  bool _cardSaved = false;
   final _cardKey = GlobalKey();
 
   late AnimationController _enterCtrl;
@@ -91,152 +92,103 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
     _enterCtrl.forward();
 
+    if (widget.initialResult != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final data = widget.initialResult!;
+        final verdict = data['verdict'] as String? ?? '';
+        final rawStatus = data['status'] as String? ?? 'pending';
+        // If already scored, apply immediately; otherwise poll
+        if (verdict == 'PASS' || verdict == 'FAIL' ||
+            rawStatus == 'approved' || rawStatus == 'rejected' || rawStatus == 'ai_error') {
+          _applyResult(data);
+        } else {
+          _startPolling();
+        }
+      });
+      return;
+    }
+
     _timeoutTimer = Timer(const Duration(seconds: 90), () {
       if (mounted && _resultStatus == null) setState(() => _timedOut = true);
     });
 
-    _sub = FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .snapshots()
-        .listen((snap) {
-      if (!mounted || _resultStatus != null) return;
-      final data = snap.data();
-      if (data == null) return;
-      final status = data['status'] as String? ?? 'pending';
-      if (status == 'approved' || status == 'rejected' || status == 'ai_error') {
-        final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
-        final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
-        final score = (data['aiScore'] as num?)?.toInt() ?? 0;
-        final isBest = data['isBestForChallenge'] as bool? ?? false;
-        final reason = data['aiReason'] as String? ?? '';
-        final uname = data['username'] as String? ?? 'User';
-        _timeoutTimer?.cancel();
-        setState(() {
-          _resultStatus = status;
-          _netAurasAwarded = netAwarded;
-          _aiScore = score;
-          _isBestForChallenge = isBest;
-          _aiReason = reason;
-          _username = uname;
-          _showExplanation = status == 'approved' && reason.isNotEmpty;
-        });
-        _resultEnterCtrl.forward();
-        if (status == 'approved') {
-          _countCtrl.forward();
-          _particleCtrl.forward();
-          if (reason.isNotEmpty) _explanationCtrl.forward();
-          _fetchCityRankAndSaveCard();
-          _triggerReferralBonusIfEligible();
-        } else {
-          // auto-close rejected/error after 8 seconds
-          Future.delayed(const Duration(seconds: 8), () {
-            if (mounted) Navigator.of(context).pop(true);
-          });
-        }
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_resultStatus != null || !mounted) {
+        _pollTimer?.cancel();
+        return;
       }
+      try {
+        final data = await ChallengesService().fetchMySubmission(widget.challengeId);
+        if (data == null || !mounted || _resultStatus != null) return;
+        final verdict = data['verdict'] as String? ?? '';
+        final rawStatus = data['status'] as String? ?? 'pending';
+        if (verdict == 'PASS' || verdict == 'FAIL' ||
+            rawStatus == 'approved' || rawStatus == 'rejected' || rawStatus == 'ai_error') {
+          _pollTimer?.cancel();
+          _applyResult(data);
+        }
+      } catch (_) {}
     });
   }
 
-  Future<void> _triggerReferralBonusIfEligible() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    try {
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final data = userDoc.data() ?? {};
-      final referrerId = data['referredBy'] as String? ?? '';
-      final bonusApplied = data['referralBonusApplied'] as bool? ?? false;
-      if (referrerId.isEmpty || bonusApplied) return;
-
-      // Mark applied first to prevent double-trigger
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'referralBonusApplied': true,
-      });
-
-      // Award +50 to referrer
-      await FirebaseFirestore.instance.collection('users').doc(referrerId).update({
-        'totalRewards': FieldValue.increment(50),
-        'referralCompletedCount': FieldValue.increment(1),
-      });
-
-      // Wallet transaction for referrer
-      await FirebaseFirestore.instance.collection('auraTransactions').add({
-        'userId': referrerId,
-        'amount': 50,
-        'type': 'referral_join_bonus',
-        'description': 'Referral bonus — your friend completed their first challenge! +50 Auras',
-        'createdAt': Timestamp.now(),
-      });
-
-      // Notification for referrer
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'userId': referrerId,
-        'message': 'Your referral completed their first challenge! +50 Auras have been credited to your wallet.',
-        'type': 'referral',
-        'isRead': false,
-        'createdAt': Timestamp.now(),
-      });
-    } catch (_) {
-      // silently ignore — referral is best-effort
+  void _applyResult(Map<String, dynamic> data) {
+    if (!mounted || _resultStatus != null) return;
+    final verdict = data['verdict'] as String? ?? '';
+    final rawStatus = data['status'] as String? ?? '';
+    final String status;
+    if (verdict == 'PASS' || rawStatus == 'approved') {
+      status = 'approved';
+    } else if (verdict == 'FAIL' || rawStatus == 'rejected') {
+      status = 'rejected';
+    } else {
+      status = 'ai_error';
     }
-  }
-
-  Future<void> _fetchCityRankAndSaveCard() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      await _saveCardToProfile();
-      return;
-    }
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      final city = userDoc.data()?['city'] as String? ?? '';
-      final totalRewards =
-          (userDoc.data()?['totalRewards'] as num?)?.toInt() ?? 0;
-
-      if (city.isNotEmpty) {
-        final countSnap = await FirebaseFirestore.instance
-            .collection('users')
-            .where('city', isEqualTo: city)
-            .where('totalRewards', isGreaterThan: totalRewards)
-            .count()
-            .get();
-        final rank = (countSnap.count ?? 0) + 1;
-        if (mounted) {
-          setState(() {
-            _city = city;
-            _cityRank = rank;
-          });
-        }
-      }
-    } catch (_) {
-      // city rank is best-effort — proceed without it
-    }
-    await _saveCardToProfile();
-  }
-
-  Future<void> _saveCardToProfile() async {
-    if (_cardSaved) return;
-    _cardSaved = true;
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('achievement_cards')
-        .doc(widget.submissionId)
-        .set({
-      'submissionId': widget.submissionId,
-      'challengeId': widget.challengeId,
-      'challengeTitle': widget.challengeTitle,
-      'auraPoints': _netAurasAwarded,
-      'username': _username,
-      if (_city.isNotEmpty) 'city': _city,
-      if (_cityRank != null) 'cityRank': _cityRank,
-      'createdAt': Timestamp.now(),
+    final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
+    final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
+    final score = (data['aiScore'] as num?)?.toInt() ?? 0;
+    final isBest = data['isBestForChallenge'] as bool? ?? false;
+    final reason = data['aiReason'] as String? ?? '';
+    final uname = data['username'] as String? ?? '';
+    _timeoutTimer?.cancel();
+    setState(() {
+      _resultStatus = status;
+      _netAurasAwarded = netAwarded;
+      _aiScore = score;
+      _isBestForChallenge = isBest;
+      _aiReason = reason;
+      if (uname.isNotEmpty) _username = uname;
+      _showExplanation = status == 'approved' && reason.isNotEmpty;
     });
+    _resultEnterCtrl.forward();
+    if (status == 'approved') {
+      _countCtrl.forward();
+      _particleCtrl.forward();
+      if (reason.isNotEmpty) _explanationCtrl.forward();
+      _fetchUserInfoForCard();
+    } else {
+      Future.delayed(const Duration(seconds: 8), () {
+        if (mounted) Navigator.of(context).pop(true);
+      });
+    }
+  }
+
+  Future<void> _fetchUserInfoForCard() async {
+    try {
+      final profile = await AuthApiService().getProfile();
+      if (!mounted || profile == null) return;
+      final city = profile['city'] as String? ?? '';
+      final name = profile['displayName'] as String? ??
+          profile['username'] as String? ?? '';
+      setState(() {
+        if (city.isNotEmpty) _city = city;
+        if (name.isNotEmpty) _username = name;
+      });
+    } catch (_) {}
   }
 
   Future<void> _shareCard() async {
@@ -300,7 +252,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _pollTimer?.cancel();
     _timeoutTimer?.cancel();
     _enterCtrl.dispose();
     _scanCtrl.dispose();

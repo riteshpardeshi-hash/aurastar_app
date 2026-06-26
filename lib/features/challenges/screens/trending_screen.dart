@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -23,7 +23,7 @@ class _TrendingScreenState extends State<TrendingScreen>
   // Sort mode: 'joined' | 'liked'
   String _sort = 'joined';
 
-  // Cache keyed by "${tabIndex}_${sort}"
+  // Cache keyed by sort mode (tabs share same ranked list — API has no time window)
   final Map<String, List<_TrendingItem>> _cache   = {};
   final Map<String, bool>                _loading = {};
 
@@ -48,17 +48,9 @@ class _TrendingScreenState extends State<TrendingScreen>
     _loadTab(_tabCtrl.index);
   }
 
-  String _cacheKey(int tab, String sort) => '${tab}_$sort';
+  String _cacheKey(int tab, String sort) => sort;
 
   // ── Data ──────────────────────────────────────────────────────────────────
-
-  Duration _windowFor(int tab) {
-    switch (tab) {
-      case 0:  return const Duration(hours: 6);
-      case 1:  return const Duration(hours: 24);
-      default: return const Duration(days: 7);
-    }
-  }
 
   String _windowLabel(int tab) {
     switch (tab) {
@@ -73,10 +65,9 @@ class _TrendingScreenState extends State<TrendingScreen>
     if (_cache.containsKey(key)) return;
     setState(() => _loading[key] = true);
 
-    final since = DateTime.now().subtract(_windowFor(tab));
     final items = _sort == 'liked'
-        ? await _fetchMostLiked(since)
-        : await _fetchMostJoined(since);
+        ? await _fetchMostLiked()
+        : await _fetchMostJoined();
 
     if (mounted) {
       setState(() {
@@ -86,117 +77,40 @@ class _TrendingScreenState extends State<TrendingScreen>
     }
   }
 
-  // Most Joined: rank by submission count in the time window
-  Future<List<_TrendingItem>> _fetchMostJoined(DateTime since) async {
-    final subsSnap = await FirebaseFirestore.instance
-        .collection('submissions')
-        .where('status',    isEqualTo:              'approved')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .orderBy('createdAt', descending: true)
-        .limit(200)
-        .get();
-
-    final counts = <String, int>{};
-    for (final doc in subsSnap.docs) {
-      final cid = (doc.data())['challengeId'] as String? ?? '';
-      if (cid.isNotEmpty) counts[cid] = (counts[cid] ?? 0) + 1;
+  Future<List<_TrendingItem>> _fetchMostJoined() async {
+    try {
+      final raw = await ChallengesService().fetchChallenges(limit: 40);
+      final normalised = raw.map(normaliseChallenge).toList()
+        ..sort((a, b) =>
+            ((b['submissionsCount'] as int?) ?? 0)
+                .compareTo((a['submissionsCount'] as int?) ?? 0));
+      return normalised.take(15).map((c) => _TrendingItem(
+            challengeId:  c['id'] as String? ?? '',
+            data:         c,
+            attemptCount: c['submissionsCount'] as int? ?? 0,
+            starsCount:   c['starsCount'] as int? ?? 0,
+          )).toList();
+    } catch (_) {
+      return [];
     }
-
-    if (counts.isEmpty) return _fetchFallback(sortByLikes: false);
-
-    final ranked = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final topIds = ranked.take(15).map((e) => e.key).toList();
-
-    final chalSnap = await FirebaseFirestore.instance
-        .collection('challenges')
-        .where(FieldPath.documentId, whereIn: topIds)
-        .get();
-
-    final chalMap = {for (final d in chalSnap.docs) d.id: d.data()};
-
-    return ranked
-        .take(15)
-        .where((e) => chalMap.containsKey(e.key))
-        .map((e) => _TrendingItem(
-              challengeId:  e.key,
-              data:         chalMap[e.key]!,
-              attemptCount: e.value,
-              starsCount:   (chalMap[e.key]!['starsCount'] as num?)?.toInt() ?? 0,
-            ))
-        .toList();
   }
 
-  // Most Liked: get challenges active in the time window, sort by starsCount
-  Future<List<_TrendingItem>> _fetchMostLiked(DateTime since) async {
-    // Pull the same submission set to identify challenges active in the window
-    final subsSnap = await FirebaseFirestore.instance
-        .collection('submissions')
-        .where('status',    isEqualTo:              'approved')
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
-        .orderBy('createdAt', descending: true)
-        .limit(200)
-        .get();
-
-    final uniqueIds = <String>{};
-    for (final doc in subsSnap.docs) {
-      final cid = (doc.data())['challengeId'] as String? ?? '';
-      if (cid.isNotEmpty) uniqueIds.add(cid);
+  Future<List<_TrendingItem>> _fetchMostLiked() async {
+    try {
+      final raw = await ChallengesService().fetchChallenges(limit: 40);
+      final normalised = raw.map(normaliseChallenge).toList()
+        ..sort((a, b) =>
+            ((b['starsCount'] as int?) ?? 0)
+                .compareTo((a['starsCount'] as int?) ?? 0));
+      return normalised.take(15).map((c) => _TrendingItem(
+            challengeId:  c['id'] as String? ?? '',
+            data:         c,
+            attemptCount: c['submissionsCount'] as int? ?? 0,
+            starsCount:   c['starsCount'] as int? ?? 0,
+          )).toList();
+    } catch (_) {
+      return [];
     }
-
-    if (uniqueIds.isEmpty) return _fetchFallback(sortByLikes: true);
-
-    final topIds = uniqueIds.take(30).toList();
-
-    final chalSnap = await FirebaseFirestore.instance
-        .collection('challenges')
-        .where(FieldPath.documentId, whereIn: topIds)
-        .get();
-
-    final items = chalSnap.docs
-        .map((d) => _TrendingItem(
-              challengeId:  d.id,
-              data:         d.data(),
-              attemptCount: 0,
-              starsCount:   (d.data()['starsCount'] as num?)?.toInt() ?? 0,
-            ))
-        .toList()
-      ..sort((a, b) => b.starsCount.compareTo(a.starsCount));
-
-    return items.take(15).toList();
-  }
-
-  Future<List<_TrendingItem>> _fetchFallback({required bool sortByLikes}) async {
-    final snap = await FirebaseFirestore.instance
-        .collection('challenges')
-        .where('status', isEqualTo: 'approved')
-        .orderBy(sortByLikes ? 'starsCount' : 'starsCount', descending: true)
-        .limit(15)
-        .get();
-
-    if (snap.docs.isEmpty) {
-      final any = await FirebaseFirestore.instance
-          .collection('challenges')
-          .limit(15)
-          .get();
-      return any.docs
-          .map((d) => _TrendingItem(
-                challengeId:  d.id,
-                data:         d.data(),
-                attemptCount: 0,
-                starsCount:   (d.data()['starsCount'] as num?)?.toInt() ?? 0,
-              ))
-          .toList();
-    }
-
-    return snap.docs
-        .map((d) => _TrendingItem(
-              challengeId:  d.id,
-              data:         d.data(),
-              attemptCount: 0,
-              starsCount:   (d.data()['starsCount'] as num?)?.toInt() ?? 0,
-            ))
-        .toList();
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -272,7 +186,10 @@ class _TrendingScreenState extends State<TrendingScreen>
 
   void _onSortChanged(String sort) {
     if (_sort == sort) return;
-    setState(() => _sort = sort);
+    setState(() {
+      _sort = sort;
+      _cache.remove(sort);
+    });
     _loadTab(_tabCtrl.index);
   }
 
@@ -299,7 +216,6 @@ class _TrendingScreenState extends State<TrendingScreen>
     final title        = item.data['title']        as String? ?? '';
     final videoUrl     = item.data['videoUrl']     as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
-    final auraPoints   = (item.data['auraPoints']  as num?)?.toInt() ?? 0;
     final category     = item.data['category']     as String? ?? '';
     final isTop3       = index < 3;
 
@@ -426,10 +342,10 @@ class _TrendingScreenState extends State<TrendingScreen>
                               style: TextStyle(
                                   color: Colors.white24, fontSize: 11)),
                         ],
-                        const Icon(Icons.diamond, color: _accent, size: 11),
+                        const Icon(Icons.star_rounded, color: _accent, size: 11),
                         const SizedBox(width: 3),
                         Text(
-                          '$auraPoints',
+                          '${item.starsCount}',
                           style: const TextStyle(
                               color: Color(0xFFD4A8FF),
                               fontSize: 11,
@@ -438,7 +354,6 @@ class _TrendingScreenState extends State<TrendingScreen>
                       ],
                     ),
                     const SizedBox(height: 6),
-                    // Stat row — switches based on sort mode
                     if (_sort == 'joined' && item.attemptCount > 0)
                       _StatRow(
                         icon: Icons.people_outline_rounded,

@@ -1,9 +1,8 @@
-import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/category_challenges_screen.dart';
+import '../../../core/services/search_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -19,144 +18,157 @@ class _SearchScreenState extends State<SearchScreen> {
 
   final _controller = TextEditingController();
   final _focus = FocusNode();
+  final _service = SearchService();
+
   String _query = '';
   String _filter = 'All';
-  List<_RecentItem> _recent = [];
-  List<QueryDocumentSnapshot> _results = [];
+  List<_SearchItem> _recent = [];
+  List<_SearchItem> _results = [];
   bool _searching = false;
+  Timer? _debounce;
 
   static const _filters = ['All', 'Challenges', 'Brands', 'Creators'];
+
+  static const _filterTypeMap = {
+    'All': 'all',
+    'Challenges': 'challenges',
+    'Brands': 'brands',
+    'Creators': 'creators',
+  };
 
   @override
   void initState() {
     super.initState();
     _loadRecent();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _focus.requestFocus();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();
     super.dispose();
   }
 
   Future<void> _loadRecent() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList('recent_search_items') ?? [];
-    setState(() {
-      _recent = raw
-          .map((s) {
-            try {
-              return _RecentItem.fromJson(
-                  jsonDecode(s) as Map<String, dynamic>);
-            } catch (_) {
-              return null;
-            }
-          })
-          .whereType<_RecentItem>()
-          .toList();
-    });
-  }
-
-  Future<void> _saveRecent(_RecentItem item) async {
-    final updated = [item, ..._recent.where((r) => r.id != item.id)]
-        .take(20)
-        .toList();
-    setState(() => _recent = updated);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('recent_search_items',
-        updated.map((r) => jsonEncode(r.toJson())).toList());
-  }
-
-  Future<void> _clearRecent() async {
-    setState(() => _recent = []);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('recent_search_items');
+    final items = await _service.fetchRecent();
+    if (!mounted) return;
+    setState(() => _recent = items.map(_SearchItem.fromApiItem).toList());
   }
 
   Future<void> _search(String q) async {
     if (q.trim().isEmpty) {
-      setState(() {
-        _results = [];
-        _searching = false;
-      });
+      setState(() { _results = []; _searching = false; });
       return;
     }
     setState(() => _searching = true);
-    final qLower = q.toLowerCase();
-    final db = FirebaseFirestore.instance;
-    final List<QueryDocumentSnapshot> docs = [];
-
-    if (_filter == 'All' || _filter == 'Challenges') {
-      final snap = await db.collection('challenges').limit(20).get();
-      docs.addAll(snap.docs.where((d) {
-        final t = (d['title'] as String? ?? '').toLowerCase();
-        return t.contains(qLower);
-      }));
+    try {
+      final type = _filterTypeMap[_filter] ?? 'all';
+      final data = await _service.search(q, type: type);
+      if (!mounted) return;
+      setState(() {
+        _results = _parseResults(data, type);
+        _searching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() { _results = []; _searching = false; });
     }
-    if (_filter == 'All' || _filter == 'Brands') {
-      final snap = await db
-          .collection('users')
-          .where('isCreator', isEqualTo: true)
-          .limit(20)
-          .get();
-      docs.addAll(snap.docs.where((d) {
-        final n = (d['name'] as String? ?? '').toLowerCase();
-        final u = (d['username'] as String? ?? '').toLowerCase();
-        return n.contains(qLower) || u.contains(qLower);
-      }));
-    }
-    if (_filter == 'All' || _filter == 'Creators') {
-      final snap = await db.collection('users').limit(20).get();
-      docs.addAll(snap.docs.where((d) {
-        final n = (d['name'] as String? ?? '').toLowerCase();
-        final u = (d['username'] as String? ?? '').toLowerCase();
-        return n.contains(qLower) || u.contains(qLower);
-      }));
-    }
-
-    setState(() {
-      _results = docs;
-      _searching = false;
-    });
   }
 
-  void _onResultTap(QueryDocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final isChallenge =
-        data.containsKey('videoUrl') && data.containsKey('title');
-    final isUser =
-        data.containsKey('name') && data.containsKey('username');
-    final isBrand = isUser && (data['isCreator'] == true);
+  List<_SearchItem> _parseResults(Map<String, dynamic> data, String type) {
+    final items = <_SearchItem>[];
+    if (type == 'all') {
+      for (final c in (data['challenges'] as List? ?? [])) {
+        final m = c as Map<String, dynamic>;
+        items.add(_SearchItem(
+          id: m['_id'] as String? ?? '',
+          type: 'Challenge',
+          title: m['title'] as String? ?? '',
+          subtitle: '${m['starsCount'] ?? 0} Aura',
+          imageUrl: '',
+          entityType: 'challenge',
+        ));
+      }
+      for (final b in (data['brands'] as List? ?? [])) {
+        final m = b as Map<String, dynamic>;
+        items.add(_SearchItem(
+          id: m['_id'] as String? ?? '',
+          type: 'Brand',
+          title: m['displayName'] as String? ?? '',
+          subtitle: '@${m['username'] ?? ''}',
+          imageUrl: m['avatar'] as String? ?? '',
+          entityType: 'brand',
+        ));
+      }
+      for (final c in (data['creators'] as List? ?? [])) {
+        final m = c as Map<String, dynamic>;
+        items.add(_SearchItem(
+          id: m['_id'] as String? ?? '',
+          type: 'Creator',
+          title: m['displayName'] as String? ?? '',
+          subtitle: '@${m['username'] ?? ''}',
+          imageUrl: m['avatar'] as String? ?? '',
+          entityType: 'creator',
+        ));
+      }
+      for (final c in (data['categories'] as List? ?? [])) {
+        final m = c as Map<String, dynamic>;
+        items.add(_SearchItem(
+          id: m['_id'] as String? ?? '',
+          type: 'Category',
+          title: m['name'] as String? ?? '',
+          subtitle: '',
+          imageUrl: '',
+          entityType: 'category',
+        ));
+      }
+    } else {
+      for (final d in (data['docs'] as List? ?? [])) {
+        final m = d as Map<String, dynamic>;
+        if (type == 'challenges') {
+          items.add(_SearchItem(
+            id: m['_id'] as String? ?? '',
+            type: 'Challenge',
+            title: m['title'] as String? ?? '',
+            subtitle: '${m['starsCount'] ?? 0} Aura',
+            imageUrl: '',
+            entityType: 'challenge',
+          ));
+        } else {
+          items.add(_SearchItem(
+            id: m['_id'] as String? ?? '',
+            type: type == 'brands' ? 'Brand' : 'Creator',
+            title: m['displayName'] as String? ?? '',
+            subtitle: '@${m['username'] ?? ''}',
+            imageUrl: m['avatar'] as String? ?? '',
+            entityType: type == 'brands' ? 'brand' : 'creator',
+          ));
+        }
+      }
+    }
+    return items;
+  }
 
-    final item = _RecentItem(
-      id: doc.id,
-      type: isChallenge ? 'Challenge' : isBrand ? 'Brand' : 'Creator',
-      title: isChallenge
-          ? data['title'] as String? ?? ''
-          : data['name'] as String? ?? '',
-      subtitle: isChallenge
-          ? '${data['auraPoints'] ?? 0} Aura'
-          : '@${data['username'] ?? ''}',
-      imageUrl: isChallenge
-          ? data['thumbnailUrl'] as String? ?? ''
-          : data['profileImageUrl'] as String? ?? '',
-    );
-    _saveRecent(item);
-
-    if (isChallenge) {
+  void _onItemTap(_SearchItem item) {
+    _service.saveHistory(item.entityType, item.id);
+    if (item.type == 'Challenge') {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ChallengeDetail(
-            title: data['title'] as String? ?? '',
-            instructions: data['instructions'] as String? ?? '',
-            videoUrl: data['videoUrl'] as String? ?? '',
-            challengeId: doc.id,
+            title: item.title,
+            instructions: '',
+            videoUrl: '',
+            challengeId: item.id,
           ),
+        ),
+      );
+    } else if (item.type == 'Category') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CategoryChallengesScreen(category: item.title),
         ),
       );
     }
@@ -205,7 +217,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ── Search bar ─────────────────────────────────────────────────────────────
   Widget _buildSearchBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 8, 14, 10),
@@ -217,17 +228,14 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           const Padding(
             padding: EdgeInsets.only(left: 14),
-            child: Icon(Icons.search_rounded,
-                color: Colors.white54, size: 20),
+            child: Icon(Icons.search_rounded, color: Colors.white54, size: 20),
           ),
           Expanded(
             child: TextField(
               controller: _controller,
               focusNode: _focus,
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontFamily: 'SpaceGrotesk'),
+                  color: Colors.white, fontSize: 15, fontFamily: 'SpaceGrotesk'),
               decoration: InputDecoration(
                 hintText: 'Search challenges, brands, creators...',
                 hintStyle: TextStyle(
@@ -235,12 +243,16 @@ class _SearchScreenState extends State<SearchScreen> {
                     fontSize: 15,
                     fontFamily: 'SpaceGrotesk'),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 14),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               ),
               onChanged: (v) {
                 setState(() => _query = v);
-                _search(v);
+                _debounce?.cancel();
+                _debounce = Timer(
+                  const Duration(milliseconds: 400),
+                  () => _search(v),
+                );
               },
             ),
           ),
@@ -248,16 +260,12 @@ class _SearchScreenState extends State<SearchScreen> {
             GestureDetector(
               onTap: () {
                 _controller.clear();
-                setState(() {
-                  _query = '';
-                  _results = [];
-                });
+                setState(() { _query = ''; _results = []; });
               },
               child: Padding(
                 padding: const EdgeInsets.only(right: 14),
                 child: Icon(Icons.close_rounded,
-                    color: Colors.white.withValues(alpha: 0.50),
-                    size: 18),
+                    color: Colors.white.withValues(alpha: 0.50), size: 18),
               ),
             ),
         ],
@@ -265,7 +273,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ── Filter pills ───────────────────────────────────────────────────────────
   Widget _buildFilterPills() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -281,8 +288,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 if (_query.isNotEmpty) _search(_query);
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                 decoration: BoxDecoration(
                   color: active ? _accent : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
@@ -297,9 +304,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: TextStyle(
                     color: active ? Colors.white : Colors.white60,
                     fontSize: 13,
-                    fontWeight: active
-                        ? FontWeight.w700
-                        : FontWeight.w500,
+                    fontWeight:
+                        active ? FontWeight.w700 : FontWeight.w500,
                     fontFamily: 'SpaceGrotesk',
                   ),
                 ),
@@ -311,7 +317,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ── Recent section ─────────────────────────────────────────────────────────
   Widget _buildRecent() {
     if (_recent.isEmpty) {
       return Center(
@@ -327,59 +332,21 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Recent',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'ClashDisplay')),
-            GestureDetector(
-              onTap: _clearRecent,
-              child: const Text('Clear all',
-                  style: TextStyle(
-                      color: Color(0xFF9B4DCA),
-                      fontSize: 13,
-                      fontFamily: 'SpaceGrotesk')),
-            ),
-          ],
-        ),
+        const Text('Recent',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'ClashDisplay')),
         const SizedBox(height: 12),
-        ..._recent.map((item) => _RecentRow(
+        ..._recent.map((item) => _SearchRow(
               item: item,
-              onTap: () => _openRecentItem(item),
+              onTap: () => _onItemTap(item),
             )),
       ],
     );
   }
 
-  void _openRecentItem(_RecentItem item) {
-    if (item.type == 'Challenge') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChallengeDetail(
-            title: item.title,
-            instructions: item.subtitle,
-            videoUrl: item.imageUrl,
-            challengeId: item.id,
-          ),
-        ),
-      );
-    } else if (item.type == 'Category') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              CategoryChallengesScreen(category: item.title),
-        ),
-      );
-    }
-  }
-
-  // ── Results section ────────────────────────────────────────────────────────
   Widget _buildResults() {
     if (_searching) {
       return const Center(
@@ -399,99 +366,85 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       itemCount: _results.length,
       itemBuilder: (context, i) {
-        final doc = _results[i];
-        final data = doc.data() as Map<String, dynamic>;
-        final isChallenge =
-            data.containsKey('videoUrl') && data.containsKey('title');
-        final isUser =
-            data.containsKey('name') && data.containsKey('username');
-        final isBrand = isUser && (data['isCreator'] == true);
-
-        final type = isChallenge
-            ? 'Challenge'
-            : isBrand
-                ? 'Brand'
-                : 'Creator';
-        final title = isChallenge
-            ? data['title'] as String? ?? ''
-            : data['name'] as String? ?? '';
-        final subtitle = isChallenge
-            ? '${data['auraPoints'] ?? 0} Aura'
-            : '@${data['username'] ?? ''}';
-        final imageUrl = isChallenge
-            ? data['thumbnailUrl'] as String? ?? ''
-            : data['profileImageUrl'] as String? ?? '';
-
-        final item = _RecentItem(
-            id: doc.id,
-            type: type,
-            title: title,
-            subtitle: subtitle,
-            imageUrl: imageUrl);
-
-        return _RecentRow(
-          item: item,
-          onTap: () => _onResultTap(doc),
-        );
+        final item = _results[i];
+        return _SearchRow(item: item, onTap: () => _onItemTap(item));
       },
     );
   }
 }
 
-// ── Recent item model ──────────────────────────────────────────────────────────
-class _RecentItem {
-  final String id, type, title, subtitle, imageUrl;
-  const _RecentItem({
+// ── Data model ─────────────────────────────────────────────────────────────────
+
+class _SearchItem {
+  final String id, type, title, subtitle, imageUrl, entityType;
+
+  const _SearchItem({
     required this.id,
     required this.type,
     required this.title,
     required this.subtitle,
     required this.imageUrl,
+    required this.entityType,
   });
 
-  factory _RecentItem.fromJson(Map<String, dynamic> j) => _RecentItem(
-        id: j['id'] as String? ?? '',
-        type: j['type'] as String? ?? '',
-        title: j['title'] as String? ?? '',
-        subtitle: j['subtitle'] as String? ?? '',
-        imageUrl: j['imageUrl'] as String? ?? '',
-      );
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'title': title,
-        'subtitle': subtitle,
-        'imageUrl': imageUrl,
-      };
+  static _SearchItem fromApiItem(Map<String, dynamic> item) {
+    final type = item['type'] as String? ?? '';
+    final entity = item['entity'] as Map<String, dynamic>? ?? {};
+    switch (type) {
+      case 'challenge':
+        return _SearchItem(
+          id: entity['_id'] as String? ?? '',
+          type: 'Challenge',
+          title: entity['title'] as String? ?? '',
+          subtitle: '${entity['starsCount'] ?? 0} Aura',
+          imageUrl: '',
+          entityType: 'challenge',
+        );
+      case 'brand':
+      case 'creator':
+        return _SearchItem(
+          id: entity['_id'] as String? ?? '',
+          type: type == 'brand' ? 'Brand' : 'Creator',
+          title: entity['displayName'] as String? ?? '',
+          subtitle: '@${entity['username'] ?? ''}',
+          imageUrl: entity['avatar'] as String? ?? '',
+          entityType: type,
+        );
+      case 'category':
+        return _SearchItem(
+          id: entity['_id'] as String? ?? '',
+          type: 'Category',
+          title: entity['name'] as String? ?? '',
+          subtitle: '',
+          imageUrl: '',
+          entityType: 'category',
+        );
+      default:
+        return _SearchItem(
+            id: '', type: type, title: '', subtitle: '', imageUrl: '', entityType: type);
+    }
+  }
 }
 
-// ── Recent row widget ─────────────────────────────────────────────────────────
-class _RecentRow extends StatelessWidget {
-  final _RecentItem item;
+// ── Row widget ─────────────────────────────────────────────────────────────────
+
+class _SearchRow extends StatelessWidget {
+  final _SearchItem item;
   final VoidCallback onTap;
 
-  const _RecentRow({required this.item, required this.onTap});
+  const _SearchRow({required this.item, required this.onTap});
 
   Color get _badgeColor {
     switch (item.type) {
-      case 'Challenge':
-        return const Color(0xFF7B2CBF);
-      case 'Brand':
-        return const Color(0xFF1B7A4A);
-      case 'Creator':
-        return const Color(0xFFB03080);
-      case 'Category':
-        return const Color(0xFFB03080);
-      default:
-        return const Color(0xFF7B2CBF);
+      case 'Brand':   return const Color(0xFF1B7A4A);
+      case 'Creator': return const Color(0xFFB03080);
+      case 'Category':return const Color(0xFFB03080);
+      default:        return const Color(0xFF7B2CBF);
     }
   }
 
-  Color get _badgeTextColor {
-    if (item.type == 'Brand') return const Color(0xFF44E896);
-    return Colors.white;
-  }
+  Color get _badgeTextColor =>
+      item.type == 'Brand' ? const Color(0xFF44E896) : Colors.white;
 
   @override
   Widget build(BuildContext context) {
@@ -506,7 +459,6 @@ class _RecentRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
@@ -523,7 +475,6 @@ class _RecentRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            // Text
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,30 +490,30 @@ class _RecentRow extends StatelessWidget {
                       fontFamily: 'SpaceGrotesk',
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${item.type} · ${item.subtitle}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
-                      fontSize: 12,
-                      fontFamily: 'SpaceGrotesk',
+                  if (item.subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      '${item.type} · ${item.subtitle}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 12,
+                        fontFamily: 'SpaceGrotesk',
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            // Type badge
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: _badgeColor.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: _badgeColor.withValues(alpha: 0.55)),
+                border: Border.all(color: _badgeColor.withValues(alpha: 0.55)),
               ),
               child: Text(
                 item.type,
@@ -581,7 +532,6 @@ class _RecentRow extends StatelessWidget {
   }
 }
 
-// ── Icon placeholder ──────────────────────────────────────────────────────────
 class _SearchPlaceholder extends StatelessWidget {
   const _SearchPlaceholder();
 

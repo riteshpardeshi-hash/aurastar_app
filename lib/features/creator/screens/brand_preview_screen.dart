@@ -1,20 +1,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:video_player/video_player.dart';
-import 'package:path/path.dart' as path;
+import '../../../core/services/api_client.dart';
+import '../../../core/services/challenges_service.dart';
 import 'creator_challenge_submitted_screen.dart';
 
 class BrandPreviewScreen extends StatefulWidget {
-  final String       videoPath;
-  final String       challengeTitle;
-  final String       description;
-  final String       instructions;
-  final String       difficulty;
+  final String videoPath;
+  final String challengeTitle;
+  final String description;
+  final String instructions;
+  final String difficulty;
+  final String categoryId;
   final List<String> instructionSteps;
-  final List<String> scoringChecklist;
 
   const BrandPreviewScreen({
     super.key,
@@ -22,9 +20,9 @@ class BrandPreviewScreen extends StatefulWidget {
     required this.challengeTitle,
     required this.description,
     required this.instructions,
-    this.difficulty       = 'Medium',
+    required this.categoryId,
+    this.difficulty = 'Medium',
     this.instructionSteps = const [],
-    this.scoringChecklist = const [],
   });
 
   @override
@@ -33,19 +31,19 @@ class BrandPreviewScreen extends StatefulWidget {
 
 class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
   late VideoPlayerController _controller;
-  bool isUploading = false;
+  bool _isUploading = false;
+  double _progress = 0;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.file(
-      File(widget.videoPath),
-    )..initialize().then((_) {
-      if (mounted) {
-        setState(() {});
-        _controller.play();
-      }
-    });
+    _controller = VideoPlayerController.file(File(widget.videoPath))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          _controller.play();
+        }
+      });
   }
 
   @override
@@ -54,70 +52,71 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
     super.dispose();
   }
 
-  Future<void> submitChallenge() async {
+  Future<void> _submit() async {
+    setState(() {
+      _isUploading = true;
+      _progress = 0;
+    });
+
     try {
-      setState(() => isUploading = true);
+      final service = ChallengesService();
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() => isUploading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You must be signed in to submit.')),
-          );
-        }
-        return;
-      }
-      final file = File(widget.videoPath);
+      // Step 1: get presigned S3 URL
+      final presign = await service.presignChallenge();
+      final uploadUrl = presign['uploadUrl'] as String;
+      final videoKey = presign['key'] as String;
 
-      final fileName =
-          "${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}";
+      // Step 2: upload to S3
+      await ApiClient().uploadToS3(
+        uploadUrl,
+        File(widget.videoPath),
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p * 0.9);
+        },
+      );
 
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('creator_videos')
-          .child(user.uid)
-          .child(fileName);
+      // Step 3: create challenge
+      if (mounted) setState(() => _progress = 0.95);
+      final instructions = widget.instructionSteps.isNotEmpty
+          ? widget.instructionSteps
+              .asMap()
+              .entries
+              .map((e) => '${e.key + 1}. ${e.value}')
+              .join('\n')
+          : widget.instructions;
 
-      await ref.putFile(file);
-      final videoUrl = await ref.getDownloadURL();
-
-      await FirebaseFirestore.instance.collection('creator_requests').add({
-        'title':            widget.challengeTitle,
-        'description':      widget.description,
-        'instructions':     widget.instructions,
-        'difficulty':       widget.difficulty,
-        'instructionSteps': widget.instructionSteps,
-        'scoringChecklist': widget.scoringChecklist,
-        'videoUrl':         videoUrl,
-        'creatorId':        user.uid,
-        'status':           'pending',
-        'rejectionReason':  '',
-        'createdAt':        Timestamp.now(),
-      });
+      await service.createChallenge(
+        title: widget.challengeTitle,
+        description: widget.description,
+        instructions: instructions,
+        categoryId: widget.categoryId,
+        difficulty: widget.difficulty,
+        videoKey: videoKey,
+      );
 
       if (!mounted) return;
-
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const CreatorChallengeSubmittedScreen()),
+        MaterialPageRoute(
+            builder: (_) => const CreatorChallengeSubmittedScreen()),
         (route) => false,
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => isUploading = false);
+      setState(() {
+        _isUploading = false;
+        _progress = 0;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Submission failed. Please try again.')),
       );
     }
   }
 
-  void recordAgain() => Navigator.pop(context);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Preview Video")),
+      appBar: AppBar(title: const Text('Preview Video')),
       body: Column(
         children: [
           Expanded(
@@ -132,27 +131,37 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isUploading ? null : submitChallenge,
-                    child: isUploading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text("Submit"),
+            child: _isUploading
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LinearProgressIndicator(value: _progress),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${(_progress * 100).toInt()}%',
+                        style: const TextStyle(color: Colors.white54),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _submit,
+                          child: const Text('Submit'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Record Again'),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: isUploading ? null : recordAgain,
-                    child: const Text("Record Again"),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
       ),

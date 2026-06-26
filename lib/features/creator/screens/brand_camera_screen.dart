@@ -8,17 +8,17 @@ class BrandCameraScreen extends StatefulWidget {
   final String       description;
   final String       instructions;
   final String       difficulty;
+  final String       categoryId;
   final List<String> instructionSteps;
-  final List<String> scoringChecklist;
 
   const BrandCameraScreen({
     super.key,
     required this.challengeTitle,
     required this.description,
     required this.instructions,
+    required this.categoryId,
     this.difficulty       = 'Medium',
     this.instructionSteps = const [],
-    this.scoringChecklist = const [],
   });
 
   @override
@@ -173,8 +173,8 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
                                   description:      widget.description,
                                   instructions:     widget.instructions,
                                   difficulty:       widget.difficulty,
+                                  categoryId:       widget.categoryId,
                                   instructionSteps: widget.instructionSteps,
-                                  scoringChecklist: widget.scoringChecklist,
                                 ),
                               ),
                             );

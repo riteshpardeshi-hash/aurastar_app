@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/challenges_service.dart';
 import 'brand_camera_screen.dart';
 
 class CreateChallenge extends StatefulWidget {
@@ -14,15 +15,15 @@ class _CreateChallengeState extends State<CreateChallenge> {
   static const _accent = Color(0xFF7B2CBF);
 
   final _titleCtrl       = TextEditingController();
+  final _descCtrl        = TextEditingController();
   final _stepInputCtrl   = TextEditingController();
-  final _checkInputCtrl  = TextEditingController();
 
   final _stepFocus  = FocusNode();
-  final _checkFocus = FocusNode();
 
-  String             _difficulty = 'Medium';
-  final List<String> _steps      = [];
-  final List<String> _checklist  = [];
+  String             _difficulty   = 'Medium';
+  String?            _categoryId;
+  final List<String> _steps        = [];
+  List<Map<String, dynamic>> _categories = [];
 
   static const _difficulties = [
     ('Easy',   Color(0xFF22C55E)),
@@ -32,12 +33,22 @@ class _CreateChallengeState extends State<CreateChallenge> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await ChallengesService().fetchCategoriesWithIds();
+    if (mounted && cats.isNotEmpty) setState(() => _categories = cats);
+  }
+
+  @override
   void dispose() {
     _titleCtrl.dispose();
+    _descCtrl.dispose();
     _stepInputCtrl.dispose();
-    _checkInputCtrl.dispose();
     _stepFocus.dispose();
-    _checkFocus.dispose();
     super.dispose();
   }
 
@@ -53,19 +64,17 @@ class _CreateChallengeState extends State<CreateChallenge> {
     _stepFocus.requestFocus();
   }
 
-  void _addCheckItem() {
-    final text = _checkInputCtrl.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _checklist.add(text);
-      _checkInputCtrl.clear();
-    });
-    _checkFocus.requestFocus();
-  }
-
   void _openRecorder() {
     if (_titleCtrl.text.trim().isEmpty) {
       _snack('Please enter a challenge title');
+      return;
+    }
+    if (_descCtrl.text.trim().isEmpty) {
+      _snack('Please enter a description');
+      return;
+    }
+    if (_categoryId == null) {
+      _snack('Please select a category');
       return;
     }
     if (_steps.isEmpty) {
@@ -73,7 +82,6 @@ class _CreateChallengeState extends State<CreateChallenge> {
       return;
     }
 
-    // Derive a flat instructions string for backward-compat display
     final instructions = _steps
         .asMap()
         .entries
@@ -84,12 +92,12 @@ class _CreateChallengeState extends State<CreateChallenge> {
       context,
       MaterialPageRoute(
         builder: (_) => BrandCameraScreen(
-          challengeTitle:  _titleCtrl.text.trim(),
-          description:     '',
-          instructions:    instructions,
-          difficulty:      _difficulty,
+          challengeTitle:   _titleCtrl.text.trim(),
+          description:      _descCtrl.text.trim(),
+          instructions:     instructions,
+          difficulty:       _difficulty,
+          categoryId:       _categoryId!,
           instructionSteps: List.unmodifiable(_steps),
-          scoringChecklist: List.unmodifiable(_checklist),
         ),
       ),
     );
@@ -137,6 +145,73 @@ class _CreateChallengeState extends State<CreateChallenge> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
               decoration: _inputDecor('e.g. Bollywood Walk Challenge'),
             ),
+
+            const SizedBox(height: 22),
+
+            // ── Description ────────────────────────────────────────────
+            _SectionLabel('Description'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _descCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              maxLines: 3,
+              decoration: _inputDecor('Describe what participants need to do…'),
+            ),
+
+            const SizedBox(height: 22),
+
+            // ── Category ───────────────────────────────────────────────
+            _SectionLabel('Category'),
+            const SizedBox(height: 6),
+            _categories.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: CircularProgressIndicator(
+                          color: _accent, strokeWidth: 2),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _categories.map((cat) {
+                      final id   = cat['_id'] as String? ?? '';
+                      final name = cat['name'] as String? ?? id;
+                      final sel  = _categoryId == id;
+                      return GestureDetector(
+                        onTap: () => setState(() => _categoryId = id),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: sel
+                                ? _accent.withValues(alpha: 0.20)
+                                : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: sel
+                                  ? _accent.withValues(alpha: 0.75)
+                                  : Colors.white.withValues(alpha: 0.10),
+                              width: sel ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              color: sel
+                                  ? const Color(0xFFD4A8FF)
+                                  : Colors.white38,
+                              fontSize: 13,
+                              fontWeight: sel
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
 
             const SizedBox(height: 22),
 
@@ -205,7 +280,6 @@ class _CreateChallengeState extends State<CreateChallenge> {
             ),
             const SizedBox(height: 10),
 
-            // Existing steps
             if (_steps.isNotEmpty)
               _StepList(
                 items: _steps,
@@ -214,72 +288,12 @@ class _CreateChallengeState extends State<CreateChallenge> {
                 numberItems: true,
               ),
 
-            // Add step input
             _AddItemRow(
               ctrl:        _stepInputCtrl,
               focusNode:   _stepFocus,
               hint:        'Describe a step…',
               buttonLabel: 'Add step',
               onAdd:       _addStep,
-            ),
-
-            const SizedBox(height: 24),
-
-            // ── Scoring checklist builder ──────────────────────────────
-            Row(
-              children: [
-                const _SectionLabel('AI Scoring Checklist'),
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                    border:
-                        Border.all(color: _accent.withValues(alpha: 0.35)),
-                  ),
-                  child: const Text(
-                    'Optional',
-                    style: TextStyle(
-                        color: Color(0xFFD4A8FF),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-                const Spacer(),
-                if (_checklist.isNotEmpty)
-                  Text(
-                    '${_checklist.length} item${_checklist.length == 1 ? '' : 's'}',
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 12),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Each item is a YES/NO question the AI uses to score entries. '
-              'If empty, the AI scores holistically.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-            const SizedBox(height: 10),
-
-            // Existing checklist items
-            if (_checklist.isNotEmpty)
-              _StepList(
-                items: _checklist,
-                icon: Icons.check_circle_outline_rounded,
-                onDelete: (i) => setState(() => _checklist.removeAt(i)),
-                numberItems: false,
-              ),
-
-            // Add checklist item input
-            _AddItemRow(
-              ctrl:        _checkInputCtrl,
-              focusNode:   _checkFocus,
-              hint:        'e.g. Does the participant maintain eye contact?',
-              buttonLabel: 'Add item',
-              onAdd:       _addCheckItem,
             ),
 
             const SizedBox(height: 32),

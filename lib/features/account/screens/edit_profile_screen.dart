@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/auth_api_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -13,17 +12,17 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final _nameCtrl = TextEditingController();
+  final _nameCtrl     = TextEditingController();
   final _usernameCtrl = TextEditingController();
-  final _bioCtrl = TextEditingController();
-  bool _loading = true;
-  bool _saving = false;
+  bool _loading  = true;
+  bool _saving   = false;
 
-  File? _pickedImage;
-  String _currentPhotoUrl = '';
+  File?   _pickedImage;
+  String  _currentPhotoUrl = '';
+  String  _currentGender   = '';
 
   static const _accent = Color(0xFF7B2CBF);
-  static const _bg = Color(0xFF080810);
+  static const _bg     = Color(0xFF080810);
 
   @override
   void initState() {
@@ -32,18 +31,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final profile = await AuthApiService().getProfile();
     if (!mounted) return;
-    final data = doc.data() ?? {};
-    _nameCtrl.text = data['name'] as String? ?? '';
-    _usernameCtrl.text = data['username'] as String? ?? '';
-    _bioCtrl.text = data['bio'] as String? ?? '';
-    _currentPhotoUrl = data['profileImageUrl'] as String? ?? '';
+    if (profile != null) {
+      _nameCtrl.text     = profile['displayName'] as String? ?? '';
+      _usernameCtrl.text = profile['username']    as String? ?? '';
+      _currentPhotoUrl   = profile['avatar']      as String? ?? '';
+      _currentGender     = profile['gender']      as String? ?? '';
+    }
     setState(() => _loading = false);
   }
 
@@ -79,8 +74,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     );
     if (source == null) return;
-    final picked = await ImagePicker().pickImage(source: source, imageQuality: 80, maxWidth: 512);
-    if (picked != null && mounted) setState(() => _pickedImage = File(picked.path));
+    final picked = await ImagePicker().pickImage(
+        source: source, imageQuality: 80, maxWidth: 512);
+    if (picked != null && mounted) {
+      setState(() => _pickedImage = File(picked.path));
+    }
   }
 
   Widget _photoOption(IconData icon, String label, ImageSource source) {
@@ -113,38 +111,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       return;
     }
     setState(() => _saving = true);
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      setState(() => _saving = false);
-      return;
-    }
 
     try {
-      String photoUrl = _currentPhotoUrl;
+      final service = AuthApiService();
+
+      // Upload avatar if changed
       if (_pickedImage != null) {
-        final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
-        await ref.putFile(_pickedImage!);
-        if (!mounted) return;
-        photoUrl = await ref.getDownloadURL();
+        final uploadData = await service.getAvatarUploadUrl('image/jpeg');
+        final uploadUrl = uploadData['uploadUrl'] as String;
+        final publicUrl = uploadData['publicUrl'] as String;
+        await ApiClient().uploadToS3(
+          uploadUrl,
+          _pickedImage!,
+          contentType: 'image/jpeg',
+        );
+        await service.updateAvatar(publicUrl);
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'name': _nameCtrl.text.trim(),
-        'username': _usernameCtrl.text.trim(),
-        'bio': _bioCtrl.text.trim(),
-        'profileImageUrl': photoUrl,
-      });
+      // Update profile fields
+      await service.updateProfile(
+        gender:      _currentGender.isNotEmpty ? _currentGender : 'other',
+        displayName: _nameCtrl.text.trim(),
+        username:    _usernameCtrl.text.trim(),
+      );
+
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated.')),
       );
       Navigator.pop(context);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save profile. Please try again.')),
+        SnackBar(content: Text(e.toString())),
       );
     }
   }
@@ -153,7 +154,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _usernameCtrl.dispose();
-    _bioCtrl.dispose();
     super.dispose();
   }
 
@@ -172,8 +172,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               onPressed: _saving ? null : _save,
               child: _saving
                   ? const SizedBox(
-                      width: 18,
-                      height: 18,
+                      width: 18, height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
@@ -189,8 +188,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ],
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: _accent))
+          ? const Center(child: CircularProgressIndicator(color: _accent))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -224,17 +222,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               child: _pickedImage != null
                                   ? Image.file(_pickedImage!, fit: BoxFit.cover)
                                   : _currentPhotoUrl.isNotEmpty
-                                      ? Image.network(_currentPhotoUrl, fit: BoxFit.cover)
+                                      ? Image.network(_currentPhotoUrl,
+                                          fit: BoxFit.cover)
                                       : const Icon(Icons.person_rounded,
                                           color: Colors.white, size: 44),
                             ),
                           ),
                           Positioned(
-                            bottom: 0,
-                            right: 0,
+                            bottom: 0, right: 0,
                             child: Container(
-                              width: 28,
-                              height: 28,
+                              width: 28, height: 28,
                               decoration: const BoxDecoration(
                                 color: _accent,
                                 shape: BoxShape.circle,
@@ -252,10 +249,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Text(
                       'Change Photo',
                       style: TextStyle(
-                        color: _accent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          color: _accent,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -277,15 +273,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     hint: 'Your username',
                     icon: Icons.alternate_email_rounded,
                     prefix: '@',
-                  ),
-                  const SizedBox(height: 20),
-
-                  _label('Bio'),
-                  const SizedBox(height: 8),
-                  _field(
-                    controller: _bioCtrl,
-                    hint: 'Tell people about yourself…',
-                    maxLines: 4,
                   ),
                 ],
               ),

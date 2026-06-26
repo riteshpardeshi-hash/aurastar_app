@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../auth/screens/auth_choice_screen.dart';
+import '../../auth/screens/profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -90,11 +91,21 @@ class _SplashScreenState extends State<SplashScreen>
     }
     if (!mounted) return;
 
-    final user = FirebaseAuth.instance.currentUser;
+    final authService = AuthApiService();
+    final loggedIn = await authService.isLoggedIn();
+    if (!mounted) return;
+
+    Widget destination = const AuthChoiceScreen();
+    if (loggedIn) {
+      final profile = await authService.getProfile();
+      final isComplete = profile?['isProfileComplete'] as bool? ?? false;
+      destination = isComplete ? const Dashboard() : const ProfileSetupScreen();
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(PageRouteBuilder<void>(
       transitionDuration: const Duration(milliseconds: 600),
-      pageBuilder: (_, __, ___) =>
-          user != null ? const Dashboard() : const AuthChoiceScreen(),
+      pageBuilder: (_, __, ___) => destination,
       transitionsBuilder: (_, anim, __, child) =>
           FadeTransition(opacity: anim, child: child),
     ));

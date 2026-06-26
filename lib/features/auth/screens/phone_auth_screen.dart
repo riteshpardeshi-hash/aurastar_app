@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -12,151 +11,113 @@ class PhoneAuthScreen extends StatefulWidget {
 }
 
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
-  final phoneController = TextEditingController();
-  final otpController = TextEditingController();
+  final _countryCodeCtrl = TextEditingController(text: '+91');
+  final _phoneCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
 
-  String verificationId = '';
-  bool otpSent = false;
-  bool isLoading = false;
+  final _authService = AuthApiService();
+
+  bool _otpSent = false;
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    phoneController.dispose();
-    otpController.dispose();
+    _countryCodeCtrl.dispose();
+    _phoneCtrl.dispose();
+    _otpCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> sendOtp() async {
-    final phone = phoneController.text.trim();
+  String get _phone => _phoneCtrl.text.trim();
+  String get _countryCode => _countryCodeCtrl.text.trim();
 
-    if (phone.isEmpty || !phone.startsWith('+')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid phone number with country code (e.g. +91…)')),
-      );
+  Future<void> _sendOtp() async {
+    if (_phone.isEmpty || _phone.length < 7) {
+      _showSnack('Enter a valid phone number');
+      return;
+    }
+    if (!_countryCode.startsWith('+')) {
+      _showSnack('Country code must start with + (e.g. +91)');
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
-      setState(() => isLoading = true);
-
-      await FirebaseAuth.instance.verifyPhoneNumber(
-        phoneNumber: phone,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          await FirebaseAuth.instance.signInWithCredential(credential);
-          if (!mounted) return;
-          await handlePostLogin();
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          if (!mounted) return;
-          setState(() => isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not verify this number. Check it and try again.')),
-          );
-        },
-        codeSent: (String verId, int? resendToken) {
-          if (!mounted) return;
-          setState(() {
-            verificationId = verId;
-            otpSent = true;
-            isLoading = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('OTP sent successfully')),
-          );
-        },
-        codeAutoRetrievalTimeout: (String verId) {
-          verificationId = verId;
-        },
-      );
-    } catch (_) {
+      final otp = await _authService.requestOtp(phone: _phone, countryCode: _countryCode);
       if (!mounted) return;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to send OTP. Please check the number and try again.')),
-      );
+      setState(() {
+        _otpSent = true;
+        _isLoading = false;
+        if (otp != null) _otpCtrl.text = otp;
+      });
+      _showSnack('OTP sent successfully');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      _showSnack(e.toString());
     }
   }
 
-  Future<void> verifyOtp() async {
-    final otp = otpController.text.trim();
-
-    if (otp.length != 6 || int.tryParse(otp) == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the 6-digit OTP from your SMS')),
-      );
+  Future<void> _verifyOtp() async {
+    final otp = _otpCtrl.text.trim();
+    if (otp.length != 6) {
+      _showSnack('Enter the 6-digit OTP from your SMS');
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
-      setState(() => isLoading = true);
-
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: otp,
+      final result = await _authService.verifyOtp(
+        phone: _phone,
+        countryCode: _countryCode,
+        otp: otp,
       );
-
-      await FirebaseAuth.instance.signInWithCredential(credential);
-
       if (!mounted) return;
-      await handlePostLogin();
-    } catch (_) {
+      setState(() => _isLoading = false);
+
+      if (result.isNewUser || !(result.user['isProfileComplete'] as bool? ?? false)) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => Dashboard()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
       if (!mounted) return;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect OTP. Please try again.')),
-      );
+      setState(() => _isLoading = false);
+      _showSnack(e.toString());
     }
   }
 
-  Future<void> handlePostLogin() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (!mounted) return;
-
-    setState(() => isLoading = false);
-
-    if (!doc.exists) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-        (route) => false,
-      );
-    } else {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => Dashboard()),
-        (route) => false,
-      );
-    }
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  InputDecoration input(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: Colors.black54, fontSize: 16),
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Colors.white, width: 1.2),
-      ),
-    );
-  }
+  InputDecoration _input(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.black54, fontSize: 16),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Colors.white, width: 1.2),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +151,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     const Text(
-                      "Continue with Phone",
+                      'Continue with Phone',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 28,
@@ -198,19 +159,41 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       ),
                     ),
                     const SizedBox(height: 30),
-                    TextField(
-                      controller: phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: input("Phone Number (+91XXXXXXXXXX)"),
+
+                    // Country code + phone number row
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 90,
+                          child: TextField(
+                            controller: _countryCodeCtrl,
+                            keyboardType: TextInputType.phone,
+                            textAlign: TextAlign.center,
+                            decoration: _input('+91'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: _input('Phone number'),
+                          ),
+                        ),
+                      ],
                     ),
+
                     const SizedBox(height: 16),
-                    if (otpSent)
+
+                    if (_otpSent)
                       TextField(
-                        controller: otpController,
+                        controller: _otpCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: input("Enter OTP"),
+                        decoration: _input('Enter 6-digit OTP'),
                       ),
+
                     const SizedBox(height: 26),
+
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -234,8 +217,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                               borderRadius: BorderRadius.circular(28),
                             ),
                           ),
-                          onPressed: isLoading ? null : (otpSent ? verifyOtp : sendOtp),
-                          child: isLoading
+                          onPressed: _isLoading ? null : (_otpSent ? _verifyOtp : _sendOtp),
+                          child: _isLoading
                               ? const SizedBox(
                                   width: 22,
                                   height: 22,
@@ -245,7 +228,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                                   ),
                                 )
                               : Text(
-                                  otpSent ? "Verify OTP" : "Send OTP",
+                                  _otpSent ? 'Verify OTP' : 'Send OTP',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 20,
@@ -255,14 +238,26 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 18),
+
+                    if (_otpSent)
+                      TextButton(
+                        onPressed: _isLoading ? null : () => setState(() => _otpSent = false),
+                        child: const Text(
+                          'Change number',
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                      ),
+
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text(
-                        "Back",
+                        'Back',
                         style: TextStyle(color: Colors.white70, fontSize: 14),
                       ),
                     ),
+
                     const SizedBox(height: 40),
                     Image.asset(
                       'assets/images/Aura arena.png',

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -30,7 +30,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
   int _activeFilter = 0;
 
-  List<QueryDocumentSnapshot> _allDocs = [];
+  List<Map<String, dynamic>> _challenges = [];
   bool _loading = true;
   int _totalAttempts = 0;
 
@@ -43,76 +43,55 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   Future<void> _fetch() async {
     setState(() => _loading = true);
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('challenges')
-          .where('category', isEqualTo: widget.category)
-          .where('status',   isEqualTo: 'approved')
-          .limit(40)
-          .get();
-
-      // Attempt count — best-effort aggregate
-      int attempts = 0;
-      try {
-        final countSnap = await FirebaseFirestore.instance
-            .collection('submissions')
-            .where('status', isEqualTo: 'approved')
-            .where('challengeId', whereIn: snap.docs.isEmpty
-                ? ['__none__']
-                : snap.docs.map((d) => d.id).take(30).toList())
-            .count()
-            .get();
-        attempts = countSnap.count ?? 0;
-      } catch (_) {}
+      final raw = await ChallengesService().fetchChallenges(
+        category: widget.category,
+        limit: 40,
+      );
+      final challenges = raw.map(normaliseChallenge).toList();
+      final attempts = challenges.fold<int>(
+        0, (sum, c) => sum + (c['submissionsCount'] as int? ?? 0));
 
       if (!mounted) return;
       setState(() {
-        _allDocs      = snap.docs;
+        _challenges    = challenges;
         _totalAttempts = attempts;
-        _loading      = false;
+        _loading       = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // ── Filtered + sorted docs ────────────────────────────────────────────────
+  // ── Filtered + sorted challenges ──────────────────────────────────────────
 
-  List<QueryDocumentSnapshot> get _filtered {
-    var docs = List<QueryDocumentSnapshot>.from(_allDocs);
+  List<Map<String, dynamic>> get _filtered {
+    var list = List<Map<String, dynamic>>.from(_challenges);
 
     switch (_activeFilter) {
       case 0: // Trending — sort by starsCount desc
-        docs.sort((a, b) {
-          final sa = (a.data() as Map)['starsCount'] as num? ?? 0;
-          final sb = (b.data() as Map)['starsCount'] as num? ?? 0;
-          return sb.compareTo(sa);
-        });
+        list.sort((a, b) =>
+            ((b['starsCount'] as int?) ?? 0).compareTo((a['starsCount'] as int?) ?? 0));
       case 1: // New — sort by createdAt desc
-        docs.sort((a, b) {
-          final ta = (a.data() as Map)['createdAt'];
-          final tb = (b.data() as Map)['createdAt'];
+        list.sort((a, b) {
+          final ta = a['createdAt'] as String?;
+          final tb = b['createdAt'] as String?;
           if (ta == null || tb == null) return 0;
-          return (tb as Timestamp).compareTo(ta as Timestamp);
+          return tb.compareTo(ta);
         });
-      case 2: // Easy — filter then sort by auraPoints
-        docs = docs.where((d) {
-          final diff = ((d.data() as Map)['difficulty'] as String? ?? '').toLowerCase();
-          return diff == 'easy';
-        }).toList();
-        docs.sort((a, b) {
-          final pa = (a.data() as Map)['auraPoints'] as num? ?? 0;
-          final pb = (b.data() as Map)['auraPoints'] as num? ?? 0;
-          return pb.compareTo(pa);
-        });
-      case 3: // High Aura — sort by auraPoints desc
-        docs.sort((a, b) {
-          final pa = (a.data() as Map)['auraPoints'] as num? ?? 0;
-          final pb = (b.data() as Map)['auraPoints'] as num? ?? 0;
-          return pb.compareTo(pa);
-        });
+      case 2: // Easy — filter then sort by submissionsCount
+        list = list
+            .where((c) =>
+                (c['difficulty'] as String? ?? '').toLowerCase() == 'easy')
+            .toList();
+        list.sort((a, b) =>
+            ((b['submissionsCount'] as int?) ?? 0)
+                .compareTo((a['submissionsCount'] as int?) ?? 0));
+      case 3: // High Aura — sort by starsCount desc
+        list.sort((a, b) =>
+            ((b['starsCount'] as int?) ?? 0).compareTo((a['starsCount'] as int?) ?? 0));
     }
 
-    return docs;
+    return list;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -239,7 +218,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   // ── Challenge grid ────────────────────────────────────────────────────────
 
   Widget _buildGrid() {
-    final docs = _filtered;
+    final list = _filtered;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -248,19 +227,19 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
         mainAxisSpacing: 10,
         childAspectRatio: 0.72,
       ),
-      itemCount: docs.length,
-      itemBuilder: (_, i) => _buildCard(docs[i]),
+      itemCount: list.length,
+      itemBuilder: (_, i) => _buildCard(list[i]),
     );
   }
 
-  Widget _buildCard(QueryDocumentSnapshot doc) {
-    final data        = doc.data() as Map<String, dynamic>;
-    final title       = data['title']        as String? ?? '';
-    final videoUrl    = data['videoUrl']      as String? ?? '';
-    final instructions = data['instructions'] as String? ?? '';
-    final auraPoints  = (data['auraPoints']  as num?)?.toInt() ?? 0;
-    final difficulty  = data['difficulty']   as String? ?? '';
-    final isSystem    = (data['creatorId']   as String? ?? '') == 'system';
+  Widget _buildCard(Map<String, dynamic> c) {
+    final title        = c['title']        as String? ?? '';
+    final videoUrl     = c['videoUrl']     as String? ?? '';
+    final instructions = c['instructions'] as String? ?? '';
+    final starsCount   = c['starsCount']   as int?    ?? 0;
+    final difficulty   = c['difficulty']   as String? ?? '';
+    final isSystem     = (c['creatorId']   as String? ?? '') == 'system';
+    final challengeId  = c['id']           as String? ?? '';
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -268,7 +247,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
           title: title,
           instructions: instructions,
           videoUrl: videoUrl,
-          challengeId: doc.id,
+          challengeId: challengeId,
         ),
       )),
       child: Container(
@@ -351,10 +330,10 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.diamond, color: _accent, size: 12),
+                      const Icon(Icons.star_rounded, color: _accent, size: 12),
                       const SizedBox(width: 3),
                       Text(
-                        '$auraPoints',
+                        '$starsCount',
                         style: const TextStyle(color: Color(0xFFD4A8FF), fontSize: 12, fontWeight: FontWeight.w700),
                       ),
                       const Spacer(),

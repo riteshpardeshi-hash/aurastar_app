@@ -5,18 +5,21 @@ import 'package:flutter/rendering.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../dashboard/dashboard.dart';
 
 class PostScoreActionScreen extends StatefulWidget {
   final String submissionId;
   final String challengeTitle;
   final String challengeId;
+  final Map<String, dynamic>? submissionData;
 
   const PostScoreActionScreen({
     super.key,
     required this.submissionId,
     required this.challengeTitle,
     required this.challengeId,
+    this.submissionData,
   });
 
   @override
@@ -36,18 +39,32 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchSubmission();
+    if (widget.submissionData != null) {
+      _submission = _normaliseApiSubmission(widget.submissionData!);
+      _loading = false;
+    } else {
+      _fetchSubmission();
+    }
+  }
+
+  Map<String, dynamic> _normaliseApiSubmission(Map<String, dynamic> s) {
+    final verdict = s['verdict'] as String? ?? '';
+    return {
+      ...s,
+      'status': verdict == 'PASS'
+          ? 'approved'
+          : verdict == 'FAIL'
+              ? 'rejected'
+              : 'ai_error',
+    };
   }
 
   Future<void> _fetchSubmission() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submissionId)
-          .get();
+      final data = await ChallengesService().fetchMySubmission(widget.challengeId);
       if (mounted) {
         setState(() {
-          _submission = doc.data();
+          _submission = data != null ? _normaliseApiSubmission(data) : null;
           _loading = false;
         });
       }

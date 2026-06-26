@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
 import '../../../features/account/screens/my_account_screen.dart';
 import '../../../features/explore/screens/explore_creators_screen.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
+import '../../../core/services/challenges_service.dart';
 import 'challenge_detail.dart';
 import 'category_challenges_screen.dart';
 
@@ -23,31 +23,50 @@ class _AllGeneralChallengesScreenState
   static const _accent = Color(0xFF7B2CBF);
 
   String _filter = 'Trending';
+  List<Map<String, dynamic>>? _challenges;
+  bool _loading = false;
 
-  static const _categories = [
-    'Dance',
-    'Fitness',
-    'Fashion',
-    'Sports',
-    'Comedy',
-    'Skill',
+  List<String> _categories = const [
+    'Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill',
   ];
   static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
 
-  Query<Map<String, dynamic>> get _challengeQuery {
-    final base =
-        FirebaseFirestore.instance.collection('challenges');
-    switch (_filter) {
-      case 'New':
-        return base.orderBy('createdAt', descending: true).limit(10);
-      case 'High Aura':
-        return base.orderBy('auraPoints', descending: true).limit(10);
-      case 'Easy':
-        return base
-            .where('difficulty', isEqualTo: 'easy')
-            .limit(10);
-      default:
-        return base.limit(10);
+  @override
+  void initState() {
+    super.initState();
+    _loadChallenges();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final names = await ChallengesService().fetchCategories();
+    if (mounted && names.isNotEmpty) {
+      setState(() => _categories = names);
+    }
+  }
+
+  Future<void> _loadChallenges() async {
+    setState(() => _loading = true);
+    try {
+      final String? difficulty = _filter == 'Easy' ? 'Easy' : null;
+      final raw = await ChallengesService().fetchChallenges(
+        difficulty: difficulty,
+        limit: 20,
+      );
+      var list = raw.map(normaliseChallenge).toList();
+      if (_filter == 'New') {
+        list.sort((a, b) {
+          final aT = a['createdAt'] as String? ?? '';
+          final bT = b['createdAt'] as String? ?? '';
+          return bT.compareTo(aT);
+        });
+      } else if (_filter == 'High Aura') {
+        list.sort((a, b) =>
+            (b['starsCount'] as int).compareTo(a['starsCount'] as int));
+      }
+      if (mounted) setState(() { _challenges = list; _loading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _challenges = []; _loading = false; });
     }
   }
 
@@ -185,7 +204,10 @@ class _AllGeneralChallengesScreenState
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: GestureDetector(
-              onTap: () => setState(() => _filter = f),
+              onTap: () {
+                setState(() { _filter = f; _challenges = null; });
+                _loadChallenges();
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 18, vertical: 8),
@@ -219,43 +241,31 @@ class _AllGeneralChallengesScreenState
 
   // ── Challenge list ─────────────────────────────────────────────────────────
   Widget _buildChallengeList(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _challengeQuery.snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const SizedBox(
-              height: 120,
-              child: Center(
-                  child:
-                      CircularProgressIndicator(color: _accent)));
-        }
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const SizedBox(
-            height: 120,
-            child: Center(
-              child: Text('No challenges yet',
-                  style: TextStyle(color: Colors.white38)),
-            ),
-          );
-        }
-        return Column(
-          children: docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            return _ChallengeCard(
-              challengeId: doc.id,
-              title: data['title'] as String? ?? '',
-              videoUrl: data['videoUrl'] as String? ?? '',
-              thumbnailUrl: data['thumbnailUrl'] as String? ?? '',
-              auraPoints:
-                  (data['auraPoints'] as num?)?.toInt() ?? 0,
-              views: (data['views'] as num?)?.toInt() ?? 0,
-              instructions:
-                  data['instructions'] as String? ?? '',
-            );
-          }).toList(),
-        );
-      },
+    if (_loading) {
+      return const SizedBox(
+          height: 120,
+          child: Center(child: CircularProgressIndicator(color: _accent)));
+    }
+    final list = _challenges ?? [];
+    if (list.isEmpty) {
+      return const SizedBox(
+        height: 120,
+        child: Center(
+          child: Text('No challenges yet',
+              style: TextStyle(color: Colors.white38)),
+        ),
+      );
+    }
+    return Column(
+      children: list.map((c) => _ChallengeCard(
+        challengeId: c['id'] as String,
+        title: c['title'] as String,
+        videoUrl: c['videoUrl'] as String,
+        thumbnailUrl: '',
+        auraPoints: c['starsCount'] as int,
+        views: c['submissionsCount'] as int,
+        instructions: c['instructions'] as String,
+      )).toList(),
     );
   }
 
@@ -400,49 +410,53 @@ class _AllGeneralChallengesScreenState
   }
 }
 
-// ── Category tile (fetches first challenge in category) ────────────────────────
-class _CategoryTile extends StatelessWidget {
+// ── Category tile ──────────────────────────────────────────────────────────────
+class _CategoryTile extends StatefulWidget {
   final String category;
   const _CategoryTile({required this.category});
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('challenges')
-          .where('category', isEqualTo: category)
-          .limit(1)
-          .snapshots(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
-        final data = docs.isNotEmpty
-            ? docs.first.data() as Map<String, dynamic>
-            : null;
-        final thumbnailUrl = data?['thumbnailUrl'] as String? ?? '';
-        final videoUrl = data?['videoUrl'] as String? ?? '';
+  State<_CategoryTile> createState() => _CategoryTileState();
+}
 
-        return GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) =>
-                    CategoryChallengesScreen(category: category)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (thumbnailUrl.isNotEmpty)
-                  Image.network(thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          const _DarkPlaceholder())
-                else if (videoUrl.isNotEmpty)
-                  VideoThumbnailWidget(
-                      videoUrl: videoUrl, fit: BoxFit.cover)
-                else
-                  const _DarkPlaceholder(),
+class _CategoryTileState extends State<_CategoryTile> {
+  String? _videoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await ChallengesService()
+          .fetchChallenges(category: widget.category, limit: 1);
+      if (mounted && list.isNotEmpty) {
+        setState(() => _videoUrl = list.first['videoUrl'] as String? ?? '');
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final videoUrl = _videoUrl ?? '';
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) =>
+                CategoryChallengesScreen(category: widget.category)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (videoUrl.isNotEmpty)
+              VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover)
+            else
+              const _DarkPlaceholder(),
                 Container(
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
@@ -458,7 +472,7 @@ class _CategoryTile extends StatelessWidget {
                   left: 0,
                   right: 0,
                   child: Text(
-                    category,
+                    widget.category,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -472,8 +486,6 @@ class _CategoryTile extends StatelessWidget {
             ),
           ),
         );
-      },
-    );
   }
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import '../../splash/screens/splash_screen.dart';
@@ -128,7 +129,10 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
-    await FirebaseAuth.instance.signOut();
+    await Future.wait([
+      AuthApiService().logout(),
+      FirebaseAuth.instance.signOut(),
+    ]);
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,

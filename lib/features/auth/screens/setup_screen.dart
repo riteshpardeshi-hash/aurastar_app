@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/api_client.dart';
 import '../../dashboard/dashboard.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -61,50 +60,23 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Future<void> _finish() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = await ApiClient().userId;
+    if (uid == null || uid.isEmpty) {
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const Dashboard()),
+        (_) => false,
+      );
+      return;
+    }
 
     setState(() => _saving = true);
-    final prefs = await SharedPreferences.getInstance();
-
     try {
-      final manualCode = _referralCodeCtrl.text.trim().toUpperCase();
-      final deepLinkCode = prefs.getString('pending_referral_code') ?? '';
-      final codeToApply = manualCode.isNotEmpty ? manualCode : deepLinkCode;
-
-      if (codeToApply.isNotEmpty) {
-        final referrerId = await _lookupReferrerId(uid, codeToApply);
-        if (referrerId == null && manualCode.isNotEmpty) {
-          // Invalid manual code — warn and block
-          if (mounted) {
-            setState(() => _saving = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Referral code not found. Clear it to continue.'),
-                backgroundColor: Colors.redAccent,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-          return;
-        }
-        if (referrerId != null) {
-          final batch = FirebaseFirestore.instance.batch();
-          batch.update(
-            FirebaseFirestore.instance.collection('users').doc(uid),
-            {'referredBy': referrerId},
-          );
-          batch.update(
-            FirebaseFirestore.instance.collection('users').doc(referrerId),
-            {'referralCount': FieldValue.increment(1)},
-          );
-          await batch.commit();
-        }
-        await prefs.remove('pending_referral_code');
-      }
-    } catch (_) {
-      // Referral write failed — still navigate
-    } finally {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_referral_code');
+      // TODO: wire referral code to backend API when endpoint is available
+    } catch (_) {} finally {
       if (mounted) setState(() => _saving = false);
     }
 
@@ -114,28 +86,6 @@ class _SetupScreenState extends State<SetupScreen> {
       MaterialPageRoute(builder: (_) => const Dashboard()),
       (_) => false,
     );
-  }
-
-  Future<String?> _lookupReferrerId(String uid, String code) async {
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      if ((userDoc.data()?['referredBy'] as String? ?? '').isNotEmpty) {
-        return null; // Already referred
-      }
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('referralCode', isEqualTo: code)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return null;
-      final referrerId = snap.docs.first.id;
-      return referrerId == uid ? null : referrerId;
-    } catch (_) {
-      return null;
-    }
   }
 
   @override

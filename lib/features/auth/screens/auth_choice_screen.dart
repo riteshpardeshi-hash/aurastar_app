@@ -1,11 +1,10 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'login_screen.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
@@ -48,36 +47,6 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
     );
   }
 
-  // ── Shared: post-credential navigation ──────────────────────────────────────
-
-  Future<void> _handleCredential(UserCredential userCred) async {
-    final user = userCred.user;
-    if (user == null) {
-      if (mounted) setState(() => _loading = null);
-      return;
-    }
-
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (!mounted) return;
-    setState(() => _loading = null);
-
-    if (!doc.exists) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const Dashboard()),
-      );
-    }
-  }
-
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -86,6 +55,17 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  void _navigateAfterAuth(bool isNewUser, Map<String, dynamic> user) {
+    final isProfileComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            isProfileComplete ? const Dashboard() : const ProfileSetupScreen(),
       ),
     );
   }
@@ -102,14 +82,13 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         return;
       }
       final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      final userCred =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-      await _handleCredential(userCred);
-    } catch (_) {
+      final idToken = googleAuth.idToken;
+      if (idToken == null) throw Exception('No ID token from Google');
+
+      final result = await AuthApiService().signInWithGoogle(idToken);
+      if (!mounted) return;
+      _navigateAfterAuth(result.isNewUser, result.user);
+    } catch (e) {
       if (mounted) setState(() => _loading = null);
       _showError('Google sign-in failed. Please try again.');
     }
@@ -127,15 +106,17 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
           AppleIDAuthorizationScopes.fullName,
         ],
       );
-      final oAuthProvider = OAuthProvider('apple.com');
-      final credential = oAuthProvider.credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
+      final idToken = appleCredential.identityToken;
+      final authCode = appleCredential.authorizationCode;
+      if (idToken == null) throw Exception('No identity token from Apple');
+
+      final result = await AuthApiService().signInWithApple(
+        idToken: idToken,
+        authorizationCode: authCode,
       );
-      final userCred =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-      await _handleCredential(userCred);
-    } catch (_) {
+      if (!mounted) return;
+      _navigateAfterAuth(result.isNewUser, result.user);
+    } catch (e) {
       if (mounted) setState(() => _loading = null);
       _showError('Apple sign-in failed. Please try again.');
     }

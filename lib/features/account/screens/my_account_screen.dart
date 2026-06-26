@@ -1,64 +1,55 @@
-import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/challenges_service.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
+import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
 import 'settings_screen.dart';
 import 'saved_challenges_screen.dart';
+import 'edit_profile_screen.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
 class _AchievementCardsSection extends StatelessWidget {
-  final String uid;
-  const _AchievementCardsSection({required this.uid});
+  final List<Map<String, dynamic>> cards;
+  const _AchievementCardsSection({required this.cards});
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('achievement_cards')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder: (context, snap) {
-        if (!snap.hasData || snap.data!.docs.isEmpty) return const SizedBox.shrink();
+    if (cards.isEmpty) return const SizedBox.shrink();
 
-        final cards = snap.data!.docs;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'My Achievement Cards',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Tap a card to share it',
-              style: TextStyle(fontSize: 12, color: Colors.black45),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 220,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: cards.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, i) {
-                  final data = cards[i].data() as Map<String, dynamic>;
-                  return _AchievementCardTile(cardData: data);
-                },
-              ),
-            ),
-          ],
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MY ACHIEVEMENT CARDS',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 220,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: cards.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, i) =>
+                _AchievementCardTile(cardData: cards[i]),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
@@ -80,16 +71,20 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
     setState(() => _sharing = true);
     try {
       Uint8List? bytes;
-      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary != null) {
         final image = await boundary.toImage(pixelRatio: 3.0);
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        final byteData =
+            await image.toByteData(format: ui.ImageByteFormat.png);
         bytes = byteData?.buffer.asUint8List();
       }
 
       final challengeId = widget.cardData['challengeId'] as String? ?? '';
-      final challengeTitle = widget.cardData['challengeTitle'] as String? ?? '';
-      final auraPoints = (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
+      final challengeTitle =
+          widget.cardData['challengeTitle'] as String? ?? '';
+      final auraPoints =
+          (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
       final link = '$kChallengeBaseUrl/$challengeId';
       final message =
           'I completed "$challengeTitle" on Aura and earned $auraPoints Aura Points! 🏆\n\n'
@@ -98,14 +93,17 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
 
       if (bytes != null) {
         await Share.shareXFiles(
-          [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
+          [
+            XFile.fromData(bytes,
+                mimeType: 'image/png', name: 'aura_achievement.png')
+          ],
           text: message,
         );
       } else {
         await Share.share(message);
       }
     } catch (_) {
-      // share cancelled or failed — ignore
+      // share cancelled or failed
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -113,9 +111,11 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
 
   @override
   Widget build(BuildContext context) {
-    final challengeTitle = widget.cardData['challengeTitle'] as String? ?? '';
+    final challengeTitle =
+        widget.cardData['challengeTitle'] as String? ?? '';
     final challengeId = widget.cardData['challengeId'] as String? ?? '';
-    final auraPoints = (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
+    final auraPoints =
+        (widget.cardData['auraPoints'] as num?)?.toInt() ?? 0;
     final username = widget.cardData['username'] as String? ?? '';
     final city = widget.cardData['city'] as String?;
     final cityRank = (widget.cardData['cityRank'] as num?)?.toInt();
@@ -124,9 +124,6 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
       onTap: _shareCard,
       child: Stack(
         children: [
-          // FittedBox scales the full-size card to fit the tile area.
-          // RepaintBoundary wraps the full-size card so the captured
-          // screenshot is at full resolution (288×~380 logical px at 3x).
           SizedBox(
             width: 196,
             height: 220,
@@ -156,7 +153,8 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF7B2CBF), strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                      color: Color(0xFF7B2CBF), strokeWidth: 2),
                 ),
               ),
             ),
@@ -164,7 +162,8 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
             bottom: 6,
             right: 6,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: const Color(0xFF7B2CBF).withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(12),
@@ -174,7 +173,11 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
                 children: [
                   Icon(Icons.share_rounded, color: Colors.white, size: 11),
                   SizedBox(width: 4),
-                  Text('Share', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
+                  Text('Share',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -187,11 +190,56 @@ class _AchievementCardTileState extends State<_AchievementCardTile> {
 
 // ── MyAccountScreen ────────────────────────────────────────────────────────────
 
-class MyAccountScreen extends StatelessWidget {
+class MyAccountScreen extends StatefulWidget {
   const MyAccountScreen({super.key});
 
+  @override
+  State<MyAccountScreen> createState() => _MyAccountScreenState();
+}
+
+class _MyAccountScreenState extends State<MyAccountScreen> {
   static const int _xpPerLevel = 1300;
   static const _accent = Color(0xFF7B2CBF);
+  static const _bg = Color(0xFF080810);
+  static const _card = Color(0xFF0E0C1E);
+
+  bool _loading = true;
+  String? _uid;
+  Map<String, dynamic> _profile = {};
+  List<Map<String, dynamic>> _videos = [];
+  List<Map<String, dynamic>> _achievements = [];
+  List<Map<String, dynamic>> _savedChallenges = [];
+  Map<String, dynamic>? _referral;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    final uid = await ApiClient().userId;
+    final results = await Future.wait<dynamic>([
+      AuthApiService().getProfile(),
+      AuthApiService().fetchMyVideos(limit: 10),
+      AuthApiService().fetchAchievements(),
+      AuthApiService().fetchSavedChallenges(limit: 4),
+      AuthApiService().fetchReferralStats(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _uid = uid;
+      _profile = results[0] as Map<String, dynamic>? ?? {};
+      _videos = (results[1] as List).cast<Map<String, dynamic>>();
+      _achievements = (results[2] as List).cast<Map<String, dynamic>>();
+      _savedChallenges = (results[3] as List)
+          .cast<Map<String, dynamic>>()
+          .map(normaliseChallenge)
+          .toList();
+      _referral = results[4] as Map<String, dynamic>?;
+      _loading = false;
+    });
+  }
 
   int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
   int _xpInLevel(int pts) => pts % _xpPerLevel;
@@ -203,75 +251,157 @@ class MyAccountScreen extends StatelessWidget {
     return '$n';
   }
 
-  Widget _buildLevelStar(int level) {
-    final tier = auraTierForLevel(level);
-    return SizedBox(
-      width: 100,
-      height: 100,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  tier.color.withValues(alpha: 0.35),
-                  tier.color.withValues(alpha: 0.08),
-                ],
-              ),
-              border: Border.all(color: tier.color.withValues(alpha: 0.70), width: 2.5),
-              boxShadow: [
-                BoxShadow(
-                  color: tier.color.withValues(alpha: 0.35),
-                  blurRadius: 14,
-                  spreadRadius: 2,
+  static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
+    final verdict = s['verdict'] as String?;
+    final rawStatus = s['status'] as String?;
+    final status = verdict != null
+        ? (verdict == 'PASS'
+            ? 'approved'
+            : verdict == 'FAIL'
+                ? 'rejected'
+                : 'ai_error')
+        : rawStatus ?? 'pending';
+    return {
+      'submissionId': s['_id'] as String? ?? s['id'] as String? ?? '',
+      'videoUrl': s['videoUrl'] as String? ?? '',
+      'status': status,
+      'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
+      'aiScore': s['aiScore'],
+      'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',
+      'reviewedByAI': s['reviewedByAI'] as bool? ?? true,
+    };
+  }
+
+  // ── Profile card ─────────────────────────────────────────────────────────────
+  Widget _buildProfileCard(BuildContext context) {
+    final name = _profile['displayName'] as String? ?? 'User';
+    final username = _profile['username'] as String? ?? '';
+    final gender = (_profile['gender'] as String? ?? '').trim();
+    final photoUrl = _profile['avatar'] as String? ?? '';
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+      ).then((_) => _loadAll()),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _accent.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          children: [
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 38,
+                  backgroundColor: _accent.withValues(alpha: 0.20),
+                  backgroundImage: photoUrl.isNotEmpty
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  child: photoUrl.isEmpty
+                      ? Text(
+                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: _accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _card, width: 2),
+                    ),
+                    child: const Icon(Icons.edit, color: Colors.white, size: 11),
+                  ),
                 ),
               ],
             ),
-          ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Level', style: TextStyle(color: Colors.white70, fontSize: 10)),
-              Text(
-                '$level',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  height: 1.1,
-                ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text('@$username',
+                      style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                  if (gender.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline_rounded,
+                            color: Colors.white38, size: 14),
+                        const SizedBox(width: 4),
+                        Text(gender,
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ],
               ),
-              Text(
-                tier.name,
-                style: TextStyle(
-                  color: tier.color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                ),
+            ),
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: _accent.withValues(alpha: 0.55), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withValues(alpha: 0.25),
+                    blurRadius: 14,
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: Color(0xFFD4A8FF),
+                size: 32,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // ── Aura points card ─────────────────────────────────────────────────────────
   Widget _buildAuraPointsCard(int points) {
     final level = _level(points);
     final progress = _progress(points);
     final xpToNext = _xpPerLevel - _xpInLevel(points);
+    final tier = auraTierForLevel(level);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 20),
+      margin: const EdgeInsets.only(bottom: 20),
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _accent.withValues(alpha: 0.35), width: 1),
+        border:
+            Border.all(color: _accent.withValues(alpha: 0.35), width: 1),
       ),
       child: Stack(
         children: [
@@ -294,62 +424,123 @@ class MyAccountScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Your Aura Points',
-                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                            'YOUR AURA POINTS',
+                            style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                                letterSpacing: 0.5),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.diamond,
+                                  color: Color(0xFFD4A8FF), size: 28),
+                              const SizedBox(width: 6),
+                              Text(
+                                _fmt(points),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 44,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            tier.color.withValues(alpha: 0.35),
+                            tier.color.withValues(alpha: 0.08),
+                          ],
+                        ),
+                        border: Border.all(
+                            color: tier.color.withValues(alpha: 0.70),
+                            width: 2.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: tier.color.withValues(alpha: 0.35),
+                            blurRadius: 14,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('LEVEL',
+                              style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 9,
+                                  letterSpacing: 1)),
                           Text(
-                            _fmt(points),
+                            '$level',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 42,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               height: 1.0,
+                            ),
+                          ),
+                          Text(
+                            tier.name,
+                            style: TextStyle(
+                              color: tier.color,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    _buildLevelStar(level),
                   ],
                 ),
-                const SizedBox(height: 22),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '$xpToNext XP to Next Level',
-                      style: const TextStyle(color: Colors.white60, fontSize: 11),
-                    ),
-                    Text(
-                      '${(progress * 100).round()}%',
-                      style: const TextStyle(color: Colors.white60, fontSize: 11),
-                    ),
-                  ],
+                const SizedBox(height: 18),
+                Text(
+                  '$xpToNext XP to Next Level',
+                  style: const TextStyle(
+                      color: Colors.white60, fontSize: 11),
                 ),
-                const SizedBox(height: 7),
+                const SizedBox(height: 6),
                 LayoutBuilder(
-                  builder: (context, constraints) {
-                    return Stack(
-                      children: [
-                        Container(
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: Colors.white12,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        ClipRRect(
+                  builder: (context, constraints) => Stack(
+                    children: [
+                      Container(
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.white12,
                           borderRadius: BorderRadius.circular(4),
-                          child: SizedBox(
-                            height: 5,
-                            width: constraints.maxWidth * progress,
-                            child: Image.asset('assets/images/bar.png', fit: BoxFit.fill),
-                          ),
                         ),
-                      ],
-                    );
-                  },
+                      ),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          height: 5,
+                          width: constraints.maxWidth * progress,
+                          child: Image.asset('assets/images/bar.png',
+                              fit: BoxFit.fill),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '${(progress * 100).round()}%',
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 10),
+                  ),
                 ),
               ],
             ),
@@ -359,158 +550,98 @@ class MyAccountScreen extends StatelessWidget {
     );
   }
 
-  static String _makeCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rng = Random.secure();
-    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
-  }
+  // ── Referral card ─────────────────────────────────────────────────────────────
+  Widget _buildReferralCard(BuildContext context) {
+    final referralCode = _referral?['referralCode'] as String? ?? '';
+    if (referralCode.isEmpty) return const SizedBox.shrink();
 
-  Widget _buildReferralCard(
-      BuildContext context, String referralCode, Map<String, dynamic> userData) {
-    // Existing users created before referral system — generate a code lazily
-    if (referralCode.isEmpty) {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final newCode = _makeCode();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-            'referralCode': newCode,
-            'referredBy': '',
-            'referralBonusApplied': false,
-            'referralCount': 0,
-            'referralCompletedCount': 0,
-          });
-        });
-      }
-      return const SizedBox.shrink(); // StreamBuilder will re-render once Firestore updates
-    }
-    final referralCount = (userData['referralCount'] as num?)?.toInt() ?? 0;
-    final completedCount =
-        (userData['referralCompletedCount'] as num?)?.toInt() ?? 0;
     final link = 'https://aura-app-efae1.web.app/ref/$referralCode';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: _card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _accent.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text(
+                      'REFER TO FRIENDS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Share your code. When your friend completes a challenge, you earn 50 Auras!',
+                      style: TextStyle(
+                          color: Colors.white54, fontSize: 11, height: 1.4),
+                    ),
+                  ],
                 ),
-                child: const Icon(Icons.group_add_rounded,
-                    color: _accent, size: 18),
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Refer to Friends',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text(
+                    'Tap to copy Referral code',
+                    style: TextStyle(color: Colors.white38, fontSize: 9),
+                  ),
+                  const SizedBox(height: 5),
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: referralCode));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Referral code copied!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _accent,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accent.withValues(alpha: 0.40),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        referralCode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          const Text(
-            'Share your code. When your friend completes a challenge, you earn 50 Auras!',
-            style:
-                TextStyle(color: Colors.black54, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 14),
-          // Code display row
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _accent.withValues(alpha: 0.22)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Your referral code',
-                          style:
-                              TextStyle(color: Colors.black38, fontSize: 10)),
-                      const SizedBox(height: 2),
-                      Text(
-                        referralCode,
-                        style: const TextStyle(
-                          color: _accent,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 3,
-                          fontFamily: 'SpaceGrotesk',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: referralCode));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Referral code copied!'),
-                          duration: Duration(seconds: 2)),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _accent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.copy_rounded, color: _accent, size: 14),
-                        SizedBox(width: 4),
-                        Text('Copy',
-                            style: TextStyle(
-                                color: _accent,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // Stats
-          Row(
-            children: [
-              _referralStat('$referralCount', 'Joined'),
-              const SizedBox(width: 20),
-              _referralStat('$completedCount', 'Completed'),
-              const SizedBox(width: 20),
-              _referralStat('${completedCount * 50}', 'Auras Earned'),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Share button
+          const SizedBox(height: 16),
           GestureDetector(
             onTap: () => Share.share(
               '🎯 Join Aura Arena — copy viral challenges and earn real rewards!\n\n'
@@ -520,7 +651,7 @@ class MyAccountScreen extends StatelessWidget {
             ),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 13),
+              padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
@@ -534,12 +665,12 @@ class MyAccountScreen extends StatelessWidget {
                     Icon(Icons.share_rounded, color: Colors.white, size: 16),
                     SizedBox(width: 8),
                     Text(
-                      'Share Referral Link',
+                      'SHARE REFERRAL LINK',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'SpaceGrotesk',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1,
                       ),
                     ),
                   ],
@@ -552,417 +683,10 @@ class MyAccountScreen extends StatelessWidget {
     );
   }
 
-  Widget _referralStat(String value, String label) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: _accent)),
-          Text(label,
-              style:
-                  const TextStyle(color: Colors.black38, fontSize: 11)),
-        ],
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF6F7FB),
-        body: Center(child: Text('Not signed in.')),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(
-        title: const Text("My Account"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-        ],
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .snapshots(),
-        builder: (context, userSnapshot) {
-          if (userSnapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text("User data error: ${userSnapshot.error}"),
-              ),
-            );
-          }
-
-          if (userSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-            return const Center(child: Text("User profile not found."));
-          }
-
-          final userData = userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-
-          final name = userData['name'] ?? 'User';
-          final username = userData['username'] ?? '';
-          final gender = (userData['gender'] as String? ?? '').trim();
-          final totalRewards = userData['totalRewards'] ?? 0;
-
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('submissions')
-                .where('userId', isEqualTo: user.uid)
-                .where('isDeleted', isEqualTo: false)
-                .snapshots(),
-            builder: (context, submissionSnapshot) {
-              if (submissionSnapshot.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      "Submission error: ${submissionSnapshot.error}",
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                );
-              }
-
-              if (submissionSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              if (!submissionSnapshot.hasData) {
-                return const Center(child: Text("No submission data found."));
-              }
-
-              final submissions = submissionSnapshot.data!.docs.toList();
-
-              submissions.sort((a, b) {
-                final aData = a.data() as Map<String, dynamic>;
-                final bData = b.data() as Map<String, dynamic>;
-                final aCreatedAt = aData['createdAt'];
-                final bCreatedAt = bData['createdAt'];
-                if (aCreatedAt is Timestamp && bCreatedAt is Timestamp) {
-                  return bCreatedAt.compareTo(aCreatedAt);
-                }
-                return 0;
-              });
-
-              final totalSubmissions = submissions.length;
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF3A1C71), Color(0xFFD76D77)],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            "@$username",
-                            style: const TextStyle(color: Colors.white70, fontSize: 15),
-                          ),
-                          if (gender.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.person_outline, color: Colors.white54, size: 15),
-                                const SizedBox(width: 5),
-                                Text(
-                                  gender,
-                                  style: const TextStyle(color: Colors.white60, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildAuraPointsCard(totalRewards),
-                    _RewardsSection(level: _level(totalRewards)),
-                    _buildReferralCard(
-                        context,
-                        userData['referralCode'] as String? ?? '',
-                        userData),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          const Icon(Icons.video_collection, size: 32, color: Colors.deepPurple),
-                          const SizedBox(height: 10),
-                          Text(
-                            "$totalSubmissions",
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text("Total Videos Submitted", style: TextStyle(color: Colors.black54)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    _AchievementCardsSection(uid: user.uid),
-                    const SizedBox(height: 16),
-                    _SavedChallengesRow(uid: user.uid),
-                    const SizedBox(height: 12),
-                    _ClaimedOffersRow(uid: user.uid),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "My Videos",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    if (submissions.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Text(
-                          "You have not submitted any videos yet.",
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    else
-                      Column(
-                        children: submissions.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final doc = entry.value;
-                          final data = doc.data() as Map<String, dynamic>;
-
-                          final auraPoints = data['auraPoints'] ?? 0;
-                          final videoUrl = data['videoUrl'] ?? '';
-                          final status = data['status'] ?? 'pending';
-                          final aiScore = data['aiScore'];
-                          final aiReason = data['aiReason'] ?? '';
-                          final reviewedByAI = data['reviewedByAI'] == true;
-                          final challengeTitle = data['challengeTitle'] ?? '';
-
-                          Color statusColor;
-                          String statusLabel;
-                          IconData statusIcon;
-                          if (status == 'approved') {
-                            statusColor = Colors.green;
-                            statusLabel = 'Approved';
-                            statusIcon = Icons.check_circle;
-                          } else if (status == 'rejected') {
-                            statusColor = Colors.red;
-                            statusLabel = 'Rejected';
-                            statusIcon = Icons.cancel;
-                          } else if (status == 'ai_error') {
-                            statusColor = Colors.orange;
-                            statusLabel = 'Manual Review';
-                            statusIcon = Icons.pending;
-                          } else {
-                            statusColor = const Color(0xFF7B2CBF);
-                            statusLabel = 'AI Reviewing...';
-                            statusIcon = Icons.auto_awesome;
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      challengeTitle.isNotEmpty ? challengeTitle : "Video ${index + 1}",
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: statusColor.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          status == 'pending'
-                                              ? SizedBox(
-                                                  width: 12,
-                                                  height: 12,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: statusColor,
-                                                  ),
-                                                )
-                                              : Icon(statusIcon, size: 14, color: statusColor),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            statusLabel,
-                                            style: TextStyle(
-                                              color: statusColor,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (reviewedByAI && aiScore != null) ...[
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.star, size: 16, color: Color(0xFF7B2CBF)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        "AI Score: $aiScore / 100",
-                                        style: const TextStyle(
-                                          color: Color(0xFF7B2CBF),
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      if (status == 'approved') ...[
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          "+$auraPoints pts",
-                                          style: const TextStyle(
-                                            color: Colors.green,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  if (aiReason.isNotEmpty) ...[
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      aiReason,
-                                      style: const TextStyle(
-                                        color: Colors.black54,
-                                        fontSize: 13,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    ),
-                                  ],
-                                ] else if (status == 'approved') ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "Aura Points: $auraPoints",
-                                    style: const TextStyle(
-                                      color: Colors.deepPurple,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 10),
-                                if (videoUrl.toString().isNotEmpty)
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton(
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => UserVideoDetailScreen(
-                                              videoNumber: index + 1,
-                                              auraPoints: auraPoints,
-                                              videoUrl: videoUrl,
-                                              status: status,
-                                              aiScore: aiScore,
-                                              aiReason: aiReason,
-                                              reviewedByAI: reviewedByAI,
-                                              submissionId: doc.id,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: const Text("View Video"),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ── Rewards Section ────────────────────────────────────────────────────────────
-
-class _RewardsSection extends StatelessWidget {
-  final int level;
-  const _RewardsSection({required this.level});
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  @override
-  Widget build(BuildContext context) {
-    final unlockedCount = auraTiers
-        .where((t) => level >= t.minLevel)
-        .expand((t) => t.rewards)
-        .length;
+  // ── My Videos grid ────────────────────────────────────────────────────────────
+  Widget _buildMyVideosSection(BuildContext context) {
+    final normalised = _videos.map(_normaliseSubmission).toList();
+    final preview = normalised.take(4).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -970,20 +694,21 @@ class _RewardsSection extends StatelessWidget {
         Row(
           children: [
             const Text(
-              'My Rewards',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              'MY VIDEOS',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
             ),
             const Spacer(),
-            if (unlockedCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '$unlockedCount unlocked',
-                  style: const TextStyle(
+            if (_videos.length > 4)
+              GestureDetector(
+                onTap: () {},
+                child: const Text(
+                  'VIEW ALL  ›',
+                  style: TextStyle(
                     color: _accent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -992,163 +717,315 @@ class _RewardsSection extends StatelessWidget {
               ),
           ],
         ),
+        const SizedBox(height: 12),
+        if (preview.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: Text('No videos yet',
+                  style: TextStyle(color: Colors.white38, fontSize: 13)),
+            ),
+          )
+        else
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.65,
+            children: List.generate(preview.length, (i) {
+              final data = preview[i];
+              final videoUrl = data['videoUrl'] as String;
+              final status = data['status'] as String;
+              final auraPoints = data['auraPoints'] as int;
+              final aiScore = data['aiScore'];
+              final aiReason = data['aiReason'] as String;
+              final reviewedByAI = data['reviewedByAI'] as bool;
+              final submissionId = data['submissionId'] as String;
+
+              final statusColor = _statusColor(status);
+              final statusLabel = _statusLabel(status);
+
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserVideoDetailScreen(
+                      videoNumber: i + 1,
+                      auraPoints: auraPoints,
+                      videoUrl: videoUrl,
+                      status: status,
+                      aiScore: aiScore,
+                      aiReason: aiReason,
+                      reviewedByAI: reviewedByAI,
+                      submissionId: submissionId,
+                    ),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      VideoThumbnailWidget(
+                          videoUrl: videoUrl, fit: BoxFit.cover),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.90),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      if (status == 'approved')
+                        Positioned(
+                          bottom: 6,
+                          left: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.diamond,
+                                    color: Color(0xFFD4A8FF), size: 10),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '+$auraPoints',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'approved':  return Colors.green;
+      case 'rejected':  return Colors.red;
+      case 'ai_error':  return Colors.orange;
+      default:          return _accent;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'approved':  return 'Approved';
+      case 'rejected':  return 'Rejected';
+      case 'ai_error':  return 'Review';
+      default:          return 'Scoring...';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _uid == null) {
+      return const Scaffold(
+        backgroundColor: _bg,
+        body: Center(
+            child: CircularProgressIndicator(color: Color(0xFF7B2CBF))),
+      );
+    }
+
+    final totalRewards =
+        (_profile['auraPoints'] as num?)?.toInt() ?? 0;
+
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: SizedBox(
+          height: 22,
+          child: Image.asset(
+            'assets/images/Aura arena.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined,
+                color: Colors.white, size: 22),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildProfileCard(context),
+            const SizedBox(height: 16),
+            _buildAuraPointsCard(totalRewards),
+            _RewardsSection(level: _level(totalRewards)),
+            const SizedBox(height: 8),
+            _buildReferralCard(context),
+            _AchievementCardsSection(cards: _achievements),
+            _buildMyVideosSection(context),
+            _SavedChallengesGrid(challenges: _savedChallenges),
+            const SizedBox(height: 12),
+            _ClaimedOffersRow(uid: _uid!),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rewards Section (horizontal tier cards) ────────────────────────────────────
+
+class _RewardsSection extends StatelessWidget {
+  final int level;
+  const _RewardsSection({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MY REWARDS',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
+        ),
         const SizedBox(height: 4),
         const Text(
           'Earn more Aura to unlock higher tier rewards',
-          style: TextStyle(fontSize: 12, color: Colors.black45),
+          style: TextStyle(color: Colors.white38, fontSize: 12),
         ),
         const SizedBox(height: 14),
-        ...auraTiers.map((tier) => _TierRewardCard(tier: tier, level: level)),
-        const SizedBox(height: 8),
+        SizedBox(
+          height: 148,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            itemCount: auraTiers.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, i) {
+              final tier = auraTiers[i];
+              final isUnlocked = level >= tier.minLevel;
+              return _HorizontalTierCard(tier: tier, isUnlocked: isUnlocked);
+            },
+          ),
+        ),
+        const SizedBox(height: 24),
       ],
     );
   }
 }
 
-class _TierRewardCard extends StatefulWidget {
+class _HorizontalTierCard extends StatelessWidget {
   final AuraTier tier;
-  final int level;
-  const _TierRewardCard({required this.tier, required this.level});
-
-  @override
-  State<_TierRewardCard> createState() => _TierRewardCardState();
-}
-
-class _TierRewardCardState extends State<_TierRewardCard> {
-  bool _expanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Auto-expand unlocked tiers
-    _expanded = widget.level >= widget.tier.minLevel;
-  }
+  final bool isUnlocked;
+  const _HorizontalTierCard({required this.tier, required this.isUnlocked});
 
   @override
   Widget build(BuildContext context) {
-    final isUnlocked = widget.level >= widget.tier.minLevel;
-    final tier = widget.tier;
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      width: 115,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isUnlocked
+            ? tier.color.withValues(alpha: 0.14)
+            : const Color(0xFF12102A),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isUnlocked
-              ? tier.color.withValues(alpha: 0.35)
-              : Colors.black.withValues(alpha: 0.07),
+              ? tier.color.withValues(alpha: 0.55)
+              : Colors.white.withValues(alpha: 0.09),
+          width: isUnlocked ? 1.5 : 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Tier header ──────────────────────────────────────────────
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isUnlocked
-                          ? tier.color.withValues(alpha: 0.15)
-                          : Colors.black.withValues(alpha: 0.05),
-                      border: Border.all(
-                        color: isUnlocked
-                            ? tier.color.withValues(alpha: 0.45)
-                            : Colors.black12,
-                      ),
-                    ),
-                    child: Icon(
-                      isUnlocked ? Icons.lock_open_rounded : Icons.lock_outline,
-                      color: isUnlocked ? tier.color : Colors.black26,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              tier.name,
-                              style: TextStyle(
-                                color: isUnlocked ? tier.color : Colors.black38,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isUnlocked
-                                    ? tier.color.withValues(alpha: 0.12)
-                                    : Colors.black.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                isUnlocked ? 'Unlocked' : 'Lv ${tier.minLevel}',
-                                style: TextStyle(
-                                  color: isUnlocked ? tier.color : Colors.black38,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${tier.rewards.length} reward${tier.rewards.length != 1 ? 's' : ''} • ${tier.unlock}',
-                          style: TextStyle(
-                            color: isUnlocked ? Colors.black54 : Colors.black26,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: Colors.black26,
-                    size: 22,
-                  ),
-                ],
-              ),
+          Icon(
+            isUnlocked ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
+            color: isUnlocked ? tier.color : Colors.white24,
+            size: 20,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            tier.name.toUpperCase(),
+            style: TextStyle(
+              color: isUnlocked ? tier.color : Colors.white38,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
             ),
           ),
-          // ── Reward items ─────────────────────────────────────────────
-          if (_expanded && tier.rewards.isNotEmpty) ...[
-            Divider(height: 1, color: Colors.black.withValues(alpha: 0.06)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              child: Column(
-                children: tier.rewards
-                    .map((r) => _RewardRow(
-                          reward: r,
-                          isUnlocked: isUnlocked,
-                          tierColor: tier.color,
-                        ))
-                    .toList(),
+          const SizedBox(height: 2),
+          Text(
+            isUnlocked ? 'Unlocked' : 'Lv ${tier.minLevel}',
+            style: TextStyle(
+              color: isUnlocked ? Colors.white38 : Colors.white24,
+              fontSize: 10,
+            ),
+          ),
+          if (isUnlocked && tier.rewards.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${tier.rewards.length} reward${tier.rewards.length != 1 ? 's' : ''}',
+              style: TextStyle(
+                color: tier.color.withValues(alpha: 0.85),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '${tier.rewards.first.brand} — ${tier.rewards.first.title}',
+              style: const TextStyle(color: Colors.white38, fontSize: 9),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
@@ -1157,179 +1034,99 @@ class _TierRewardCardState extends State<_TierRewardCard> {
   }
 }
 
-class _RewardRow extends StatelessWidget {
-  final LevelReward reward;
-  final bool isUnlocked;
-  final Color tierColor;
-  const _RewardRow(
-      {required this.reward,
-      required this.isUnlocked,
-      required this.tierColor});
+// ── Saved Challenges grid ─────────────────────────────────────────────────────
+
+class _SavedChallengesGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> challenges;
+  const _SavedChallengesGrid({required this.challenges});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: isUnlocked
-                  ? tierColor.withValues(alpha: 0.10)
-                  : Colors.black.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
+    if (challenges.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Saved Challenges',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-            child: Icon(
-              reward.icon,
-              color: isUnlocked ? tierColor : Colors.black26,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${reward.brand} — ${reward.title}',
-                  style: TextStyle(
-                    color: isUnlocked ? Colors.black87 : Colors.black26,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  reward.description,
-                  style: TextStyle(
-                    color: isUnlocked ? Colors.black45 : Colors.black.withValues(alpha: 0.18),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: isUnlocked
-                ? () {
-                    Clipboard.setData(ClipboardData(text: reward.code));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Code "${reward.code}" copied!'),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: isUnlocked
-                    ? tierColor.withValues(alpha: 0.10)
-                    : Colors.black.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isUnlocked
-                      ? tierColor.withValues(alpha: 0.35)
-                      : Colors.black12,
+            const Spacer(),
+            GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SavedChallengesScreen()),
+              ),
+              child: const Text(
+                'VIEW ALL  ›',
+                style: TextStyle(
+                  color: Color(0xFF7B2CBF),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 0.85,
+          children: challenges.map((c) {
+            final videoUrl = c['videoUrl'] as String? ?? '';
+            final title    = c['title']    as String? ?? '';
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Text(
-                    isUnlocked ? reward.code : '??????',
-                    style: TextStyle(
-                      color: isUnlocked ? tierColor : Colors.black26,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                  VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.78),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                  if (isUnlocked) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.copy_rounded, color: tierColor, size: 11),
-                  ],
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Saved Challenges row ───────────────────────────────────────────────────────
-
-class _SavedChallengesRow extends StatelessWidget {
-  final String uid;
-  const _SavedChallengesRow({required this.uid});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users').doc(uid)
-          .collection('saved_challenges')
-          .limit(1)
-          .snapshots(),
-      builder: (context, snap) {
-        final hasSaved = (snap.data?.docs.length ?? 0) > 0;
-
-        return GestureDetector(
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const SavedChallengesScreen())),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF12102A),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: hasSaved
-                    ? const Color(0xFF7B2CBF).withValues(alpha: 0.40)
-                    : Colors.white.withValues(alpha: 0.08),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 38, height: 38,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF7B2CBF).withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    hasSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-                    color: hasSaved ? const Color(0xFFD4A8FF) : Colors.white38,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Saved Challenges',
-                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(
-                        hasSaved
-                            ? 'Tap to see your saved list'
-                            : 'Bookmark challenges to try later',
-                        style: const TextStyle(color: Colors.white38, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 20),
-              ],
-            ),
-          ),
-        );
-      },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
@@ -1344,7 +1141,8 @@ class _ClaimedOffersRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('users').doc(uid)
+          .collection('users')
+          .doc(uid)
           .collection('offerClaims')
           .limit(1)
           .snapshots(),
@@ -1354,7 +1152,8 @@ class _ClaimedOffersRow extends StatelessWidget {
         return GestureDetector(
           onTap: () => _showClaimedOffersSheet(context),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: hasClaims
                   ? const Color(0xFFF59E0B).withValues(alpha: 0.07)
@@ -1369,7 +1168,8 @@ class _ClaimedOffersRow extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 36, height: 36,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: hasClaims
                         ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
@@ -1443,7 +1243,8 @@ class _ClaimedOffersSheet extends StatelessWidget {
         children: [
           Container(
             margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 36, height: 4,
+            width: 36,
+            height: 4,
             decoration: BoxDecoration(
                 color: Colors.white24,
                 borderRadius: BorderRadius.circular(2)),
@@ -1454,13 +1255,13 @@ class _ClaimedOffersSheet extends StatelessWidget {
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontWeight: FontWeight.w800)),
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('users').doc(uid)
+                  .collection('users')
+                  .doc(uid)
                   .collection('offerClaims')
                   .orderBy('claimedAt', descending: true)
                   .snapshots(),
@@ -1472,10 +1273,10 @@ class _ClaimedOffersSheet extends StatelessWidget {
                 }
                 final docs = snap.data!.docs;
                 if (docs.isEmpty) {
-                  return Center(
+                  return const Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Icon(Icons.local_offer_outlined,
                             color: Colors.white24, size: 44),
                         SizedBox(height: 10),
@@ -1483,8 +1284,7 @@ class _ClaimedOffersSheet extends StatelessWidget {
                             style: TextStyle(
                                 color: Colors.white38, fontSize: 14)),
                         SizedBox(height: 4),
-                        Text(
-                            'Complete challenges to unlock brand codes',
+                        Text('Complete challenges to unlock brand codes',
                             style: TextStyle(
                                 color: Colors.white24, fontSize: 12)),
                       ],
@@ -1496,13 +1296,13 @@ class _ClaimedOffersSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                   itemCount: docs.length,
                   itemBuilder: (context, i) {
-                    final d     = docs[i].data() as Map<String, dynamic>;
-                    final code  = d['code']       as String? ?? '—';
+                    final d = docs[i].data() as Map<String, dynamic>;
+                    final code = d['code'] as String? ?? '—';
                     final title = d['offerTitle'] as String? ?? 'Offer';
-                    final brand = d['brand']      as String? ?? '';
-                    final type  = d['type']       as String? ?? 'percent';
-                    final value = (d['value']     as num?)?.toInt() ?? 0;
-                    final ts    = d['claimedAt']  as Timestamp?;
+                    final brand = d['brand'] as String? ?? '';
+                    final type = d['type'] as String? ?? 'percent';
+                    final value = (d['value'] as num?)?.toInt() ?? 0;
+                    final ts = d['claimedAt'] as Timestamp?;
 
                     final typeDisplay = switch (type) {
                       'percent' => '$value% off',
@@ -1579,20 +1379,17 @@ class _ClaimedOffersSheet extends StatelessWidget {
                           const SizedBox(height: 10),
                           GestureDetector(
                             onTap: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: code));
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Code "$code" copied!'),
-                                  backgroundColor:
-                                      const Color(0xFF1A0A2E),
-                                  behavior: SnackBarBehavior.floating,
-                                  duration: const Duration(seconds: 2),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(10)),
-                                ),
-                              );
+                              Clipboard.setData(ClipboardData(text: code));
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(SnackBar(
+                                content: Text('Code "$code" copied!'),
+                                backgroundColor: const Color(0xFF1A0A2E),
+                                behavior: SnackBarBehavior.floating,
+                                duration: const Duration(seconds: 2),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(10)),
+                              ));
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -1632,8 +1429,7 @@ class _ClaimedOffersSheet extends StatelessWidget {
                               padding: const EdgeInsets.only(top: 6),
                               child: Text('Claimed $dateStr',
                                   style: const TextStyle(
-                                      color: Colors.white24,
-                                      fontSize: 10)),
+                                      color: Colors.white24, fontSize: 10)),
                             ),
                         ],
                       ),

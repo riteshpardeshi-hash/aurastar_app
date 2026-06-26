@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../../core/services/challenges_service.dart';
+import '../../../core/services/api_client.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
-import '../../../core/utils/cdn_url.dart';
-import '../widgets/achievement_card.dart';
-import '../widgets/challenge_offer_banner.dart';
-import '../../video/screens/preview_screen.dart';
+import '../widgets/achievement_card.dart' show kChallengeBaseUrl;
 import 'camera_screen.dart';
 
 class ChallengeDetail extends StatefulWidget {
@@ -43,16 +40,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   // Challenge data
   int _auraPoints = 150;
-  String _difficulty = '';
-  String _sourceType = '';
-  String _category = '';
-  dynamic _endDate;
   bool _isPaused = false;
-
-  // Stats
-  int _attemptCount = 0;
-  int _topScore = 0;
-  bool _statsLoaded = false;
 
   // Bookmark
   bool _isSaved = false;
@@ -63,6 +51,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   int _likesCount = 0;
   bool _likingBusy = false;
 
+  // Submissions
+  List<Map<String, dynamic>> _submissions = [];
+  Map<String, dynamic>? _mySubmission;
+  bool _submissionsLoading = true;
+
   void _onVideoUpdate() {
     if (mounted) setState(() => _isPlaying = _videoController!.value.isPlaying);
   }
@@ -71,36 +64,43 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   void initState() {
     super.initState();
     _fetchChallengeData();
-    _fetchStats();
     _checkSaved();
+    _fetchSubmissions();
   }
 
   Future<void> _fetchChallengeData() async {
     if (widget.challengeId.isEmpty) return;
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('challenges')
-          .doc(widget.challengeId)
-          .get();
-      if (!doc.exists || !mounted) return;
-      final data = doc.data()!;
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-      final likedBy = List<String>.from(data['likedBy'] ?? []);
+      final data = await ChallengesService().fetchChallenge(widget.challengeId);
+      if (data == null || !mounted) return;
+      final c = normaliseChallenge(data);
       setState(() {
-        _auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 150;
-        _difficulty = data['difficulty'] as String? ?? '';
-        _sourceType = data['sourceType'] as String? ?? '';
-        _category = data['category'] as String? ?? '';
-        _endDate = data['endDate'];
-        _isPaused = (data['status'] as String? ?? '') == 'paused';
-        _likesCount = (data['likesCount'] as num?)?.toInt() ?? likedBy.length;
-        _liked = uid.isNotEmpty && likedBy.contains(uid);
+        _auraPoints = c['starsCount'] as int;
+        _isPaused = false;
+        _likesCount = 0;
+        _liked = false;
       });
     } catch (_) {}
   }
 
+  Future<void> _fetchSubmissions() async {
+    if (widget.challengeId.isEmpty) return;
+    try {
+      final subs = await ChallengesService().fetchSubmissions(widget.challengeId);
+      final mine = await ChallengesService().fetchMySubmission(widget.challengeId);
+      if (!mounted) return;
+      setState(() {
+        _submissions = subs;
+        _mySubmission = mine;
+        _submissionsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _submissionsLoading = false);
+    }
+  }
+
   Future<void> _checkSaved() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = await ApiClient().userId;
     if (uid == null || widget.challengeId.isEmpty) return;
     try {
       final doc = await FirebaseFirestore.instance
@@ -112,7 +112,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   }
 
   Future<void> _toggleSave() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = await ApiClient().userId;
     if (uid == null || widget.challengeId.isEmpty || _savingBookmark) return;
     setState(() => _savingBookmark = true);
     final ref = FirebaseFirestore.instance
@@ -124,14 +124,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         if (mounted) setState(() { _isSaved = false; _savingBookmark = false; });
       } else {
         await ref.set({
-          'challengeId':   widget.challengeId,
-          'title':         widget.title,
-          'instructions':  widget.instructions,
-          'videoUrl':      widget.videoUrl,
-          'auraPoints':    _auraPoints,
-          'category':      _category,
-          'difficulty':    _difficulty,
-          'savedAt':       FieldValue.serverTimestamp(),
+          'challengeId': widget.challengeId,
+          'title': widget.title,
+          'instructions': widget.instructions,
+          'videoUrl': widget.videoUrl,
+          'auraPoints': _auraPoints,
+          'savedAt': FieldValue.serverTimestamp(),
         });
         if (mounted) setState(() { _isSaved = true; _savingBookmark = false; });
       }
@@ -141,7 +139,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   }
 
   Future<void> _toggleLike() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = await ApiClient().userId;
     if (uid == null || widget.challengeId.isEmpty || _likingBusy) return;
     setState(() => _likingBusy = true);
     final ref = FirebaseFirestore.instance
@@ -167,34 +165,25 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     }
   }
 
-  Future<void> _fetchStats() async {
-    if (widget.challengeId.isEmpty) return;
-    try {
-      final countSnap = await FirebaseFirestore.instance
-          .collection('submissions')
-          .where('challengeId', isEqualTo: widget.challengeId)
-          .where('status', isEqualTo: 'approved')
-          .count()
-          .get();
-      final topSnap = await FirebaseFirestore.instance
-          .collection('submissions')
-          .where('challengeId', isEqualTo: widget.challengeId)
-          .where('status', isEqualTo: 'approved')
-          .orderBy('aiScore', descending: true)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      setState(() {
-        _attemptCount = countSnap.count ?? 0;
-        if (topSnap.docs.isNotEmpty) {
-          final d = topSnap.docs.first.data();
-          _topScore = (d['aiScore'] as num?)?.toInt() ?? 0;
-        }
-        _statsLoaded = true;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _statsLoaded = true);
-    }
+  void _share() {
+    final link = '$kChallengeBaseUrl/${widget.challengeId}';
+    Share.share(
+      'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
+      'Think you can complete it? 💪\n\n'
+      '👉 $link',
+    );
+  }
+
+  void _showReportSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _ReportSheet(
+        challengeId: widget.challengeId,
+        challengeTitle: widget.title,
+      ),
+    );
   }
 
   Future<void> _initAndPlayVideo() async {
@@ -238,15 +227,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
-  void _share() {
-    final link = '$kChallengeBaseUrl/${widget.challengeId}';
-    Share.share(
-      'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
-      'Think you can complete it? 💪\n\n'
-      '👉 $link',
-    );
-  }
-
   void _showCameraRulesModal() {
     showModalBottomSheet(
       context: context,
@@ -270,18 +250,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
-  void _showReportSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) => _ReportSheet(
-        challengeId: widget.challengeId,
-        challengeTitle: widget.title,
-      ),
-    );
-  }
-
   void _showTakeChallengeSheet() {
     showModalBottomSheet(
       context: context,
@@ -291,7 +259,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           color: Color(0xFF12102A),
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        padding: EdgeInsets.fromLTRB(
+            20, 16, 20, MediaQuery.of(context).padding.bottom + 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -304,14 +273,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'How do you want to submit?',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
             _sheetOption(
               icon: Icons.videocam_rounded,
               label: 'Record Now',
@@ -321,29 +282,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 _showCameraRulesModal();
               },
             ),
-            const SizedBox(height: 10),
-            _sheetOption(
-              icon: Icons.photo_library_outlined,
-              label: 'Pick from Gallery',
-              subtitle: 'Choose an existing video',
-              onTap: () async {
-                final nav = Navigator.of(context);
-                nav.pop();
-                final picked = await ImagePicker()
-                    .pickVideo(source: ImageSource.gallery);
-                if (picked == null) return;
-                if (!mounted) return;
-                nav.push(
-                  MaterialPageRoute(
-                    builder: (_) => PreviewScreen(
-                      videoPath: picked.path,
-                      challengeTitle: widget.title,
-                      challengeId: widget.challengeId,
-                    ),
-                  ),
-                );
-              },
-            ),
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -463,36 +402,17 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                             ),
                           ),
 
-                        // Meta chips: source • category • difficulty • aura
-                        _buildMetaRow(),
-
                         // Video player
                         _buildVideoSection(),
-
-                        // Stats bar: attempts + top score
-                        _buildStatsBar(),
 
                         // Details section
                         _buildDetailsSection(),
 
-                        // Scoring rubric
-                        _buildScoringRubric(),
-
-                        // Rules section
-                        _buildRulesSection(),
-
                         // Rewards section
                         _buildRewardsSection(),
 
-                        // Brand offer unlock
-                        if (widget.challengeId.isNotEmpty)
-                          ChallengeOfferBanner(
-                              challengeId: widget.challengeId),
-
-                        // Leaderboard
-                        if (widget.challengeId.isNotEmpty)
-                          _ChallengeLeaderboard(
-                              challengeId: widget.challengeId),
+                        // Submissions section
+                        _buildSubmissionsSection(),
 
                         // Space for sticky button
                         const SizedBox(height: 100),
@@ -534,16 +454,21 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     icon: _savingBookmark
                         ? const SizedBox(
                             width: 18, height: 18,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
                           )
                         : Icon(
-                            _isSaved ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
-                            color: _isSaved ? const Color(0xFFD4A8FF) : Colors.white,
+                            _isSaved
+                                ? Icons.bookmark_rounded
+                                : Icons.bookmark_outline_rounded,
+                            color: _isSaved
+                                ? const Color(0xFFD4A8FF)
+                                : Colors.white,
                             size: 20,
                           ),
                     style: IconButton.styleFrom(
                       backgroundColor: _isSaved
-                          ? const Color(0xFF7B2CBF).withValues(alpha: 0.30)
+                          ? _accent.withValues(alpha: 0.30)
                           : Colors.white.withValues(alpha: 0.12),
                       shape: const CircleBorder(),
                     ),
@@ -589,71 +514,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                   ),
                 ),
                 child: Row(
-                  children: [
-                    // Take this Challenge / Paused state
-                    Expanded(
-                      child: _isPaused
-                          ? Container(
-                              height: 58,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(
-                                  color: Colors.amber.withValues(alpha: 0.40),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.pause_circle_outline_rounded,
-                                      color: Colors.amber.withValues(alpha: 0.80),
-                                      size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Submissions Paused',
-                                    style: TextStyle(
-                                      color: Colors.amber.withValues(alpha: 0.80),
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : GestureDetector(
-                              onTap: _showTakeChallengeSheet,
-                              child: Container(
-                                height: 58,
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(30),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _accent.withValues(alpha: 0.50),
-                                      blurRadius: 20,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'Take this Challenge',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
+                  children: [Expanded(child: _buildBottomButton())],
                 ),
               ),
             ),
@@ -721,142 +582,238 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
-  // ── Meta row ──────────────────────────────────────────────────────────────
-  Widget _buildMetaRow() {
-    final chips = <Widget>[];
-    if (_sourceType.isNotEmpty) {
-      chips.add(_metaChip(_sourceType, Icons.verified_outlined, _sourceTypeColor));
-    }
-    if (_category.isNotEmpty) {
-      chips.add(_metaChip(_category, Icons.category_outlined, Colors.white54));
-    }
-    if (_difficulty.isNotEmpty) {
-      chips.add(_metaChip(_difficulty, Icons.speed_outlined, _difficultyColor));
-    }
-    chips.add(_metaChip('$_auraPoints Aura', Icons.diamond, _accent));
-    final endLabel = campaignEndLabel(_endDate);
-    if (endLabel.isNotEmpty) {
-      chips.add(_metaChip(
-          endLabel, Icons.timer_outlined, campaignEndColor(_endDate)));
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: Wrap(spacing: 8, runSpacing: 6, children: chips),
-    );
-  }
-
-  Widget _metaChip(String label, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 12),
-          const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  // ── Stats bar ─────────────────────────────────────────────────────────────
-  Widget _buildStatsBar() {
-    if (!_statsLoaded || (_attemptCount == 0 && _topScore == 0 && _likesCount == 0)) {
-      return const SizedBox.shrink();
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  // ── Bottom button (paused / already submitted / take) ─────────────────────
+  Widget _buildBottomButton() {
+    if (_isPaused) {
+      return Container(
+        height: 58,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.40)),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _statItem(Icons.people_outline_rounded, _formatCount(_attemptCount), 'Attempts'),
-            Container(width: 1, height: 32, color: Colors.white12),
-            _statItem(Icons.emoji_events_outlined, _topScore > 0 ? '$_topScore' : '—', 'Top Score'),
-            Container(width: 1, height: 32, color: Colors.white12),
-            _statItem(
-              _liked ? Icons.favorite_rounded : Icons.favorite_outline_rounded,
-              _formatCount(_likesCount),
-              'Likes',
-              color: _liked ? Colors.pinkAccent : null,
+            Icon(Icons.pause_circle_outline_rounded,
+                color: Colors.amber.withValues(alpha: 0.80), size: 20),
+            const SizedBox(width: 8),
+            Text('Submissions Paused',
+                style: TextStyle(
+                    color: Colors.amber.withValues(alpha: 0.80),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+    }
+
+    if (_mySubmission != null) {
+      final score = (_mySubmission!['aiScore'] as num?)?.toInt() ?? 0;
+      final status = _mySubmission!['status'] as String? ?? '';
+      final approved = status == 'approved';
+      return GestureDetector(
+        onTap: _showTakeChallengeSheet,
+        child: Container(
+          height: 58,
+          decoration: BoxDecoration(
+            color: approved
+                ? Colors.green.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: approved
+                  ? Colors.green.withValues(alpha: 0.50)
+                  : Colors.white.withValues(alpha: 0.20),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                approved ? Icons.check_circle_rounded : Icons.replay_rounded,
+                color: approved ? Colors.greenAccent : Colors.white70,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                approved
+                    ? 'Submitted · $score pts — Try again?'
+                    : 'Try again',
+                style: TextStyle(
+                    color: approved ? Colors.greenAccent : Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _showTakeChallengeSheet,
+      child: Container(
+        height: 58,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: _accent.withValues(alpha: 0.50),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
+        child: const Center(
+          child: Text(
+            'Take this Challenge',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _statItem(IconData icon, String value, String label, {Color? color}) {
-    final c = color ?? _accent;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: c, size: 15),
-            const SizedBox(width: 5),
-            Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-          ],
+  // ── Submissions section ────────────────────────────────────────────────────
+  Widget _buildSubmissionsSection() {
+    if (_submissionsLoading) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
+        child: SizedBox(
+          height: 60,
+          child: Center(
+              child: CircularProgressIndicator(color: _accent, strokeWidth: 2)),
         ),
-        const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
-      ],
-    );
-  }
+      );
+    }
+    if (_submissions.isEmpty) return const SizedBox.shrink();
 
-  // ── Scoring rubric ────────────────────────────────────────────────────────
-  Widget _buildScoringRubric() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Scoring :',
-            style: TextStyle(color: _accent, fontSize: 20, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              const Text(
+                'Top Submissions',
+                style: TextStyle(
+                    color: _accent, fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _accent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_submissions.length}',
+                  style: const TextStyle(
+                      color: Color(0xFFD4A8FF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _scorePill('Style', '30%', const Color(0xFF4B6EF6)),
-              _scorePill('Match', '30%', const Color(0xFF9B4DCA)),
-              _scorePill('Confidence', '20%', const Color(0xFFFF6B9D)),
-              _scorePill('Finish', '20%', const Color(0xFF06B6D4)),
-            ],
+          SizedBox(
+            height: 130,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _submissions.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) =>
+                  _buildSubmissionTile(_submissions[i], i),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _scorePill(String label, String pct, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: RichText(
-        text: TextSpan(
+  Widget _buildSubmissionTile(Map<String, dynamic> sub, int rank) {
+    final videoUrl = sub['videoUrl'] as String? ?? '';
+    final score = (sub['aiScore'] as num?)?.toInt() ?? 0;
+    final status = sub['status'] as String? ?? '';
+    final approved = status == 'approved';
+    final user = sub['user'] as Map<String, dynamic>?;
+    final username = user?['displayName'] as String? ?? 'User';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 90,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            TextSpan(text: label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-            TextSpan(text: '  $pct', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+            videoUrl.isNotEmpty
+                ? VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover)
+                : Container(color: const Color(0xFF1A1A2E)),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.75)
+                  ],
+                ),
+              ),
+            ),
+            if (rank < 3)
+              Positioned(
+                top: 6,
+                left: 6,
+                child: Text(
+                  rank == 0 ? '🥇' : rank == 1 ? '🥈' : '🥉',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            Positioned(
+              bottom: 6,
+              left: 4,
+              right: 4,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    username,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600),
+                  ),
+                  if (approved && score > 0) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '$score pts',
+                      style: const TextStyle(
+                          color: Color(0xFFD4A8FF),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -979,89 +936,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
-  // ── Rules section ─────────────────────────────────────────────────────────
-  Widget _buildRulesSection() {
-    const rules = [
-      (
-        icon: Icons.auto_awesome_rounded,
-        color: Color(0xFF9B4DCA),
-        text: 'AuraSense scores you — no human judges, no bias.',
-      ),
-      (
-        icon: Icons.content_copy_rounded,
-        color: Color(0xFF54A0FF),
-        text: 'Match the timing, movements and sound as closely as you can.',
-      ),
-      (
-        icon: Icons.shield_outlined,
-        color: Color(0xFF22C55E),
-        text: 'Fair play only — duplicates and unsafe content will be penalised.',
-      ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Rules :',
-            style: TextStyle(
-              color: _accent,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: Column(
-              children: rules.map((r) {
-                final isLast = r == rules.last;
-                return Padding(
-                  padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: r.color.withValues(alpha: 0.13),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(r.icon, color: r.color, size: 15),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 5),
-                          child: Text(
-                            r.text,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Rewards section ────────────────────────────────────────────────────────
   Widget _buildRewardsSection() {
     return Padding(
@@ -1104,36 +978,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     final text = widget.instructions.trim();
     if (text.isEmpty) return '';
     final firstLine = text.split('\n').first.trim();
-    // Use first line only if it's reasonably short (tagline-like)
-    if (firstLine.length <= 80 &&
-        widget.instructions.contains('\n')) {
+    if (firstLine.length <= 80 && widget.instructions.contains('\n')) {
       return firstLine;
     }
     return '';
-  }
-
-  String _formatCount(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
-    return '$n';
-  }
-
-  Color get _difficultyColor {
-    switch (_difficulty.toLowerCase()) {
-      case 'easy': return Colors.greenAccent;
-      case 'medium': return Colors.yellow;
-      case 'hard': return Colors.orange;
-      case 'pro': return Colors.redAccent;
-      default: return Colors.white54;
-    }
-  }
-
-  Color get _sourceTypeColor {
-    switch (_sourceType.toLowerCase()) {
-      case 'brand': return const Color(0xFF4B6EF6);
-      case 'creator': return const Color(0xFFFF6B9D);
-      case 'sponsored': return const Color(0xFFFFD700);
-      default: return _accent;
-    }
   }
 
   List<String> get _bulletPoints {
@@ -1159,138 +1007,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         .map((s) => s.endsWith('.') ? s : '$s.')
         .toList();
     return sentences.length > 1 ? sentences : [text];
-  }
-}
-
-// ── Per-challenge leaderboard ──────────────────────────────────────────────────
-class _ChallengeLeaderboard extends StatelessWidget {
-  final String challengeId;
-  const _ChallengeLeaderboard({required this.challengeId});
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('submissions')
-          .where('challengeId', isEqualTo: challengeId)
-          .where('status', isEqualTo: 'approved')
-          .orderBy('aiScore', descending: true)
-          .limit(10)
-          .snapshots(),
-      builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Top Scores',
-                style: TextStyle(
-                  color: Color(0xFF7B2CBF),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 14),
-              ...List.generate(docs.length, (i) {
-                final data = docs[i].data() as Map<String, dynamic>;
-                final username = data['username'] as String? ?? 'User';
-                final score = (data['aiScore'] as num?)?.toInt() ?? 0;
-                final isTop = i == 0;
-
-                final submissionId = docs[i].id;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isTop
-                        ? _accent.withValues(alpha: 0.14)
-                        : Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isTop
-                          ? _accent.withValues(alpha: 0.45)
-                          : Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 26,
-                        child: Text(_medal(i),
-                            style: const TextStyle(fontSize: 16),
-                            textAlign: TextAlign.center),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          '@$username',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: isTop
-                                ? FontWeight.bold
-                                : FontWeight.w400,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const Icon(Icons.diamond,
-                          color: _accent, size: 15),
-                      const SizedBox(width: 5),
-                      Text(
-                        '$score',
-                        style: const TextStyle(
-                            color: _accent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15),
-                      ),
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: () => _showSubmissionReport(
-                            context, submissionId, username),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.flag_outlined,
-                              color: Colors.white24, size: 14),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _medal(int i) {
-    switch (i) {
-      case 0: return '🥇';
-      case 1: return '🥈';
-      case 2: return '🥉';
-      default: return '${i + 1}';
-    }
-  }
-
-  void _showSubmissionReport(
-      BuildContext context, String submissionId, String username) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _SubmissionReportSheet(
-        submissionId: submissionId,
-        username: username,
-      ),
-    );
   }
 }
 
@@ -1517,7 +1233,7 @@ class _ReportSheetState extends State<_ReportSheet> {
     setState(() => _submitting = true);
 
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = await ApiClient().userId;
       await FirebaseFirestore.instance.collection('reports').add({
         'challengeId': widget.challengeId,
         'challengeTitle': widget.challengeTitle,
@@ -1697,6 +1413,111 @@ class _ReportSheetState extends State<_ReportSheet> {
   }
 }
 
+// ── Like button with animated heart + count ───────────────────────────────────
+
+class _LikeButton extends StatefulWidget {
+  final bool liked;
+  final int count;
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _LikeButton({
+    required this.liked,
+    required this.count,
+    required this.busy,
+    required this.onTap,
+  });
+
+  @override
+  State<_LikeButton> createState() => _LikeButtonState();
+}
+
+class _LikeButtonState extends State<_LikeButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+      lowerBound: 0.75,
+      upperBound: 1.0,
+      value: 1.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_LikeButton old) {
+    super.didUpdateWidget(old);
+    if (widget.liked != old.liked) {
+      _ctrl.reverse().then((_) => _ctrl.forward());
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.busy ? null : widget.onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ScaleTransition(
+            scale: _ctrl,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: widget.liked
+                    ? Colors.pinkAccent.withValues(alpha: 0.28)
+                    : Colors.white.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: widget.busy
+                  ? const Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            color: Colors.pinkAccent, strokeWidth: 2),
+                      ),
+                    )
+                  : Icon(
+                      widget.liked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_outline_rounded,
+                      color:
+                          widget.liked ? Colors.pinkAccent : Colors.white,
+                      size: 20,
+                    ),
+            ),
+          ),
+          if (widget.count > 0) ...[
+            const SizedBox(height: 2),
+            Text(
+              widget.count >= 1000
+                  ? '${(widget.count / 1000).toStringAsFixed(1)}k'
+                  : '${widget.count}',
+              style: TextStyle(
+                color: widget.liked ? Colors.pinkAccent : Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 // ── Submission report sheet ───────────────────────────────────────────────────
 
 class _SubmissionReportSheet extends StatefulWidget {
@@ -1727,7 +1548,7 @@ class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
     if (_selected == null || _submitting) return;
     setState(() => _submitting = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = await ApiClient().userId;
       await FirebaseFirestore.instance.collection('reports').add({
         'submissionId': widget.submissionId,
         'reportedUsername': widget.username,
@@ -1893,106 +1714,3 @@ class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
   }
 }
 
-// ── Like button with animated heart + count ───────────────────────────────────
-
-class _LikeButton extends StatefulWidget {
-  final bool liked;
-  final int count;
-  final bool busy;
-  final VoidCallback onTap;
-
-  const _LikeButton({
-    required this.liked,
-    required this.count,
-    required this.busy,
-    required this.onTap,
-  });
-
-  @override
-  State<_LikeButton> createState() => _LikeButtonState();
-}
-
-class _LikeButtonState extends State<_LikeButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-      lowerBound: 0.75,
-      upperBound: 1.0,
-      value: 1.0,
-    );
-  }
-
-  @override
-  void didUpdateWidget(_LikeButton old) {
-    super.didUpdateWidget(old);
-    if (widget.liked != old.liked) {
-      _ctrl.reverse().then((_) => _ctrl.forward());
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.busy ? null : widget.onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ScaleTransition(
-            scale: _ctrl,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: widget.liked
-                    ? Colors.pinkAccent.withValues(alpha: 0.28)
-                    : Colors.white.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: widget.busy
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            color: Colors.pinkAccent, strokeWidth: 2),
-                      ),
-                    )
-                  : Icon(
-                      widget.liked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_outline_rounded,
-                      color: widget.liked ? Colors.pinkAccent : Colors.white,
-                      size: 20,
-                    ),
-            ),
-          ),
-          if (widget.count > 0) ...[
-            const SizedBox(height: 2),
-            Text(
-              widget.count >= 1000
-                  ? '${(widget.count / 1000).toStringAsFixed(1)}k'
-                  : '${widget.count}',
-              style: TextStyle(
-                color: widget.liked ? Colors.pinkAccent : Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}

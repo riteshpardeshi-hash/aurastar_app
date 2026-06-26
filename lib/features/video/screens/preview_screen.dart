@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:video_player/video_player.dart';
-import 'package:path/path.dart' as path;
+import '../../../core/services/api_client.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../core/services/upload_queue_service.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
@@ -89,22 +87,21 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 
   Future<void> _upload({bool isAutoRetry = false}) async {
-    // Connectivity pre-check
     final online = await UploadQueueService.hasInternet();
     if (!online) {
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.failed);
-      // Persist so dashboard can offer recovery after app restart
       await UploadQueueService.save(
-        videoPath:      widget.videoPath,
-        challengeId:    widget.challengeId,
+        videoPath: widget.videoPath,
+        challengeId: widget.challengeId,
         challengeTitle: widget.challengeTitle,
       );
       _startAutoRetry();
       if (!isAutoRetry && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No internet. We\'ll retry automatically when you\'re back online.'),
+            content: Text(
+                'No internet. We\'ll retry automatically when you\'re back online.'),
             duration: Duration(seconds: 4),
           ),
         );
@@ -119,88 +116,44 @@ class _PreviewScreenState extends State<PreviewScreen> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        setState(() => _uploadState = _UploadState.idle);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You must be signed in to upload.')),
-          );
-        }
-        return;
-      }
-      final file = File(widget.videoPath);
+      final service = ChallengesService();
 
-      // Fetch username
-      String username = 'User';
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (userDoc.exists) {
-        username = userDoc.data()?['username'] as String? ??
-            userDoc.data()?['name'] as String? ??
-            'User';
-      }
+      // Step 1: get presigned S3 URL
+      final presign = await service.presignSubmission(widget.challengeId);
+      final uploadUrl = presign['uploadUrl'] as String;
+      final videoKey = presign['key'] as String;
 
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${path.basename(file.path)}';
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('submissions')
-          .child(user.uid)
-          .child(fileName);
+      // Step 2: upload directly to S3
+      await ApiClient().uploadToS3(
+        uploadUrl,
+        File(widget.videoPath),
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p * 0.9);
+        },
+      );
 
-      final task = ref.putFile(file);
+      // Step 3: create submission record + get AI score
+      if (mounted) setState(() => _progress = 0.95);
+      final submission =
+          await service.createSubmission(widget.challengeId, videoKey);
 
-      // Stream upload progress
-      task.snapshotEvents.listen((snap) {
-        if (snap.totalBytes > 0 && mounted) {
-          setState(() =>
-              _progress = snap.bytesTransferred / snap.totalBytes);
-        }
-      });
-
-      await task;
-
-      final videoUrl = await ref.getDownloadURL();
-
-      final docRef =
-          await FirebaseFirestore.instance.collection('submissions').add({
-        'userId': user.uid,
-        'username': username,
-        'challengeTitle': widget.challengeTitle,
-        'challengeId': widget.challengeId,
-        'videoUrl': videoUrl,
-        'status': 'pending',
-        'auraPoints': 0,
-        'netAurasAwarded': 0,
-        'isCountedForDailyAuras': false,
-        'isPublic': false,
-        'isArchived': false,
-        'isDeleted': false,
-        'starsCount': 0,
-        'starredBy': [],
-        'views': 0,
-        'reach': 0,
-        'createdAt': Timestamp.now(),
-      });
-
-      // Upload succeeded — clear any persisted queue entry
       await UploadQueueService.clear();
 
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.done);
       _player.pause();
 
+      final submissionId = submission['_id'] as String? ?? '';
+
       await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         barrierColor: Colors.black.withValues(alpha: 0.85),
         builder: (_) => AuraSubmittedPopup(
-          submissionId: docRef.id,
+          submissionId: submissionId,
           challengeTitle: widget.challengeTitle,
           challengeId: widget.challengeId,
+          initialResult: submission,
         ),
       );
 
@@ -209,19 +162,19 @@ class _PreviewScreenState extends State<PreviewScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => PostScoreActionScreen(
-            submissionId: docRef.id,
+            submissionId: submissionId,
             challengeTitle: widget.challengeTitle,
             challengeId: widget.challengeId,
+            submissionData: submission,
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.failed);
-      // Persist and begin auto-retry
       await UploadQueueService.save(
-        videoPath:      widget.videoPath,
-        challengeId:    widget.challengeId,
+        videoPath: widget.videoPath,
+        challengeId: widget.challengeId,
         challengeTitle: widget.challengeTitle,
       );
       _startAutoRetry();
