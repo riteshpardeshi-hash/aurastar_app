@@ -98,8 +98,9 @@ workflows:
 
     publishing:
       app_store_connect:
-        apple_id: $APP_APPLE_ID
-        password: $APP_SPECIFIC_PASSWORD
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
 
   ios-prototype:
     name: iOS TestFlight - Prototype
@@ -224,5 +225,6 @@ workflows:
 
     publishing:
       app_store_connect:
-        apple_id: $APP_APPLE_ID
-        password: $APP_SPECIFIC_PASSWORD
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
