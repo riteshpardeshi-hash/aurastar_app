@@ -42,7 +42,7 @@ workflows:
         script: find . -name "Podfile" -execdir pod install \;
 
       - name: Flutter build iOS
-        script: flutter build ios --release --no-codesign
+        script: flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
 
       - name: Build and export IPA
         script: |
@@ -156,7 +156,7 @@ workflows:
         script: find . -name "Podfile" -execdir pod install \;
 
       - name: Flutter build iOS
-        script: flutter build ios --release --no-codesign
+        script: flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
 
       - name: Build and export IPA
         script: |
