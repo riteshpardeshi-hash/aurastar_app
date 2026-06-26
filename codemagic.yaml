@@ -81,6 +81,8 @@ workflows:
             -archivePath /tmp/Runner.xcarchive \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             DEVELOPMENT_TEAM="RMATK329X8" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             archive
@@ -213,6 +215,8 @@ workflows:
             -archivePath /tmp/Runner.xcarchive \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE="$PROFILE_UUID" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             DEVELOPMENT_TEAM="RMATK329X8" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             archive
