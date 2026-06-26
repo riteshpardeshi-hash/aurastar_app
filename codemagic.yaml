@@ -193,16 +193,7 @@ workflows:
 
           sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
 
-          python3 << 'PYEOF'
-          pbxproj = 'ios/Runner.xcodeproj/project.pbxproj'
-          with open(pbxproj) as f:
-              content = f.read()
-          count = content.count('alwaysOutOfDate = 1;')
-          content = content.replace('alwaysOutOfDate = 1;', '')
-          with open(pbxproj, 'w') as f:
-              f.write(content)
-          print('Removed ' + str(count) + ' occurrences of alwaysOutOfDate = 1;')
-          PYEOF
+          python3 -c "f='ios/Runner.xcodeproj/project.pbxproj'; c=open(f).read(); n=c.count('alwaysOutOfDate = 1;'); open(f,'w').write(c.replace('alwaysOutOfDate = 1;','')); print('Removed', n, 'occurrences of alwaysOutOfDate = 1;')"
 
           echo "=== alwaysOutOfDate count AFTER patch (expect 0) ==="
           grep -c "alwaysOutOfDate" ios/Runner.xcodeproj/project.pbxproj || echo "0"
