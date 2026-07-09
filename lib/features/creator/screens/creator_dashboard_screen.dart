@@ -1,107 +1,160 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/models/aura_tier.dart';
+import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/creator_account_service.dart';
+import '../../../core/services/creator_challenges_service.dart' show pickField, pickInt, pickString;
+import '../../../core/services/creator_page_service.dart';
 import '../../challenges/screens/all_general_challenges_screen.dart';
+import 'creator_challenges_screen.dart';
+import 'creator_follow_list_screen.dart';
+import 'creator_insights_screen.dart';
+import 'creator_settings_screen.dart';
 
-class CreatorDashboardScreen extends StatelessWidget {
+class CreatorDashboardScreen extends StatefulWidget {
   const CreatorDashboardScreen({super.key});
 
+  @override
+  State<CreatorDashboardScreen> createState() => _CreatorDashboardScreenState();
+}
+
+class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
   static const int _xpPerLevel = 1300;
   int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
   int _xpInCurrentLevel(int pts) => pts % _xpPerLevel;
 
+  bool _loading = true;
+  Map<String, dynamic>? _page;
+  Map<String, dynamic> _summary = {};
+  Map<String, dynamic> _analytics = {};
+  int _followingCount = 0;
+  int _auraBalance = 0;
+  List<Map<String, dynamic>> _videos = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final results = await Future.wait([
+      CreatorPageService().fetchOwnPage(),
+      CreatorPageService().fetchDashboardSummary(),
+      CreatorPageService().fetchAnalytics(),
+      CreatorAccountService().fetchFollowingCount(),
+      AuthApiService().fetchAuraBalance(),
+      AuthApiService().fetchMyVideos(limit: 20),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _page = results[0] as Map<String, dynamic>?;
+      _summary = results[1] as Map<String, dynamic>;
+      _analytics = results[2] as Map<String, dynamic>;
+      _followingCount = results[3] as int;
+      _auraBalance = results[4] as int;
+      _videos = (results[5] as List)
+          .cast<Map<String, dynamic>>()
+          .map(_normaliseVideo)
+          .toList();
+      _loading = false;
+    });
+  }
+
+  /// `GET /profile/videos` returns `verdict` (PASS/FAIL) rather than a plain
+  /// `status` on some rows — same translation `my_account_screen.dart` does
+  /// before display.
+  static Map<String, dynamic> _normaliseVideo(Map<String, dynamic> v) {
+    final verdict = v['verdict'] as String?;
+    final rawStatus = v['status'] as String?;
+    final status = verdict != null
+        ? (verdict == 'PASS'
+            ? 'approved'
+            : verdict == 'FAIL'
+                ? 'rejected'
+                : 'ai_error')
+        : rawStatus ?? 'pending';
+    return {
+      ...v,
+      'status': status,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF080810),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFF080810),
       body: SafeArea(
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-          builder: (context, userSnap) {
-            if (!userSnap.hasData) {
-              return const Center(
-                  child: CircularProgressIndicator(color: Color(0xFF7B2CBF)));
-            }
-            final userData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-
-            return StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('submissions')
-                  .where('userId', isEqualTo: uid)
-                  .orderBy('createdAt', descending: true)
-                  .limit(20)
-                  .snapshots(),
-              builder: (context, subSnap) {
-                final submissions = subSnap.data?.docs ?? [];
-                return _buildBody(context, uid, userData, submissions);
-              },
-            );
-          },
-        ),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF7B2CBF)))
+            : RefreshIndicator(
+                color: const Color(0xFF7B2CBF),
+                onRefresh: _load,
+                child: _buildBody(context),
+              ),
       ),
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    String uid,
-    Map<String, dynamic> userData,
-    List<QueryDocumentSnapshot> submissions,
-  ) {
-    final name = (userData['name'] as String?)?.trim().isNotEmpty == true
-        ? userData['name'] as String
-        : userData['username'] as String? ?? 'Creator';
-    final username = userData['username'] as String? ?? '';
-    final bio = userData['bio'] as String? ?? '';
-    final totalRewards = (userData['totalRewards'] as num?)?.toInt() ?? 0;
-    final followerCount = (userData['followerCount'] as num?)?.toInt() ?? 0;
-    final followingCount = (userData['followingCount'] as num?)?.toInt() ?? 0;
+  Widget _buildBody(BuildContext context) {
+    final page = _page ?? {};
+    final displayName = pickString(page, ['displayName'], fallback: 'Creator');
+    final username = pickString(page, ['username']);
+    final bio = pickString(page, ['bio']);
+    final profileImage = pickString(page, ['profileImage']);
 
-    final level = _level(totalRewards);
-    final xpInLevel = _xpInCurrentLevel(totalRewards);
+    final followers = pickInt(_summary, ['followers']);
+    final canUploadChallenge = _summary['canUploadChallenge'] as bool? ?? true;
+    final profileComplete = _summary['profileComplete'] as bool? ?? true;
+    final creatorPageLive = _summary['creatorPageLive'] as bool? ?? true;
+
+    final level = _level(_auraBalance);
+    final xpInLevel = _xpInCurrentLevel(_auraBalance);
     final tier = auraTierForLevel(level);
     final nextTier = nextAuraTier(level);
     final progressFraction = (xpInLevel / _xpPerLevel).clamp(0.0, 1.0);
 
-    final totalSubs = submissions.length;
-    final approvedSubs = submissions.where((d) =>
-        (d.data() as Map<String, dynamic>)['status'] == 'approved').length;
+    final totalSubs = _videos.length;
+    final approvedSubs = _videos.where((v) => v['status'] == 'approved').length;
     final approvalRate = totalSubs == 0 ? 0 : (approvedSubs / totalSubs * 100).round();
-
-    final recentSubs = submissions.take(5).toList();
+    final recentVideos = _videos.take(5).toList();
 
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.only(left: 4, top: 4),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
+            padding: const EdgeInsets.only(left: 4, right: 8, top: 4),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined, color: Colors.white),
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CreatorSettingsScreen())),
+                ),
+              ],
             ),
           ),
         ),
         SliverToBoxAdapter(
-            child: _buildHeader(context, uid, name, username, bio,
-                followerCount, followingCount)),
+            child: _buildHeader(context, displayName, username, bio, profileImage,
+                followers, _followingCount)),
+        if (!canUploadChallenge)
+          SliverToBoxAdapter(
+              child: _buildStatusBanner(profileComplete, creatorPageLive)),
         SliverToBoxAdapter(
             child: _buildAuraProgress(
-                level, tier, nextTier, xpInLevel, progressFraction, totalRewards)),
+                level, tier, nextTier, xpInLevel, progressFraction, _auraBalance)),
         SliverToBoxAdapter(
-            child: _buildStats(
-                totalRewards, totalSubs, approvedSubs, approvalRate)),
+            child: _buildStats(_auraBalance, totalSubs, approvedSubs, approvalRate)),
+        if (_analytics.isNotEmpty) SliverToBoxAdapter(child: _buildAnalytics()),
         SliverToBoxAdapter(child: _buildQuickActions(context)),
-        SliverToBoxAdapter(
-            child: _buildRecentSubmissions(context, recentSubs)),
+        SliverToBoxAdapter(child: _buildRecentSubmissions(context, recentVideos)),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
@@ -109,14 +162,15 @@ class CreatorDashboardScreen extends StatelessWidget {
 
   Widget _buildHeader(
     BuildContext context,
-    String uid,
     String name,
     String username,
     String bio,
+    String profileImage,
     int followerCount,
     int followingCount,
   ) {
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'C';
+    final displayName = name.isNotEmpty ? name : 'Creator';
+    final initial = displayName[0].toUpperCase();
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.all(20),
@@ -139,28 +193,35 @@ class CreatorDashboardScreen extends StatelessWidget {
                 height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7B2FF7), Color(0xFFF107A3)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: profileImage.isEmpty
+                      ? const LinearGradient(
+                          colors: [Color(0xFF7B2FF7), Color(0xFFF107A3)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  image: profileImage.isNotEmpty
+                      ? DecorationImage(image: NetworkImage(profileImage), fit: BoxFit.cover)
+                      : null,
                   border: Border.all(
                       color: const Color(0xFF9B4DFF).withValues(alpha: 0.6), width: 2),
                 ),
-                child: Center(
-                  child: Text(initial,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold)),
-                ),
+                child: profileImage.isEmpty
+                    ? Center(
+                        child: Text(initial,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold)),
+                      )
+                    : null,
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name,
+                    Text(displayName,
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 20,
@@ -205,9 +266,9 @@ class CreatorDashboardScreen extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              _followStat('$followerCount', 'Followers'),
+              _followStat(context, '$followerCount', 'Followers', FollowListMode.followers),
               const SizedBox(width: 24),
-              _followStat('$followingCount', 'Following'),
+              _followStat(context, '$followingCount', 'Following', FollowListMode.following),
             ],
           ),
         ],
@@ -215,19 +276,52 @@ class CreatorDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _followStat(String value, String label) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'SpaceGrotesk')),
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 12)),
-      ],
+  Widget _buildStatusBanner(bool profileComplete, bool creatorPageLive) {
+    final message = !profileComplete
+        ? 'Complete your creator profile to start uploading challenges.'
+        : !creatorPageLive
+            ? 'Your creator page isn\'t live yet — uploads are paused until it is.'
+            : 'Uploading is currently paused for your account.';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: Color(0xFFF59E0B), size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _followStat(BuildContext context, String value, String label, FollowListMode mode) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => CreatorFollowListScreen(mode: mode))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'SpaceGrotesk')),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        ],
+      ),
     );
   }
 
@@ -353,6 +447,39 @@ class CreatorDashboardScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildAnalytics() {
+    final views = pickInt(_analytics, ['totalViews', 'views']);
+    final participants = pickInt(_analytics, ['totalParticipants', 'participants']);
+    final auraEarned = pickField(_analytics, ['totalAuraEarned', 'auraEarned', 'aura']);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Growth',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'ClashDisplay')),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _statCard('Views', '$views', Icons.visibility_rounded, Colors.blue)),
+              const SizedBox(width: 10),
+              Expanded(child: _statCard('Participants', '$participants', Icons.groups_rounded, Colors.purple)),
+              if (auraEarned != null) ...[
+                const SizedBox(width: 10),
+                Expanded(child: _statCard('Aura Earned', '$auraEarned', Icons.auto_awesome, const Color(0xFFFFD700))),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -387,18 +514,44 @@ class CreatorDashboardScreen extends StatelessWidget {
   Widget _buildQuickActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: _actionBtn(
-              label: 'Browse Challenges',
-              icon: Icons.flash_on_rounded,
-              gradient: const [Color(0xFF7B2CBF), Color(0xFF9B4DFF)],
-              onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const AllGeneralChallengesScreen())),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _actionBtn(
+                  label: 'My Challenges',
+                  icon: Icons.video_collection_rounded,
+                  gradient: const [Color(0xFF7B2FF7), Color(0xFFF107A3)],
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreatorChallengesScreen())),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _actionBtn(
+                  label: 'Insights',
+                  icon: Icons.bar_chart_rounded,
+                  gradient: const [Color(0xFF1E3A5F), Color(0xFF2563EB)],
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const CreatorInsightsScreen())),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _actionBtn(
+            label: 'Browse Challenges',
+            icon: Icons.flash_on_rounded,
+            gradient: const [Color(0xFF7B2CBF), Color(0xFF9B4DFF)],
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const AllGeneralChallengesScreen())),
           ),
         ],
       ),
@@ -437,7 +590,7 @@ class CreatorDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildRecentSubmissions(
-      BuildContext context, List<QueryDocumentSnapshot> recentSubs) {
+      BuildContext context, List<Map<String, dynamic>> recentVideos) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -450,7 +603,7 @@ class CreatorDashboardScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontFamily: 'ClashDisplay')),
         ),
-        if (recentSubs.isEmpty)
+        if (recentVideos.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -476,19 +629,19 @@ class CreatorDashboardScreen extends StatelessWidget {
             ),
           )
         else
-          ...recentSubs.map((sub) => _buildSubmissionRow(context, sub)),
+          ...recentVideos.map((v) => _buildSubmissionRow(context, v)),
       ],
     );
   }
 
-  Widget _buildSubmissionRow(BuildContext context, QueryDocumentSnapshot sub) {
-    final data = sub.data() as Map<String, dynamic>;
-    final challengeId = data['challengeId']?.toString() ?? '';
-    final status = data['status']?.toString() ?? 'pending';
-    final aiScore = (data['aiScore'] as num?)?.toInt();
-    final auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 0;
-    final createdAt = data['createdAt'] as Timestamp?;
-    final timeStr = createdAt != null ? _timeAgo(createdAt.toDate()) : '';
+  Widget _buildSubmissionRow(BuildContext context, Map<String, dynamic> v) {
+    final challengeTitle = pickString(v, ['challengeTitle', 'challengeName'], fallback: 'Challenge');
+    final status = v['status'] as String? ?? 'pending';
+    final aiScore = v['aiScore'] as num?;
+    final auraPoints = (v['auraPoints'] as num?)?.toInt() ?? 0;
+    final createdAtRaw = pickString(v, ['createdAt']);
+    final createdAt = createdAtRaw.isEmpty ? null : DateTime.tryParse(createdAtRaw);
+    final timeStr = createdAt != null ? _timeAgo(createdAt) : '';
 
     Color statusColor;
     IconData statusIcon;
@@ -510,106 +663,93 @@ class CreatorDashboardScreen extends StatelessWidget {
         statusLabel = 'Pending';
     }
 
-    return FutureBuilder<DocumentSnapshot>(
-      future: challengeId.isEmpty
-          ? null
-          : FirebaseFirestore.instance
-              .collection('challenges')
-              .doc(challengeId)
-              .get(),
-      builder: (context, snap) {
-        final cData = snap.data?.data() as Map<String, dynamic>? ?? {};
-        final challengeTitle = cData['title'] as String? ?? 'Challenge';
-
-        return Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(statusIcon, color: statusColor, size: 22),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(statusIcon, color: statusColor, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(challengeTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+                const SizedBox(height: 3),
+                Row(
                   children: [
-                    Text(challengeTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: statusColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(statusLabel,
-                              style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600)),
-                        ),
-                        if (timeStr.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Text(timeStr,
-                              style: const TextStyle(
-                                  color: Colors.white38, fontSize: 10)),
-                        ],
-                      ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(statusLabel,
+                          style: TextStyle(
+                              color: statusColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600)),
                     ),
+                    if (timeStr.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(timeStr,
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 10)),
+                    ],
                   ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (aiScore != null)
-                    Text('$aiScore%',
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (aiScore != null)
+                Text('${aiScore.toInt()}%',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        fontFamily: 'SpaceGrotesk')),
+              if (status == 'approved' && auraPoints > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.auto_awesome,
+                        color: Color(0xFF9B4DFF), size: 12),
+                    const SizedBox(width: 2),
+                    Text('+$auraPoints',
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            fontFamily: 'SpaceGrotesk')),
-                  if (status == 'approved' && auraPoints > 0)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.auto_awesome,
-                            color: Color(0xFF9B4DFF), size: 12),
-                        const SizedBox(width: 2),
-                        Text('+$auraPoints',
-                            style: const TextStyle(
-                                color: Color(0xFF9B4DFF),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                ],
-              ),
+                            color: Color(0xFF9B4DFF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)),
+                  ],
+                ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 

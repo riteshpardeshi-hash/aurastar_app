@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/services/creators_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -54,15 +55,11 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
   // ── Featured Creators strip ───────────────────────────────────────────────
 
   Widget _buildFeaturedCreators() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('isCreator', isEqualTo: true)
-          .limit(12)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: CreatorsService().fetchCreators(limit: 12),
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) return const SizedBox.shrink();
+        final creators = (snap.data ?? []).map(normaliseCreator).toList();
+        if (creators.isEmpty) return const SizedBox.shrink();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,8 +74,8 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: docs.length,
-                itemBuilder: (_, i) => _creatorAvatar(docs[i]),
+                itemCount: creators.length,
+                itemBuilder: (_, i) => _creatorAvatar(creators[i]),
               ),
             ),
             const SizedBox(height: 4),
@@ -89,15 +86,16 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     );
   }
 
-  Widget _creatorAvatar(QueryDocumentSnapshot doc) {
-    final data      = doc.data() as Map<String, dynamic>;
-    final pageName  = data['pageName']  as String? ?? data['name'] as String? ?? 'Creator';
-    final followers = (data['followerCount'] as num?)?.toInt() ?? 0;
-    final imgUrl    = data['profileImageUrl'] as String? ?? '';
+  Widget _creatorAvatar(Map<String, dynamic> creator) {
+    final id         = creator['id'] as String;
+    final pageName   = creator['displayName'] as String;
+    final followers  = creator['auraPoints'] as int; // no follower count on CreatorSummary
+    final imgUrl     = creator['avatar'] as String;
+    final isVerified = creator['isVerified'] as bool;
 
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => CreatorProfileScreen(creatorId: doc.id),
+        builder: (_) => CreatorProfileScreen(creatorId: id),
       )),
       child: Container(
         width: 72,
@@ -128,18 +126,19 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                         ),
                 ),
                 // Verified badge
-                Positioned(
-                  bottom: 0, right: 0,
-                  child: Container(
-                    width: 16, height: 16,
-                    decoration: BoxDecoration(
-                      color: _accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _bg, width: 1.5),
+                if (isVerified)
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: Container(
+                      width: 16, height: 16,
+                      decoration: BoxDecoration(
+                        color: _accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _bg, width: 1.5),
+                      ),
+                      child: const Icon(Icons.check_rounded, color: Colors.white, size: 10),
                     ),
-                    child: const Icon(Icons.check_rounded, color: Colors.white, size: 10),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 5),
@@ -202,7 +201,10 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     );
   }
 
-  // ── Challenge list ────────────────────────────────────────────────────────
+  // ── Challenge list (still Firestore) ──────────────────────────────────────
+  // These are challenges made by non-system creatorId users, which in the new
+  // backend model are brand accounts (see Swagger `/brands/*`), not `/creators/*`
+  // — out of scope for the creators integration, left as-is until Brands is done.
 
   Widget _buildChallengeList() {
     Query query = FirebaseFirestore.instance

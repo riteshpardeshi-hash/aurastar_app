@@ -34,4 +34,10 @@ class SearchService {
       );
     } catch (_) {}
   }
+
+  Future<void> clearHistory() async {
+    try {
+      await _client.delete('/search/recent', auth: true);
+    } catch (_) {}
+  }
 }

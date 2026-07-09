@@ -26,6 +26,16 @@ class AuraSubmittedPopup extends StatefulWidget {
   State<AuraSubmittedPopup> createState() => _AuraSubmittedPopupState();
 }
 
+const List<String> _kAuraSenseTrivia = [
+  'When did the first modern fashion runway happen?',
+  'The word "aura" comes from the Greek word for breeze.',
+  'Confidence is the one accessory that never goes out of style.',
+  'The first color photograph was taken in 1861.',
+  'Your first impression forms in less than a second.',
+  'Vintage denim can take up to a year to fade naturally.',
+  'The catwalk got its name from a narrow backstage walkway.',
+];
+
 class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     with TickerProviderStateMixin {
   String? _resultStatus;
@@ -33,10 +43,12 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   int _aiScore = 0;
   bool _isBestForChallenge = false;
   String _aiReason = '';
-  bool _showExplanation = false;
+  String _approvedView = 'summary'; // 'summary' | 'explanation' | 'card'
   bool _timedOut = false;
   Timer? _timeoutTimer;
   Timer? _pollTimer;
+  Timer? _triviaTimer;
+  int _triviaIndex = 0;
 
   String _username = '';
   String _city = '';
@@ -46,41 +58,34 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   final _cardKey = GlobalKey();
 
   late AnimationController _enterCtrl;
-  late AnimationController _scanCtrl;
-  late AnimationController _radarCtrl;
-  late AnimationController _dotsCtrl;
   late AnimationController _pulseCtrl;
   late AnimationController _resultEnterCtrl;
   late AnimationController _countCtrl;
-  late AnimationController _particleCtrl;
   late AnimationController _explanationCtrl;
+  late AnimationController _percentCtrl;
 
   late Animation<double> _enterScale;
   late Animation<double> _enterFade;
-  late Animation<double> _scanPos;
   late Animation<double> _pulseAnim;
   late Animation<double> _resultScale;
   late Animation<double> _resultFade;
   late Animation<double> _explanationFade;
   late Animation<Offset> _explanationSlide;
+  late Animation<double> _percentAnim;
 
   @override
   void initState() {
     super.initState();
 
     _enterCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
-    _scanCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
-    _radarCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
-    _dotsCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
     _resultEnterCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _countCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
-    _particleCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2800));
     _explanationCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _percentCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 14));
 
     _enterScale = CurvedAnimation(parent: _enterCtrl, curve: Curves.elasticOut);
     _enterFade = CurvedAnimation(parent: _enterCtrl, curve: Curves.easeIn);
-    _scanPos = CurvedAnimation(parent: _scanCtrl, curve: Curves.easeInOut);
     _pulseAnim = Tween<double>(begin: 0.93, end: 1.07).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
@@ -89,8 +94,15 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     _explanationFade = CurvedAnimation(parent: _explanationCtrl, curve: Curves.easeIn);
     _explanationSlide = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
         .animate(CurvedAnimation(parent: _explanationCtrl, curve: Curves.easeOutCubic));
+    _percentAnim = Tween<double>(begin: 0, end: 92)
+        .animate(CurvedAnimation(parent: _percentCtrl, curve: Curves.easeOutCubic));
 
     _enterCtrl.forward();
+    _percentCtrl.forward();
+    _triviaTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || _resultStatus != null) return;
+      setState(() => _triviaIndex = (_triviaIndex + 1) % _kAuraSenseTrivia.length);
+    });
 
     if (widget.initialResult != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -162,15 +174,14 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       _isBestForChallenge = isBest;
       _aiReason = reason;
       if (uname.isNotEmpty) _username = uname;
-      _showExplanation = status == 'approved' && reason.isNotEmpty;
+      _approvedView = 'summary';
     });
     _resultEnterCtrl.forward();
     if (status == 'approved') {
       _countCtrl.forward();
-      _particleCtrl.forward();
-      if (reason.isNotEmpty) _explanationCtrl.forward();
+      _explanationCtrl.forward();
       _fetchUserInfoForCard();
-    } else {
+    } else if (status == 'ai_error') {
       Future.delayed(const Duration(seconds: 8), () {
         if (mounted) Navigator.of(context).pop(true);
       });
@@ -183,6 +194,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       if (!mounted || profile == null) return;
       final city = profile['city'] as String? ?? '';
       final name = profile['displayName'] as String? ??
+          profile['profileName'] as String? ??
           profile['username'] as String? ?? '';
       setState(() {
         if (city.isNotEmpty) _city = city;
@@ -254,194 +266,111 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   void dispose() {
     _pollTimer?.cancel();
     _timeoutTimer?.cancel();
+    _triviaTimer?.cancel();
     _enterCtrl.dispose();
-    _scanCtrl.dispose();
-    _radarCtrl.dispose();
-    _dotsCtrl.dispose();
     _pulseCtrl.dispose();
     _resultEnterCtrl.dispose();
     _countCtrl.dispose();
-    _particleCtrl.dispose();
     _explanationCtrl.dispose();
+    _percentCtrl.dispose();
     super.dispose();
   }
 
-  // ── Particles (approved state only) ──────────────────────────────────────────
+  // ── Reviewing phase: full-screen "Aura Sense" analysing experience ──────────
 
-  List<Widget> _buildParticles() {
-    const particles = <List<double>>[
-      [18.0, 60.0, 14.0],
-      [295.0, 45.0, 10.0],
-      [4.0, 160.0, 12.0],
-      [308.0, 170.0, 9.0],
-      [95.0, 12.0, 16.0],
-      [220.0, 18.0, 10.0],
-      [145.0, 490.0, 12.0],
-      [48.0, 460.0, 8.0],
-      [270.0, 445.0, 14.0],
-      [155.0, 510.0, 10.0],
-      [28.0, 360.0, 8.0],
-      [298.0, 330.0, 11.0],
-    ];
-    return particles.asMap().entries.map((entry) {
-      final idx = entry.key;
-      final p = entry.value;
-      return AnimatedBuilder(
-        animation: _particleCtrl,
-        builder: (_, __) {
-          final stagger = (idx * 0.07).clamp(0.0, 0.55);
-          final localT = ((_particleCtrl.value - stagger) / (1 - stagger)).clamp(0.0, 1.0);
-          final opacity = localT < 0.25
-              ? localT / 0.25
-              : localT > 0.65
-                  ? (1 - localT) / 0.35
-                  : 1.0;
-          final dy = p[1] - localT * 90;
-          return Positioned(
-            left: p[0],
-            top: dy,
-            child: Opacity(
-              opacity: opacity.clamp(0.0, 1.0),
-              child: Text(
-                idx % 3 == 0 ? '✦' : idx % 3 == 1 ? '★' : '✸',
-                style: TextStyle(
-                  color: idx % 2 == 0 ? const Color(0xFFD4A8FF) : const Color(0xFFFFD700),
-                  fontSize: p[2],
-                ),
-              ),
+  Widget _buildAuraSenseScreen() {
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ScaleTransition(
+            scale: _pulseAnim,
+            child: Image.asset(
+              'assets/images/analysing/Asset 132.png',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
             ),
-          );
-        },
-      );
-    }).toList();
-  }
-
-  // ── Reviewing phase ───────────────────────────────────────────────────────────
-
-  Widget _buildReviewingPhase() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: 150,
-          height: 150,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              ...List.generate(3, (i) {
-                return AnimatedBuilder(
-                  animation: _radarCtrl,
-                  builder: (_, __) {
-                    final t = (_radarCtrl.value + i / 3.0) % 1.0;
-                    final scale = 0.35 + t * 0.65;
-                    final opacity = (1 - t).clamp(0.0, 1.0);
-                    return Opacity(
-                      opacity: opacity,
-                      child: Container(
-                        width: 140 * scale,
-                        height: 140 * scale,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }),
-              ScaleTransition(
-                scale: _pulseAnim,
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const RadialGradient(colors: [Color(0xFFBB66FF), Color(0xFF4A1080)]),
-                    boxShadow: [BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.85), blurRadius: 22, spreadRadius: 4)],
-                  ),
-                  child: ClipOval(
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Image.asset('assets/images/Aura Arena Mono.png'),
-                        ),
-                        AnimatedBuilder(
-                          animation: _scanPos,
-                          builder: (_, __) {
-                            return Positioned(
-                              top: _scanPos.value * 96,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                height: 2.5,
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [Colors.transparent, Color(0xFFCC77FF), Colors.transparent],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          'AI is reviewing\nyour video...',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.35),
-        ),
-        const SizedBox(height: 14),
-        if (!_timedOut)
-          AnimatedBuilder(
-            animation: _dotsCtrl,
-            builder: (_, __) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(3, (i) {
-                  final t = (_dotsCtrl.value + i * 0.33) % 1.0;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
-                    child: Transform.scale(
-                      scale: 0.5 + t * 0.5,
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color.lerp(const Color(0xFF7B2CBF), const Color(0xFFD4A8FF), t),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  FadeTransition(
+                    opacity: _enterFade,
+                    child: Image.asset('assets/images/analysing/Asset 133.png', height: 32),
+                  ),
+                  const Spacer(flex: 5),
+                  AnimatedBuilder(
+                    animation: _percentAnim,
+                    builder: (_, __) {
+                      final pct = _percentAnim.value.round();
+                      return ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Colors.white, Color(0xFFC9A6FF)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ).createShader(bounds),
+                        child: Text(
+                          '$pct%',
+                          style: const TextStyle(
+                            fontFamily: 'ClashDisplay',
+                            color: Colors.white,
+                            fontSize: 64,
+                            fontWeight: FontWeight.w700,
+                            height: 1,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Image.asset('assets/images/analysing/Asset 135.png', height: 16),
+                  const SizedBox(height: 18),
+                  Image.asset('assets/images/analysing/Asset 136.png', height: 60),
+                  const Spacer(flex: 6),
+                  if (!_timedOut) ...[
+                    Image.asset('assets/images/analysing/Asset 137.png', height: 22),
+                    const SizedBox(height: 10),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 400),
+                      child: Text(
+                        _kAuraSenseTrivia[_triviaIndex],
+                        key: ValueKey(_triviaIndex),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
                         ),
                       ),
                     ),
-                  );
-                }),
-              );
-            },
-          )
-        else ...[
-          const Text('Taking longer than usual...', style: TextStyle(color: Colors.white54, fontSize: 13)),
-          const SizedBox(height: 14),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(false),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF7B2CBF).withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.5)),
+                  ] else ...[
+                    const Text('Taking longer than usual...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    const SizedBox(height: 14),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7B2CBF).withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.5)),
+                        ),
+                        child: const Text('Check My Account later', style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                ],
               ),
-              child: const Text('Check My Account later', style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w600)),
             ),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -452,127 +381,278 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       scale: _resultScale,
       child: FadeTransition(
         opacity: _resultFade,
-        child: _resultStatus == 'approved'
-            ? _buildApprovedContent()
-            : _resultStatus == 'rejected'
-                ? _buildRejectedContent()
-                : _buildErrorContent(),
+        child: _buildErrorContent(),
       ),
     );
   }
 
-  // ── Approved: explanation → card flow ────────────────────────────────────────
+  // ── Approved: full-screen "Aura Sense" earned experience ─────────────────────
 
-  Widget _buildApprovedContent() {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 350),
-      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-      child: _showExplanation ? _buildExplanationView() : _buildCardView(),
+  Widget _buildAuraSenseApprovedScreen() {
+    final isSummary = _approvedView == 'summary';
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          isSummary
+              ? ScaleTransition(
+                  scale: _pulseAnim,
+                  child: Image.asset(
+                    'assets/images/aura earned/Asset 139.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                  ),
+                )
+              : Opacity(
+                  opacity: 0.55,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.asset(
+                        'assets/images/aura earned/Asset 139.png',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                      ),
+                      SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 12),
+                              Image.asset('assets/images/aura earned/Asset 140.png', height: 32),
+                              const Spacer(),
+                              Image.asset('assets/images/aura earned/Asset 144.png', height: 24),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          if (!isSummary) Container(color: Colors.black.withValues(alpha: 0.35)),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 350),
+                switchInCurve: Curves.easeIn,
+                switchOutCurve: Curves.easeOut,
+                child: isSummary
+                    ? _buildAuraEarnedSummary()
+                    : Column(
+                        key: ValueKey(_approvedView),
+                        children: [
+                          Expanded(
+                            child: Center(
+                              child: SingleChildScrollView(
+                                child: Container(
+                                  constraints: const BoxConstraints(maxWidth: 320),
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(28),
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF0D0020), Color(0xFF3D1277), Color(0xFF150030)],
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                    ),
+                                    border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF7B2CBF).withValues(alpha: 0.7),
+                                        blurRadius: 40,
+                                        spreadRadius: 8,
+                                      ),
+                                    ],
+                                  ),
+                                  child: _approvedView == 'explanation' ? _buildExplanationView() : _buildCardView(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (_approvedView == 'explanation') ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildAuraEarnedIconButton(
+                                  'assets/images/aura earned/Asset 146.png',
+                                  onTap: () => setState(() => _approvedView = 'card'),
+                                ),
+                                const SizedBox(width: 20),
+                                _buildAuraEarnedIconButton(
+                                  'assets/images/aura earned/Asset 147.png',
+                                  onTap: () => Navigator.of(context).pop(true),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
+  Widget _buildAuraEarnedSummary() {
+    return Column(
+      key: const ValueKey('summary'),
+      children: [
+        const SizedBox(height: 12),
+        Image.asset('assets/images/aura earned/Asset 140.png', height: 32),
+        const Spacer(flex: 4),
+        Image.asset('assets/images/aura earned/Asset 141.png', height: 20),
+        const SizedBox(height: 10),
+        AnimatedBuilder(
+          animation: _countCtrl,
+          builder: (_, __) {
+            final n = (_netAurasAwarded * Curves.easeOutCubic.transform(_countCtrl.value)).round();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Colors.white, Color(0xFFC9A6FF)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ).createShader(bounds),
+                  child: Text(
+                    '+$n',
+                    style: const TextStyle(
+                      fontFamily: 'ClashDisplay',
+                      color: Colors.white,
+                      fontSize: 56,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Image.asset('assets/images/aura earned/Asset 143.png', width: 32, height: 32),
+              ],
+            );
+          },
+        ),
+        const Spacer(flex: 5),
+        Image.asset('assets/images/aura earned/Asset 144.png', height: 24),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildAuraEarnedIconButton(
+              'assets/images/aura earned/Asset 145.png',
+              onTap: () => setState(() => _approvedView = 'explanation'),
+            ),
+            const SizedBox(width: 20),
+            _buildAuraEarnedIconButton(
+              'assets/images/aura earned/Asset 146.png',
+              onTap: () => setState(() => _approvedView = 'card'),
+            ),
+            const SizedBox(width: 20),
+            _buildAuraEarnedIconButton(
+              'assets/images/aura earned/Asset 147.png',
+              onTap: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildAuraEarnedIconButton(String asset, {required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Image.asset(asset, width: 56, height: 56),
+    );
+  }
+
+  // ── Approved: score-breakdown / achievement-card sub-views ──────────────────
+
+  static const _kScoreAnalysisDots = [
+    'assets/images/score analysis/Asset 157.png', // green — strength
+    'assets/images/score analysis/Asset 158.png', // yellow — area to improve
+    'assets/images/score analysis/Asset 159.png', // pink — tip
+  ];
+
   Widget _buildExplanationView() {
+    final points = _feedbackSentences();
     return SlideTransition(
       position: _explanationSlide,
       child: FadeTransition(
         opacity: _explanationFade,
-        child: SingleChildScrollView(
+        child: Column(
           key: const ValueKey('explanation'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _aiScore > 0 ? '$_aiScore' : '${_netAurasAwarded * 6}',
-                style: const TextStyle(
-                  color: Color(0xFFFFD700),
-                  fontSize: 72,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                ),
-              ),
-              const Text(
-                'AURA SCORE',
-                style: TextStyle(color: Colors.white54, fontSize: 11, letterSpacing: 2.5, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _isBestForChallenge
-                      ? Colors.greenAccent.withValues(alpha: 0.12)
-                      : Colors.orange.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _isBestForChallenge
-                        ? Colors.greenAccent.withValues(alpha: 0.35)
-                        : Colors.orange.withValues(alpha: 0.35),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Score Analysis',
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.2))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Transform.rotate(
+                    angle: 0.785398,
+                    child: Container(width: 8, height: 8, color: const Color(0xFF9B4DCA)),
                   ),
                 ),
-                child: Text(
-                  _isBestForChallenge
-                      ? '+$_netAurasAwarded Aura earned  ✓'
-                      : 'Not your best — no Auras earned',
-                  style: TextStyle(
-                    color: _isBestForChallenge ? Colors.greenAccent : Colors.orange,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Expanded(child: Container(height: 1, color: Colors.white.withValues(alpha: 0.2))),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              widget.challengeTitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFFC978F0), fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.6)),
               ),
-              const SizedBox(height: 18),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A0533).withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              child: RichText(
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.psychology_outlined, color: Color(0xFFD4A8FF), size: 18),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Score Breakdown',
-                          style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _aiReason,
-                      style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.55),
-                    ),
+                    const TextSpan(text: 'AI Score : ', style: TextStyle(color: Colors.white)),
+                    TextSpan(text: '$_aiScore', style: const TextStyle(color: Color(0xFFFF6EC7), fontWeight: FontWeight.w800)),
+                    TextSpan(text: '/100', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              GestureDetector(
-                onTap: () {
-                  setState(() => _showExplanation = false);
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)]),
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.45), blurRadius: 12, spreadRadius: 1),
+            ),
+            const SizedBox(height: 22),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: points.asMap().entries.map((entry) {
+                final dot = _kScoreAnalysisDots[entry.key % _kScoreAnalysisDots.length];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(padding: const EdgeInsets.only(top: 3), child: Image.asset(dot, width: 12, height: 12)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(entry.value, style: const TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4)),
+                      ),
                     ],
                   ),
-                  child: const Text(
-                    'Got it',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ],
-          ),
+                );
+              }).toList(),
+            ),
+          ],
         ),
       ),
     );
@@ -741,51 +821,140 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     );
   }
 
-  // ── Rejected ──────────────────────────────────────────────────────────────────
+  // ── Rejected: full-screen "Aura Sense" card ──────────────────────────────────
 
-  Widget _buildRejectedContent() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 104,
-          height: 104,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF1A0000),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 2),
-            boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 24, spreadRadius: 4)],
-          ),
-          child: const Icon(Icons.close_rounded, color: Colors.redAccent, size: 56),
-        ),
-        const SizedBox(height: 18),
-        const Text('Video Rejected', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _aiReason.isNotEmpty ? _aiReason : 'This video didn\'t meet the challenge criteria.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.4),
-          ),
-        ),
-        const SizedBox(height: 20),
-        GestureDetector(
-          onTap: () => Navigator.of(context).pop(true),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+  List<String> _feedbackSentences({String fallback = 'No additional feedback for this submission.'}) {
+    final raw = _aiReason.trim();
+    if (raw.isEmpty) return [fallback];
+    final sentences = raw
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return sentences.isEmpty ? [raw] : sentences;
+  }
+
+  Widget _buildAuraSenseRejectedScreen() {
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Opacity(
+            opacity: 0.55,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset('assets/images/analysing/Asset 132.png', fit: BoxFit.cover, alignment: Alignment.center),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 12),
+                        Image.asset('assets/images/analysing/Asset 133.png', height: 32),
+                        const Spacer(),
+                        Image.asset('assets/images/analysing/Asset 137.png', height: 22),
+                        const SizedBox(height: 10),
+                        Text(
+                          _kAuraSenseTrivia[_triviaIndex],
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            child: const Text(
-              'Try again with a better video',
-              style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.35)),
+          SafeArea(
+            child: Center(
+              child: FadeTransition(
+                opacity: _resultFade,
+                child: ScaleTransition(
+                  scale: _resultScale,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(28),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0D0018), Color(0xFF1B0433), Color(0xFF0D0018)],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        border: Border.all(color: const Color(0xFF7B2CBF).withValues(alpha: 0.7), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.35), blurRadius: 30, spreadRadius: 4),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset('assets/images/video rejected/Asset 123.png', width: 84, height: 84),
+                          const SizedBox(height: 18),
+                          Image.asset('assets/images/video rejected/Asset 124.png', height: 26),
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.challengeTitle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Color(0xFFC978F0), fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 18),
+                          Container(height: 1, color: Colors.white.withValues(alpha: 0.15)),
+                          const SizedBox(height: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _feedbackSentences(
+                              fallback: 'Your attempt did not meet the challenge requirements.',
+                            ).map((reason) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 5),
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFA855F7)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        reason,
+                                        style: const TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).pop(true),
+                            child: Image.asset(
+                              'assets/images/video rejected/Asset 131.png',
+                              width: double.infinity,
+                              height: 48,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -838,13 +1007,19 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
   @override
   Widget build(BuildContext context) {
-    final isApproved = _resultStatus == 'approved';
-    final dialogH = isApproved
-        ? (_showExplanation ? 520.0 : 560.0)
-        : 410.0;
+    if (_resultStatus == null) {
+      return _buildAuraSenseScreen();
+    }
+    if (_resultStatus == 'rejected') {
+      return _buildAuraSenseRejectedScreen();
+    }
+    if (_resultStatus == 'approved') {
+      return _buildAuraSenseApprovedScreen();
+    }
 
+    // Only 'ai_error' reaches this small dialog now.
     return GestureDetector(
-      onTap: isApproved ? null : () => Navigator.of(context).pop(true),
+      onTap: () => Navigator.of(context).pop(true),
       behavior: HitTestBehavior.opaque,
       child: Center(
         child: GestureDetector(
@@ -857,13 +1032,13 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                 color: Colors.transparent,
                 child: SizedBox(
                   width: 320,
-                  height: dialogH,
+                  height: 410,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Container(
                         width: 320,
-                        height: dialogH,
+                        height: 410,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(28),
@@ -881,37 +1056,28 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                             ),
                           ],
                         ),
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 500),
-                          switchInCurve: Curves.easeIn,
-                          switchOutCurve: Curves.easeOut,
-                          child: _resultStatus != null
-                              ? _buildResultPhase()
-                              : _buildReviewingPhase(),
-                        ),
+                        child: _buildResultPhase(),
                       ),
-                      if (_resultStatus == 'approved') ..._buildParticles(),
-                      if (_resultStatus != null)
-                        Positioned(
-                          top: -14,
-                          right: -14,
-                          child: GestureDetector(
-                            onTap: () => Navigator.of(context).pop(true),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A0050),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
-                                boxShadow: [
-                                  BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.5), blurRadius: 8),
-                                ],
-                              ),
-                              child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                      Positioned(
+                        top: -14,
+                        right: -14,
+                        child: GestureDetector(
+                          onTap: () => Navigator.of(context).pop(true),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A0050),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
+                              boxShadow: [
+                                BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.5), blurRadius: 8),
+                              ],
                             ),
+                            child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),

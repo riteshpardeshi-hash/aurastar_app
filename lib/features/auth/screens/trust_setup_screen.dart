@@ -10,8 +10,7 @@ class TrustSetupScreen extends StatefulWidget {
   State<TrustSetupScreen> createState() => _TrustSetupScreenState();
 }
 
-class _TrustSetupScreenState extends State<TrustSetupScreen>
-    with TickerProviderStateMixin {
+class _TrustSetupScreenState extends State<TrustSetupScreen> {
   static const _bg     = Color(0xFF080810);
   static const _accent = Color(0xFF7B2CBF);
 
@@ -43,44 +42,11 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
     ),
   ];
 
-  late final List<bool> _checked;
-  late final List<AnimationController> _checkCtrls;
+  bool _agreed = false;
   bool _saving = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _checked = List.filled(_pledges.length, false);
-    _checkCtrls = List.generate(
-      _pledges.length,
-      (_) => AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 250),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    for (final c in _checkCtrls) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  bool get _allChecked => _checked.every((v) => v);
-
-  void _toggle(int i) {
-    setState(() => _checked[i] = !_checked[i]);
-    if (_checked[i]) {
-      _checkCtrls[i].forward();
-    } else {
-      _checkCtrls[i].reverse();
-    }
-  }
-
-  Future<void> _agree() async {
-    if (!_allChecked || _saving) return;
+  Future<void> _letsGo() async {
+    if (!_agreed || _saving) return;
     setState(() => _saving = true);
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -90,7 +56,7 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
         });
       }
     } catch (_) {
-      // Non-blocking: proceed to setup even if write fails
+      // Non-blocking: proceed even if write fails
     }
     if (!mounted) return;
     Navigator.pushReplacement(
@@ -109,7 +75,7 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // ── Header icon ────────────────────────────────────────────────
               Center(
                 child: Container(
                   width: 60,
@@ -135,26 +101,23 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
               ),
               const SizedBox(height: 4),
               Text(
-                'Tap each item to confirm you understand.',
+                'Please read and accept our community standards.',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
               ),
               const SizedBox(height: 24),
 
-              // Pledge items
+              // ── Pledge list (non-interactive) ──────────────────────────────
               Expanded(
                 child: ListView.separated(
                   itemCount: _pledges.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (_, i) {
                     final p = _pledges[i];
-                    return _PledgeItem(
+                    return _PledgeTile(
                       icon: p.icon,
                       title: p.title,
                       body: p.body,
-                      checked: _checked[i],
-                      controller: _checkCtrls[i],
-                      onTap: () => _toggle(i),
                     );
                   },
                 ),
@@ -162,52 +125,65 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
 
               const SizedBox(height: 20),
 
-              // Progress indicator
-              AnimatedOpacity(
-                opacity: _allChecked ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 300),
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(_pledges.length, (i) {
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: _checked[i] ? 20 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: _checked[i]
+              // ── I agree checkbox ───────────────────────────────────────────
+              GestureDetector(
+                onTap: () => setState(() => _agreed = !_agreed),
+                child: Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: _agreed ? _accent : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _agreed
                               ? _accent
-                              : Colors.white.withValues(alpha: 0.20),
-                          borderRadius: BorderRadius.circular(4),
+                              : Colors.white.withValues(alpha: 0.35),
+                          width: 1.5,
                         ),
-                      );
-                    }),
-                  ),
+                      ),
+                      child: _agreed
+                          ? const Icon(Icons.check_rounded,
+                              color: Colors.white, size: 14)
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'I agree to the community pledge',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.80),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              // Agree button
+              const SizedBox(height: 20),
+
+              // ── Let's Go button ────────────────────────────────────────────
               AnimatedOpacity(
-                opacity: _allChecked ? 1.0 : 0.4,
-                duration: const Duration(milliseconds: 300),
+                opacity: _agreed ? 1.0 : 0.4,
+                duration: const Duration(milliseconds: 250),
                 child: GestureDetector(
-                  onTap: _agree,
+                  onTap: _letsGo,
                   child: Container(
                     width: double.infinity,
                     height: 56,
                     decoration: BoxDecoration(
-                      gradient: _allChecked
+                      gradient: _agreed
                           ? const LinearGradient(
                               colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
                             )
                           : null,
-                      color: _allChecked
+                      color: _agreed
                           ? null
                           : Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: _allChecked
+                      boxShadow: _agreed
                           ? [
                               BoxShadow(
                                 color: _accent.withValues(alpha: 0.45),
@@ -226,7 +202,7 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
                                   color: Colors.white, strokeWidth: 2.5),
                             )
                           : const Text(
-                              'I Agree — Let\'s Go',
+                              "Let's Go",
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 17,
@@ -246,23 +222,17 @@ class _TrustSetupScreenState extends State<TrustSetupScreen>
   }
 }
 
-// ── Pledge item ────────────────────────────────────────────────────────────────
+// ── Static pledge tile ─────────────────────────────────────────────────────────
 
-class _PledgeItem extends StatelessWidget {
+class _PledgeTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String body;
-  final bool checked;
-  final AnimationController controller;
-  final VoidCallback onTap;
 
-  const _PledgeItem({
+  const _PledgeTile({
     required this.icon,
     required this.title,
     required this.body,
-    required this.checked,
-    required this.controller,
-    required this.onTap,
   });
 
   static const _accent = Color(0xFF7B2CBF);
@@ -270,95 +240,51 @@ class _PledgeItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: checked
-              ? _accent.withValues(alpha: 0.14)
-              : _card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: checked
-                ? _accent.withValues(alpha: 0.60)
-                : Colors.white.withValues(alpha: 0.08),
-            width: checked ? 1.5 : 1,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: _accent, size: 20),
           ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Icon column
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: checked
-                    ? _accent.withValues(alpha: 0.22)
-                    : Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon,
-                  color: checked ? _accent : Colors.white38, size: 20),
-            ),
-            const SizedBox(width: 14),
-
-            // Text
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      color: checked ? Colors.white : Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    body,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                          alpha: checked ? 0.55 : 0.35),
-                      fontSize: 12,
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-
-            // Check mark
-            ScaleTransition(
-              scale: CurvedAnimation(
-                  parent: controller, curve: Curves.elasticOut),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: checked ? _accent : Colors.transparent,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: checked
-                        ? _accent
-                        : Colors.white.withValues(alpha: 0.25),
-                    width: 1.5,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                child: checked
-                    ? const Icon(Icons.check_rounded,
-                        color: Colors.white, size: 14)
-                    : null,
-              ),
+                const SizedBox(height: 3),
+                Text(
+                  body,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.40),
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

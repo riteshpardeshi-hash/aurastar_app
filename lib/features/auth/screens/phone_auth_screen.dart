@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/api_client.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -11,266 +14,420 @@ class PhoneAuthScreen extends StatefulWidget {
 }
 
 class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
-  final _countryCodeCtrl = TextEditingController(text: '+91');
   final _phoneCtrl = TextEditingController();
-  final _otpCtrl = TextEditingController();
-
+  final _otpCtrl   = TextEditingController();
   final _authService = AuthApiService();
 
-  bool _otpSent = false;
-  bool _isLoading = false;
+  bool _otpSent      = false;
+  bool _isLoading    = false;
+  String? _socialLoading;
+
+  static const _accent = Color(0xFF9B30FF);
 
   @override
   void dispose() {
-    _countryCodeCtrl.dispose();
     _phoneCtrl.dispose();
     _otpCtrl.dispose();
     super.dispose();
   }
 
-  String get _phone => _phoneCtrl.text.trim();
-  String get _countryCode => _countryCodeCtrl.text.trim();
+  // ── Phone auth ───────────────────────────────────────────────────────────────
 
   Future<void> _sendOtp() async {
-    if (_phone.isEmpty || _phone.length < 7) {
-      _showSnack('Enter a valid phone number');
+    final phone = _phoneCtrl.text.trim();
+    if (phone.isEmpty || phone.length < 7) {
+      _snack('Enter a valid phone number');
       return;
     }
-    if (!_countryCode.startsWith('+')) {
-      _showSnack('Country code must start with + (e.g. +91)');
-      return;
-    }
-
     setState(() => _isLoading = true);
     try {
-      final otp = await _authService.requestOtp(phone: _phone, countryCode: _countryCode);
+      final otp = await _authService.requestOtp(phone: phone, countryCode: '+91');
       if (!mounted) return;
       setState(() {
-        _otpSent = true;
+        _otpSent   = true;
         _isLoading = false;
         if (otp != null) _otpCtrl.text = otp;
       });
-      _showSnack('OTP sent successfully');
+      _snack('OTP sent successfully');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _showSnack(e.toString());
+      _snack(e.toString());
     }
   }
 
   Future<void> _verifyOtp() async {
     final otp = _otpCtrl.text.trim();
     if (otp.length != 6) {
-      _showSnack('Enter the 6-digit OTP from your SMS');
+      _snack('Enter the 6-digit OTP from your SMS');
       return;
     }
-
     setState(() => _isLoading = true);
     try {
       final result = await _authService.verifyOtp(
-        phone: _phone,
-        countryCode: _countryCode,
+        phone: _phoneCtrl.text.trim(),
+        countryCode: '+91',
         otp: otp,
       );
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      if (result.isNewUser || !(result.user['isProfileComplete'] as bool? ?? false)) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-          (route) => false,
-        );
+      if (!result.isNewUser) {
+        // Returning user — mark complete locally and go straight to Dashboard.
+        final uid = await ApiClient().userId;
+        if (uid != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('setup_complete_$uid', true);
+        }
+        _navigateTo(const Dashboard());
       } else {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => Dashboard()),
-          (route) => false,
-        );
+        // Brand-new user — send through onboarding.
+        final isComplete =
+            result.user['isProfileComplete'] as bool? ?? false;
+        _navigateTo(
+            isComplete ? const Dashboard() : const ProfileSetupScreen());
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _showSnack(e.toString());
+      _snack(e.toString());
     }
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _onMainButton() {
+    if (_isLoading || _socialLoading != null) return;
+    _otpSent ? _verifyOtp() : _sendOtp();
   }
 
-  InputDecoration _input(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.black54, fontSize: 16),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.white, width: 1.2),
-        ),
-      );
+  // ── Google auth ──────────────────────────────────────────────────────────────
+
+  Future<void> _signInWithGoogle() async {
+    if (_socialLoading != null || _isLoading) return;
+    setState(() => _socialLoading = 'google');
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) { setState(() => _socialLoading = null); return; }
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      if (idToken == null) throw Exception('No ID token');
+      final result = await _authService.signInWithGoogle(idToken);
+      if (!mounted) return;
+      _navigateAfterSocial(result.isNewUser, result.user);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _socialLoading = null);
+        _snack('Google sign-in failed. Please try again.');
+      }
+    }
+  }
+
+  void _navigateAfterSocial(bool isNewUser, Map<String, dynamic> user) {
+    final isComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
+    _navigateTo(isComplete ? const Dashboard() : const ProfileSetupScreen());
+  }
+
+  void _navigateTo(Widget screen) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+      (route) => false,
+    );
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final busy = _isLoading || _socialLoading != null;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // Background
           Image.asset(
-            'assets/images/power-music-concept-portrait (2).jpg',
+            'assets/images/sign in/bg.png',
             fit: BoxFit.cover,
           ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.20),
-                  Colors.black.withValues(alpha: 0.45),
-                  Colors.black.withValues(alpha: 0.65),
-                ],
-              ),
-            ),
-          ),
+
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 24),
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height - 48,
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: size.height - MediaQuery.of(context).padding.top,
+                ),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SizedBox(height: size.height * 0.07),
+
+                    // ── Title ──────────────────────────────────────────────────
+                    Center(
+                      child: Column(
+                        children: [
+                          const Text(
+                            'SIGN IN',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 3,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: 40,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: _accent,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    SizedBox(height: size.height * 0.06),
+
+                    // ── Phone field ────────────────────────────────────────────
                     const Text(
-                      'Continue with Phone',
+                      'Phone no.',
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 30),
-
-                    // Country code + phone number row
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 90,
-                          child: TextField(
-                            controller: _countryCodeCtrl,
-                            keyboardType: TextInputType.phone,
-                            textAlign: TextAlign.center,
-                            decoration: _input('+91'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _phoneCtrl,
-                            keyboardType: TextInputType.phone,
-                            decoration: _input('Phone number'),
-                          ),
-                        ),
-                      ],
+                    const SizedBox(height: 8),
+                    _SignInField(
+                      controller: _phoneCtrl,
+                      keyboardType: TextInputType.phone,
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
 
-                    if (_otpSent)
-                      TextField(
-                        controller: _otpCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: _input('Enter 6-digit OTP'),
+                    // ── OTP field ──────────────────────────────────────────────
+                    const Text(
+                      'OTP',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    _SignInField(
+                      controller: _otpCtrl,
+                      keyboardType: TextInputType.number,
+                      focused: _otpSent,
+                    ),
 
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 32),
 
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: DecoratedBox(
+                    // ── Main button ────────────────────────────────────────────
+                    GestureDetector(
+                      onTap: busy ? null : _onMainButton,
+                      child: Container(
+                        width: double.infinity,
+                        height: 52,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF7B2CBF),
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF7B2CBF).withValues(alpha: 0.45),
-                              blurRadius: 18,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
-                            ),
+                          color: const Color(0xFF1D0A4E),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.55),
+                            width: 1,
                           ),
-                          onPressed: _isLoading ? null : (_otpSent ? _verifyOtp : _sendOtp),
+                        ),
+                        child: Center(
                           child: _isLoading
                               ? const SizedBox(
                                   width: 22,
                                   height: 22,
                                   child: CircularProgressIndicator(
                                     color: Colors.white,
-                                    strokeWidth: 2.4,
+                                    strokeWidth: 2.2,
                                   ),
                                 )
                               : Text(
-                                  _otpSent ? 'Verify OTP' : 'Send OTP',
+                                  _otpSent ? 'Get Started' : 'Get OTP',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 20,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.3,
                                   ),
                                 ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 18),
+                    SizedBox(height: size.height * 0.055),
 
-                    if (_otpSent)
-                      TextButton(
-                        onPressed: _isLoading ? null : () => setState(() => _otpSent = false),
-                        child: const Text(
-                          'Change number',
-                          style: TextStyle(color: Colors.white70, fontSize: 14),
+                    // ── Sign in with divider ───────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Divider(
+                            color: _accent.withValues(alpha: 0.55),
+                            thickness: 1,
+                          ),
                         ),
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Text(
+                            'Sign in with',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Divider(
+                            color: _accent.withValues(alpha: 0.55),
+                            thickness: 1,
+                          ),
+                        ),
+                      ],
+                    ),
 
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'Back',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
+                    const SizedBox(height: 28),
+
+                    // ── Social buttons ─────────────────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _SocialImageButton(
+                          asset: 'assets/images/sign in/Asset 69.png',
+                          onTap: busy
+                              ? null
+                              : () => _snack('Facebook sign-in coming soon'),
+                        ),
+                        const SizedBox(width: 20),
+                        _SocialImageButton(
+                          asset: 'assets/images/sign in/Asset 70.png',
+                          onTap: busy
+                              ? null
+                              : () => _snack('Twitter sign-in coming soon'),
+                        ),
+                        const SizedBox(width: 20),
+                        _SocialImageButton(
+                          asset: 'assets/images/sign in/Asset 71.png',
+                          loading: _socialLoading == 'google',
+                          onTap: busy ? null : _signInWithGoogle,
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 40),
-                    Image.asset(
-                      'assets/images/Aura arena.png',
-                      height: 100,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Input field ────────────────────────────────────────────────────────────────
+
+class _SignInField extends StatelessWidget {
+  final TextEditingController controller;
+  final TextInputType keyboardType;
+  final bool focused;
+
+  const _SignInField({
+    required this.controller,
+    this.keyboardType = TextInputType.text,
+    this.focused = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF9B30FF);
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: focused
+              ? accent.withValues(alpha: 0.85)
+              : accent.withValues(alpha: 0.40),
+          width: focused ? 1.5 : 1.0,
+        ),
+        boxShadow: focused
+            ? [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        cursorColor: accent,
+        decoration: const InputDecoration(
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Social icon button ─────────────────────────────────────────────────────────
+
+class _SocialImageButton extends StatelessWidget {
+  final String asset;
+  final VoidCallback? onTap;
+  final bool loading;
+
+  const _SocialImageButton({
+    required this.asset,
+    this.onTap,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 62,
+        height: 62,
+        child: loading
+            ? Container(
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF3D0080),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.2,
+                    ),
+                  ),
+                ),
+              )
+            : Image.asset(asset),
       ),
     );
   }

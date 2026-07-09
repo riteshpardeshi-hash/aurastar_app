@@ -34,10 +34,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profile = await AuthApiService().getProfile();
     if (!mounted) return;
     if (profile != null) {
-      _nameCtrl.text     = profile['displayName'] as String? ?? '';
-      _usernameCtrl.text = profile['username']    as String? ?? '';
-      _currentPhotoUrl   = profile['avatar']      as String? ?? '';
-      _currentGender     = profile['gender']      as String? ?? '';
+      _nameCtrl.text = (profile['displayName'] as String? ?? '').isNotEmpty
+          ? profile['displayName'] as String
+          : profile['name'] as String? ?? '';
+      _usernameCtrl.text = profile['profileName'] as String? ??
+          profile['username'] as String? ?? '';
+      _currentPhotoUrl   = (profile['avatar'] as String? ?? '').isNotEmpty
+          ? profile['avatar'] as String
+          : profile['profileImageUrl'] as String? ?? '';
+      _currentGender     = profile['gender'] as String? ?? '';
     }
     setState(() => _loading = false);
   }
@@ -140,7 +145,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated.')),
       );
-      Navigator.pop(context);
+      Navigator.pop(context, {
+        'displayName': _nameCtrl.text.trim(),
+        'username': _usernameCtrl.text.trim(),
+        'gender': _currentGender,
+        'avatar': _currentPhotoUrl,
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);

@@ -87,6 +87,14 @@ flutter:
     - assets/images/homescreen/
     - assets/images/homescreen/menu/
     - assets/images/homescreen/separate elements/
+    - "assets/images/sign in/"
+    - "assets/images/your interest/"
+    - "assets/images/permissions/"
+    - assets/images/analysing/
+    - "assets/images/video rejected/"
+    - "assets/images/aura earned/"
+    - "assets/images/score analysis/"
+    - assets/images/flex/
 
   fonts:
     - family: ClashDisplay

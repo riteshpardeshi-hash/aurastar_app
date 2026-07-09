@@ -22,166 +22,111 @@ class AchievementCardView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 288,
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0A0018), Color(0xFF2A0B6B), Color(0xFF0A0018)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-        ),
-        border: Border.all(color: const Color(0xFF9B4DCA), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF7B2CBF).withValues(alpha: 0.6),
-            blurRadius: 24,
-            spreadRadius: 4,
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset('assets/images/Aura Arena Mono.png', width: 20, height: 20),
-              const SizedBox(width: 7),
-              const Text(
-                'AURA',
-                style: TextStyle(
-                  color: Color(0xFFD4A8FF),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 3.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.45)),
+    const cardWidth = 268.0;
+    const textColWidth = cardWidth * 0.58;
+
+    return SizedBox(
+      width: cardWidth,
+      child: AspectRatio(
+        aspectRatio: 810 / 1231,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Image.asset('assets/images/flex/Asset 111.png', fit: BoxFit.cover),
             ),
-            child: const Text(
-              '✦  CHALLENGE COMPLETED  ✦',
-              style: TextStyle(
-                color: Color(0xFFFFD700),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            challengeTitle,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            '+$auraPoints',
-            style: const TextStyle(
-              color: Color(0xFFFFD700),
-              fontSize: 60,
-              fontWeight: FontWeight.w900,
-              height: 1.0,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'AURA POINTS',
-            style: TextStyle(
-              color: Color(0xFFD4A8FF),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2.5,
-            ),
-          ),
-          if (cityRank != null && city != null && city!.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFF54A0FF).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: const Color(0xFF54A0FF).withValues(alpha: 0.40)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            Image.asset('assets/images/flex/Asset 112.png', fit: BoxFit.fill),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(Icons.location_city_rounded,
-                      color: Color(0xFF54A0FF), size: 11),
-                  const SizedBox(width: 4),
-                  Text(
-                    '#$cityRank in $city',
-                    style: const TextStyle(
-                      color: Color(0xFF54A0FF),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
+                  Image.asset('assets/images/flex/Asset 113.png', height: 16),
+                  const Spacer(flex: 3),
+                  SizedBox(
+                    width: textColWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          challengeTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                        ),
+                        Image.asset('assets/images/flex/Asset 115.png', height: 20, alignment: Alignment.centerLeft),
+                        const SizedBox(height: 18),
+                        Image.asset('assets/images/flex/Asset 116.png', height: 13, alignment: Alignment.centerLeft),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              '+$auraPoints',
+                              style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1),
+                            ),
+                            const SizedBox(width: 6),
+                            Image.asset('assets/images/flex/Asset 118.png', height: 22),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Image.asset('assets/images/flex/Asset 119.png', height: 12, alignment: Alignment.centerLeft),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Beat This?',
+                          style: TextStyle(color: Color(0xFFA700FF), fontSize: 17, fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 10),
+                        AspectRatio(
+                          aspectRatio: 303 / 63,
+                          child: Image.asset('assets/images/flex/Asset 123.png', fit: BoxFit.fill),
+                        ),
+                      ],
                     ),
                   ),
+                  const Spacer(flex: 3),
+                  Text(
+                    '@$username',
+                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
+                  ),
+                  if (cityRank != null && city != null && city!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF54A0FF).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFF54A0FF).withValues(alpha: 0.40)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.location_city_rounded, color: Color(0xFF54A0FF), size: 11),
+                          const SizedBox(width: 4),
+                          Text(
+                            '#$cityRank in $city',
+                            style: const TextStyle(
+                              color: Color(0xFF54A0FF),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 14),
-          Divider(color: const Color(0xFF9B4DCA).withValues(alpha: 0.35), height: 1),
-          const SizedBox(height: 12),
-          Text(
-            '@$username',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Think you can beat me? 💪\nNow it\'s your turn!',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              height: 1.45,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.link_rounded, color: Color(0xFF9B4DCA), size: 13),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  'aura.app/challenge/$challengeId',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF9B4DCA),
-                    fontSize: 10,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF9B4DCA),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }

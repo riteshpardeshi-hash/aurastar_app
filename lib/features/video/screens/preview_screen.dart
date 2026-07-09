@@ -36,6 +36,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
   double _progress = 0; // 0.0 – 1.0
   Timer? _retryTimer;
   int _retryIntervalSeconds = 5;
+  String? _lastError;
+  bool _isNetworkError = false;
 
   @override
   void initState() {
@@ -90,7 +92,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
     final online = await UploadQueueService.hasInternet();
     if (!online) {
       if (!mounted) return;
-      setState(() => _uploadState = _UploadState.failed);
+      setState(() {
+        _uploadState = _UploadState.failed;
+        _isNetworkError = true;
+        _lastError = null;
+      });
       await UploadQueueService.save(
         videoPath: widget.videoPath,
         challengeId: widget.challengeId,
@@ -169,16 +175,29 @@ class _PreviewScreenState extends State<PreviewScreen> {
           ),
         ),
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[Upload] failed: $e\n$st');
       if (!mounted) return;
-      setState(() => _uploadState = _UploadState.failed);
+      final isNetworkError = e is SocketException;
+      setState(() {
+        _uploadState = _UploadState.failed;
+        _isNetworkError = isNetworkError;
+        _lastError = _describeError(e);
+      });
       await UploadQueueService.save(
         videoPath: widget.videoPath,
         challengeId: widget.challengeId,
         challengeTitle: widget.challengeTitle,
       );
-      _startAutoRetry();
+      // Only auto-retry connectivity failures — server-rejected requests
+      // (e.g. incomplete profile) will just fail the same way again.
+      if (isNetworkError) _startAutoRetry();
     }
+  }
+
+  String _describeError(Object e) {
+    final text = e.toString();
+    return text.startsWith('Exception: ') ? text.substring(11) : text;
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -398,7 +417,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
         ),
       );
 
-  // Failed — retry button, local file preserved, auto-retry running
+  // Failed — retry button, local file preserved. Auto-retry only applies
+  // to connectivity failures; server-rejected requests show the real reason.
   Widget _failedView() => Padding(
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
         child: Column(
@@ -407,38 +427,57 @@ class _PreviewScreenState extends State<PreviewScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.wifi_off_rounded,
-                    color: Colors.redAccent, size: 18),
+                Icon(
+                    _isNetworkError
+                        ? Icons.wifi_off_rounded
+                        : Icons.error_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 18),
                 const SizedBox(width: 8),
                 const Text('Upload failed',
                     style: TextStyle(
                         color: Colors.redAccent,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
-                const Spacer(),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.35)),
+                if (_isNetworkError) ...[
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.35)),
+                    ),
+                    child: const Text('Auto-retry on',
+                        style: TextStyle(
+                            color: Colors.amber,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600)),
                   ),
-                  child: const Text('Auto-retry on',
-                      style: TextStyle(
-                          color: Colors.amber,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600)),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 6),
             Text(
-              'Your video is saved. We\'ll retry automatically when you\'re back online.',
+              _isNetworkError
+                  ? 'Your video is saved. We\'ll retry automatically when you\'re back online.'
+                  : (_lastError ??
+                      'Something went wrong. Please try again.'),
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45), fontSize: 12),
+                  color: Colors.white.withValues(alpha: 0.55), fontSize: 12),
             ),
+            if (_isNetworkError && _lastError != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                _lastError!,
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.30), fontSize: 10),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [

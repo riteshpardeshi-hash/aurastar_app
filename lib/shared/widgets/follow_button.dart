@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../core/services/api_client.dart';
+import '../../core/services/creators_service.dart';
 
 class FollowButton extends StatefulWidget {
   final String targetUserId;
-  const FollowButton({super.key, required this.targetUserId});
+
+  /// Pass this when the caller already knows the follow state (e.g. from a
+  /// `CreatorSummary`/`CreatorProfile` fetch that included `isFollowing`) to
+  /// skip a redundant network round-trip. There's no standalone "am I
+  /// following X" endpoint, so without this the button starts as "Follow"
+  /// until toggled.
+  final bool? initialIsFollowing;
+
+  const FollowButton({
+    super.key,
+    required this.targetUserId,
+    this.initialIsFollowing,
+  });
 
   @override
   State<FollowButton> createState() => _FollowButtonState();
@@ -12,10 +24,9 @@ class FollowButton extends StatefulWidget {
 
 class _FollowButtonState extends State<FollowButton> {
   static const _accent = Color(0xFF7B2CBF);
+  final _service = CreatorsService();
 
-  final String _currentUid =
-      FirebaseAuth.instance.currentUser?.uid ?? '';
-
+  String? _myId;
   bool _following = false;
   bool _loading = true;
   bool _actioning = false;
@@ -23,88 +34,35 @@ class _FollowButtonState extends State<FollowButton> {
   @override
   void initState() {
     super.initState();
-    _checkStatus();
-  }
-
-  Future<void> _checkStatus() async {
-    if (_currentUid.isEmpty || _currentUid == widget.targetUserId) {
-      if (mounted) setState(() => _loading = false);
-      return;
-    }
-    final snap = await FirebaseFirestore.instance
-        .collection('follows')
-        .where('followerUserId', isEqualTo: _currentUid)
-        .where('followedUserId', isEqualTo: widget.targetUserId)
-        .limit(1)
-        .get();
-    if (mounted) {
-      setState(() {
-        _following = snap.docs.isNotEmpty;
-        _loading = false;
-      });
-    }
+    _following = widget.initialIsFollowing ?? false;
+    ApiClient().userId.then((id) {
+      if (mounted) {
+        setState(() {
+          _myId = id;
+          _loading = false;
+        });
+      }
+    });
   }
 
   Future<void> _toggle() async {
-    if (_actioning || _loading || _currentUid.isEmpty) return;
+    if (_actioning || _loading || _myId == null) return;
     setState(() => _actioning = true);
-
-    final db = FirebaseFirestore.instance;
-    try {
-      if (_following) {
-        final snap = await db
-            .collection('follows')
-            .where('followerUserId', isEqualTo: _currentUid)
-            .where('followedUserId', isEqualTo: widget.targetUserId)
-            .limit(1)
-            .get();
-        if (snap.docs.isNotEmpty) {
-          final batch = db.batch();
-          batch.delete(snap.docs.first.reference);
-          batch.update(db.collection('users').doc(widget.targetUserId),
-              {'followerCount': FieldValue.increment(-1)});
-          batch.update(db.collection('users').doc(_currentUid),
-              {'followingCount': FieldValue.increment(-1)});
-          await batch.commit();
-        }
-        if (mounted) setState(() => _following = false);
-      } else {
-        final followRef = db.collection('follows').doc();
-        final batch = db.batch();
-        batch.set(followRef, {
-          'followerUserId': _currentUid,
-          'followedUserId': widget.targetUserId,
-          'createdAt': Timestamp.now(),
-        });
-        batch.update(db.collection('users').doc(widget.targetUserId),
-            {'followerCount': FieldValue.increment(1)});
-        batch.update(db.collection('users').doc(_currentUid),
-            {'followingCount': FieldValue.increment(1)});
-        await batch.commit();
-
-        // Notification write is separate (not in batch — no add() in batch)
-        final myDoc = await db.collection('users').doc(_currentUid).get();
-        final myUsername =
-            (myDoc.data() ?? {})['username'] as String? ?? 'Someone';
-        await db.collection('notifications').add({
-          'userId': widget.targetUserId,
-          'type': 'new_follower',
-          'message': '@$myUsername started following you',
-          'sourceUserId': _currentUid,
-          'isRead': false,
-          'createdAt': Timestamp.now(),
-        });
-
-        if (mounted) setState(() => _following = true);
-      }
-    } finally {
-      if (mounted) setState(() => _actioning = false);
+    final wasFollowing = _following;
+    final ok = wasFollowing
+        ? await _service.unfollowCreator(widget.targetUserId)
+        : await _service.followCreator(widget.targetUserId);
+    if (mounted) {
+      setState(() {
+        if (ok) _following = !wasFollowing;
+        _actioning = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_currentUid == widget.targetUserId) return const SizedBox.shrink();
+    if (_myId == widget.targetUserId) return const SizedBox.shrink();
 
     if (_loading) {
       return const SizedBox(

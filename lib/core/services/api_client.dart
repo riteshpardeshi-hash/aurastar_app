@@ -84,12 +84,35 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> put(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    var headers = await _authedHeaders();
+    var res = await http.put(_uri(path), headers: headers, body: jsonEncode(body));
+    if (res.statusCode == 401 && await _tryRefresh()) {
+      headers = await _authedHeaders();
+      res = await http.put(_uri(path), headers: headers, body: jsonEncode(body));
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> get(String path, {bool auth = false}) async {
     var headers = auth ? await _authedHeaders() : _baseHeaders;
     var res = await http.get(_uri(path), headers: headers);
     if (res.statusCode == 401 && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await http.get(_uri(path), headers: headers);
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> delete(String path, {bool auth = false}) async {
+    var headers = auth ? await _authedHeaders() : _baseHeaders;
+    var res = await http.delete(_uri(path), headers: headers);
+    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+      headers = await _authedHeaders();
+      res = await http.delete(_uri(path), headers: headers);
     }
     return jsonDecode(res.body) as Map<String, dynamic>;
   }

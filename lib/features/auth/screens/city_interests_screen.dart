@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/reference_data_service.dart';
-import 'rules_screen.dart';
+import 'interests_screen.dart';
 
 class CityInterestsScreen extends StatefulWidget {
   const CityInterestsScreen({super.key});
@@ -19,16 +19,13 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   // Reference data
   List<Map<String, dynamic>> _countries = [];
   List<Map<String, dynamic>> _cities = [];
-  List<Map<String, dynamic>> _interests = [];
 
   // Selections
   Map<String, dynamic>? _selectedCountry;
   Map<String, dynamic>? _selectedCity;
-  final Set<String> _selectedInterestIds = {};
 
   bool _loadingCountries = true;
   bool _loadingCities = false;
-  bool _loadingInterests = true;
   bool _saving = false;
 
   @override
@@ -39,34 +36,27 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
 
   Future<void> _loadInitialData() async {
     try {
-      final results = await Future.wait([
-        _refService.fetchCountries(),
-        _refService.fetchInterests(),
-      ]);
+      final countries = await _refService.fetchCountries();
       if (!mounted) return;
       setState(() {
-        _countries = results[0];
-        _interests = results[1];
+        _countries = countries;
         _loadingCountries = false;
-        _loadingInterests = false;
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _loadingCountries = false;
-        _loadingInterests = false;
-      });
+      setState(() => _loadingCountries = false);
     }
   }
 
-  Future<void> _loadCities(String countryId) async {
+  Future<void> _loadCities(String countryId, {String? countryCode}) async {
     setState(() {
       _loadingCities = true;
       _cities = [];
       _selectedCity = null;
     });
     try {
-      final cities = await _refService.fetchCities(countryId);
+      final cities =
+          await _refService.fetchCities(countryId, countryCode: countryCode);
       if (!mounted) return;
       setState(() {
         _cities = cities;
@@ -87,26 +77,39 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
       _showSnack('Please select your city');
       return;
     }
-    if (_selectedInterestIds.isEmpty) {
-      _showSnack('Please select at least one interest');
-      return;
-    }
 
     setState(() => _saving = true);
     try {
       await _refService.saveCountry(_selectedCountry!['id'] as String);
-      await _refService.saveCity(_selectedCity!['id'] as String);
-      await _refService.saveInterests(_selectedInterestIds.toList());
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const RulesScreen()),
-      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _showSnack('Failed to save. Please try again.');
+      _showSnack('Failed to save country. Please try again.');
+      return;
     }
+
+    // City save can fail even for a valid selection — the backend has no
+    // seeded city records yet, so a real cityId can still come back
+    // "not found". Don't let that block onboarding; let the user through
+    // and they can set their city later once the backend has data.
+    bool citySaveFailed = false;
+    try {
+      await _refService.saveCity(_selectedCity!['id'] as String);
+    } catch (_) {
+      citySaveFailed = true;
+    }
+
+    if (!mounted) return;
+    if (citySaveFailed) {
+      _showSnack(
+          "Country saved. City isn't available on the server yet — you can set it later from your profile.");
+      await Future.delayed(const Duration(milliseconds: 1800));
+      if (!mounted) return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const InterestsScreen()),
+    );
   }
 
   void _showSnack(String msg) {
@@ -127,7 +130,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     ).then((picked) {
       if (picked == null) return;
       setState(() => _selectedCountry = picked);
-      _loadCities(picked['id'] as String);
+      _loadCities(picked['id'] as String, countryCode: picked['code'] as String?);
     });
   }
 
@@ -149,15 +152,6 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     ).then((picked) {
       if (picked != null) setState(() => _selectedCity = picked);
     });
-  }
-
-  Map<String, List<Map<String, dynamic>>> get _groupedInterests {
-    final map = <String, List<Map<String, dynamic>>>{};
-    for (final interest in _interests) {
-      final cat = interest['category'] as String? ?? 'Other';
-      map.putIfAbsent(cat, () => []).add(interest);
-    }
-    return map;
   }
 
   @override
@@ -247,94 +241,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                             onTap: _openCityPicker,
                           ),
 
-                    SizedBox(height: size.height * 0.045),
-
-                    // ── Interests ────────────────────────────────────────────
-                    _label('YOUR INTERESTS'),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Select all that apply',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 12),
-                    ),
-                    const SizedBox(height: 14),
-
-                    if (_loadingInterests)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(color: _purple),
-                        ),
-                      )
-                    else
-                      ..._groupedInterests.entries.map((entry) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Text(
-                              entry.key.toUpperCase(),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.40),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: entry.value.map((interest) {
-                              final id = interest['id'] as String;
-                              final name = interest['name'] as String;
-                              final selected = _selectedInterestIds.contains(id);
-                              return GestureDetector(
-                                onTap: () => setState(() {
-                                  if (selected) {
-                                    _selectedInterestIds.remove(id);
-                                  } else {
-                                    _selectedInterestIds.add(id);
-                                  }
-                                }),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 180),
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                                  decoration: BoxDecoration(
-                                    color: selected
-                                        ? _purple.withValues(alpha: 0.22)
-                                        : Colors.white.withValues(alpha: 0.05),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: selected ? _purple : Colors.white.withValues(alpha: 0.12),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (selected) ...[
-                                        const Icon(Icons.check_circle_rounded,
-                                            color: _purple, size: 14),
-                                        const SizedBox(width: 6),
-                                      ],
-                                      Text(
-                                        name,
-                                        style: TextStyle(
-                                          color: selected ? Colors.white : Colors.white.withValues(alpha: 0.50),
-                                          fontSize: 13,
-                                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                          SizedBox(height: size.height * 0.025),
-                        ],
-                      )),
-
-                    SizedBox(height: size.height * 0.04),
+                    SizedBox(height: size.height * 0.05),
 
                     // ── Continue button ───────────────────────────────────────
                     GestureDetector(
@@ -377,7 +284,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                             ? null
                             : () => Navigator.pushReplacement(
                                   context,
-                                  MaterialPageRoute(builder: (_) => const RulesScreen()),
+                                  MaterialPageRoute(builder: (_) => const InterestsScreen()),
                                 ),
                         child: Text(
                           'Skip for now',

@@ -310,7 +310,7 @@ class _AllGeneralChallengesScreenState
                       ),
                       _navItem(
                         icon: Icons.storefront_rounded,
-                        label: 'Brand',
+                        label: 'Brand Challenges',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(

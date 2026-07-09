@@ -2,20 +2,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
+import 'core/services/api_client.dart';
 import 'firebase_options.dart';
 import 'features/challenges/screens/challenge_detail.dart';
-import 'features/dashboard/dashboard.dart';
 import 'features/splash/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  cameras = await availableCameras();
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
+  try {
+    cameras = await availableCameras();
+  } catch (_) {
+    cameras = [];
+  }
   runApp(const MyApp());
 }
 
@@ -72,7 +79,7 @@ class _MyAppState extends State<MyApp> {
       final code = segments[1].trim().toUpperCase();
       if (code.isEmpty) return;
       // Only save for new (not yet logged-in) users — existing users are ignored
-      if (FirebaseAuth.instance.currentUser == null) {
+      if (!await ApiClient().isLoggedIn()) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_referral_code', code);
       }
@@ -110,9 +117,7 @@ class _MyAppState extends State<MyApp> {
           labelSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
         ),
       ),
-      home: FirebaseAuth.instance.currentUser != null
-          ? const Dashboard()
-          : const SplashScreen(),
+      home: const SplashScreen(),
     );
   }
 }

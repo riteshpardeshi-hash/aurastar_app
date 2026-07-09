@@ -4,6 +4,7 @@ import '../../../core/services/auth_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import '../../splash/screens/splash_screen.dart';
+import '../../challenges/widgets/aura_submitted_popup.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -50,6 +51,29 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _showHelpSheet(context),
           ),
           const SizedBox(height: 24),
+          _section('Debug'),
+          _tile(
+            context,
+            icon: Icons.bug_report_outlined,
+            label: 'Preview: Video Rejected',
+            onTap: () => showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              barrierColor: Colors.black.withValues(alpha: 0.85),
+              builder: (_) => const AuraSubmittedPopup(
+                submissionId: 'debug-preview',
+                challengeTitle: 'Dancing Girl',
+                challengeId: 'debug-preview',
+                initialResult: {
+                  'status': 'rejected',
+                  'verdict': 'FAIL',
+                  'aiReason':
+                      'The submission does not contain any dance performance, and no human subject is visible in the frame. Additionally, the video is only 3 seconds long, failing to meet the minimum duration and movement requirements of the challenge.',
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
           _section('Danger Zone'),
           _tile(
             context,
@@ -57,6 +81,13 @@ class SettingsScreen extends StatelessWidget {
             label: 'Logout',
             color: Colors.redAccent,
             onTap: () => _logout(context),
+          ),
+          _tile(
+            context,
+            icon: Icons.phonelink_erase_rounded,
+            label: 'Logout of All Devices',
+            color: Colors.redAccent,
+            onTap: () => _logoutAll(context),
           ),
         ],
       ),
@@ -131,6 +162,47 @@ class SettingsScreen extends StatelessWidget {
     if (ok != true || !context.mounted) return;
     await Future.wait([
       AuthApiService().logout(),
+      FirebaseAuth.instance.signOut(),
+    ]);
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _logoutAll(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF12102A),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Logout of All Devices',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'This signs you out everywhere, including other phones or tablets logged into this account. You\'ll need to log in again on each device.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Logout All',
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await Future.wait([
+      AuthApiService().logoutAll(),
       FirebaseAuth.instance.signOut(),
     ]);
     if (!context.mounted) return;

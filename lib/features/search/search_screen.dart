@@ -57,6 +57,12 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => _recent = items.map(_SearchItem.fromApiItem).toList());
   }
 
+  Future<void> _clearRecent() async {
+    await _service.clearHistory();
+    if (!mounted) return;
+    setState(() => _recent = []);
+  }
+
   Future<void> _search(String q) async {
     if (q.trim().isEmpty) {
       setState(() { _results = []; _searching = false; });
@@ -332,12 +338,28 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       children: [
-        const Text('Recent',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'ClashDisplay')),
+        Row(
+          children: [
+            const Text('Recent',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'ClashDisplay')),
+            const Spacer(),
+            GestureDetector(
+              onTap: _clearRecent,
+              child: const Text(
+                'Clear',
+                style: TextStyle(
+                    color: _accent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'SpaceGrotesk'),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         ..._recent.map((item) => _SearchRow(
               item: item,

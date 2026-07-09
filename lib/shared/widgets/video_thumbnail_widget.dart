@@ -89,10 +89,13 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         imageFormat: ImageFormat.JPEG,
         maxWidth: 480,
         quality: 75,
-      );
+      ).timeout(const Duration(seconds: 12));
+      debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
       if (data != null) videoThumbnailCache[widget.videoUrl] = data;
       if (mounted) setState(() { _bytes = data; _loading = false; });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[VideoThumbnail] FAILED for ${widget.videoUrl}: $e');
+      debugPrint('$st');
       if (mounted) setState(() => _loading = false);
     }
   }

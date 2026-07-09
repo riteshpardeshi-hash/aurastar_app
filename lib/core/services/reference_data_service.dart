@@ -18,7 +18,14 @@ class ReferenceDataService {
     return kFallbackCountries;
   }
 
-  Future<List<Map<String, dynamic>>> fetchCities(String countryId) async {
+  // `countryId` is the backend's real id, used for the API call. `countryCode`
+  // is the ISO alpha-2 code (e.g. 'IN') that kFallbackCities is keyed by —
+  // the backend's `_id` never matches those keys, so it must be passed
+  // separately when falling back.
+  Future<List<Map<String, dynamic>>> fetchCities(
+    String countryId, {
+    String? countryCode,
+  }) async {
     try {
       final res = await _client.get('/countries/$countryId/cities');
       final data = res['data'] as Map<String, dynamic>;
@@ -27,7 +34,7 @@ class ReferenceDataService {
     } catch (e) {
       debugPrint('[Ref] fetchCities error: $e');
     }
-    return kFallbackCities[countryId] ?? [];
+    return kFallbackCities[countryCode ?? countryId] ?? [];
   }
 
   Future<List<Map<String, dynamic>>> fetchInterests() async {

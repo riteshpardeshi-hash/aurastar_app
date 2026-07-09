@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/api_client.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../auth/screens/auth_choice_screen.dart';
+import '../../auth/screens/phone_auth_screen.dart';
 import '../../auth/screens/profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -18,6 +20,10 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   int _slide = 0; // 0=logo  1=see-it  2=your-moves  3=climb-board
+
+  // Already-logged-in users skip the onboarding carousel entirely and see
+  // only a minimal branded loading frame while the routing checks resolve.
+  bool _fastBoot = false;
 
   // Version check (runs in parallel with splash animation)
   _VersionStatus _versionStatus = _VersionStatus.ok;
@@ -55,8 +61,23 @@ class _SplashScreenState extends State<SplashScreen>
     _starSpin = AnimationController(
         vsync: this, duration: const Duration(seconds: 8))
       ..repeat();
-    _startSequence();
-    _checkVersion();
+    _decideStartup();
+  }
+
+  // Returning logged-in users skip the onboarding carousel; new/logged-out
+  // users see the full animated sequence as before.
+  Future<void> _decideStartup() async {
+    final alreadyLoggedIn = await AuthApiService().isLoggedIn();
+    if (!mounted) return;
+    if (alreadyLoggedIn) {
+      setState(() => _fastBoot = true);
+      await _checkVersion();
+      if (!mounted) return;
+      _goToApp();
+    } else {
+      _startSequence();
+      _checkVersion();
+    }
   }
 
   void _startSequence() {
@@ -95,11 +116,47 @@ class _SplashScreenState extends State<SplashScreen>
     final loggedIn = await authService.isLoggedIn();
     if (!mounted) return;
 
-    Widget destination = const AuthChoiceScreen();
+    Widget destination = const PhoneAuthScreen();
     if (loggedIn) {
-      final profile = await authService.getProfile();
-      final isComplete = profile?['isProfileComplete'] as bool? ?? false;
-      destination = isComplete ? const Dashboard() : const ProfileSetupScreen();
+      final uid = await ApiClient().userId;
+      final prefs = await SharedPreferences.getInstance();
+
+      // Fast path: local flag set when this user finished onboarding.
+      final localComplete =
+          uid != null && (prefs.getBool('setup_complete_$uid') ?? false);
+
+      if (localComplete) {
+        destination = const Dashboard();
+      } else {
+        // Fall back to API check.
+        final profile = await authService.getProfile();
+
+        // Consider setup complete if:
+        //   • API explicitly says so, OR
+        //   • Profile already has a username/name (completed before local flag
+        //     was introduced), OR
+        //   • API call failed entirely (don't block a logged-in returning user
+        //     due to a network hiccup).
+        final apiSaysComplete =
+            profile?['isProfileComplete'] as bool? ?? false;
+        final hasUsername =
+            (profile?['profileName'] as String? ??
+                    profile?['username'] as String? ?? '')
+                .isNotEmpty;
+        final hasName =
+            (profile?['displayName'] as String? ?? '').isNotEmpty;
+        final apiUnavailable = profile == null;
+
+        final isComplete =
+            apiSaysComplete || hasUsername || hasName || apiUnavailable;
+
+        if (isComplete) {
+          if (uid != null) await prefs.setBool('setup_complete_$uid', true);
+          destination = const Dashboard();
+        } else {
+          destination = const ProfileSetupScreen();
+        }
+      }
     }
 
     if (!mounted) return;
@@ -120,7 +177,8 @@ class _SplashScreenState extends State<SplashScreen>
       final doc = await FirebaseFirestore.instance
           .collection('appConfig')
           .doc('version')
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 3));
       if (!mounted || !doc.exists) return;
       final data = doc.data()!;
       final minBuild = (data['minBuildNumber'] as num?)?.toInt() ?? 0;
@@ -251,10 +309,25 @@ class _SplashScreenState extends State<SplashScreen>
             child: ScaleTransition(scale: scale, child: child),
           );
         },
-        child: KeyedSubtree(
-          key: ValueKey(_slide),
-          child: _buildSlide(_slide, size),
-        ),
+        child: _fastBoot
+            ? _buildFastBoot(size)
+            : KeyedSubtree(
+                key: ValueKey(_slide),
+                child: _buildSlide(_slide, size),
+              ),
+      ),
+    );
+  }
+
+  // Minimal branded frame shown to already-logged-in users while the
+  // version/profile routing checks resolve — no onboarding carousel.
+  Widget _buildFastBoot(Size size) {
+    return Center(
+      key: const ValueKey('fast-boot'),
+      child: Image.asset(
+        'assets/images/Splash screen/Aura arena.png',
+        width: size.width * 0.55,
+        fit: BoxFit.contain,
       ),
     );
   }

@@ -1,7 +1,8 @@
 ﻿import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../core/services/api_client.dart';
+import '../../core/services/challenges_service.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
@@ -34,6 +35,13 @@ class _DashboardState extends State<Dashboard> {
   int? _lastKnownLevel;
   bool _atRiskAlertShown = false;
 
+  // Shared across the Hero/Brand Videos/Trending/Banners sections so they
+  // don't each fire their own REST call (and re-fetch on every rebuild).
+  late final Future<List<Map<String, dynamic>>> _challengesFuture =
+      ChallengesService()
+          .fetchChallenges(limit: 20)
+          .then((raw) => raw.map(normaliseChallenge).toList());
+
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
   static const int _xpPerLevel = 1300;
@@ -42,23 +50,32 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return _buildScaffold(context,
-          points: 0,
-          isAdmin: false,
-          isBrand: false,
-          isCreator: false,
-          userId: '',
-          displayName: 'Guest',
-          streakDay: 0,
-          lastStreakDate: '');
-    }
+    return FutureBuilder<String?>(
+      future: ApiClient().userId,
+      builder: (context, uidSnap) {
+        final userId = uidSnap.data;
+        if (!uidSnap.hasData || userId == null || userId.isEmpty) {
+          return _buildScaffold(context,
+              points: 0,
+              isAdmin: false,
+              isBrand: false,
+              isCreator: false,
+              userId: '',
+              displayName: 'Guest',
+              photoUrl: '',
+              streakDay: 0,
+              lastStreakDate: '');
+        }
+        return _buildProfileStream(context, userId);
+      },
+    );
+  }
 
+  Widget _buildProfileStream(BuildContext context, String userId) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
+          .doc(userId)
           .snapshots(),
       builder: (context, snap) {
         if (snap.hasError) {
@@ -87,6 +104,7 @@ class _DashboardState extends State<Dashboard> {
             (userData['name'] as String?)?.trim().isNotEmpty == true
                 ? userData['name'] as String
                 : userData['username'] as String? ?? 'User';
+        final photoUrl = userData['profileImageUrl'] as String? ?? '';
         final streakDay = (userData['streakDay'] as num?)?.toInt() ?? 0;
         final lastStreakDate = userData['lastStreakDate'] as String? ?? '';
 
@@ -149,8 +167,9 @@ class _DashboardState extends State<Dashboard> {
           isAdmin: isAdmin,
           isBrand: isBrand,
           isCreator: isCreator,
-          userId: user.uid,
+          userId: userId,
           displayName: displayName,
+          photoUrl: photoUrl,
           streakDay: streakDay,
           lastStreakDate: lastStreakDate,
         );
@@ -166,6 +185,7 @@ class _DashboardState extends State<Dashboard> {
     required bool isCreator,
     required String userId,
     required String displayName,
+    required String photoUrl,
     required int streakDay,
     required String lastStreakDate,
   }) {
@@ -209,7 +229,7 @@ class _DashboardState extends State<Dashboard> {
               ],
             ),
           ),
-          _buildBottomNav(context),
+          _buildBottomNav(context, displayName: displayName, photoUrl: photoUrl),
         ],
       ),
     );
@@ -482,14 +502,14 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Hero Section ───────────────────────────────────────────────────────────
   Widget _buildHeroSection(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('challenges')
-          .where('creatorId', isEqualTo: 'system')
-          .limit(1)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _challengesFuture,
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
+        final list = snap.data ?? [];
+        final hero = list.isEmpty
+            ? null
+            : list.firstWhere((c) => c['creatorId'] == 'system',
+                orElse: () => list.first);
 
         String title = 'Bollywood Walk';
         int auraPoints = 150;
@@ -497,13 +517,12 @@ class _DashboardState extends State<Dashboard> {
         String instructions = '';
         String challengeId = '';
 
-        if (docs.isNotEmpty) {
-          final data = docs.first.data() as Map<String, dynamic>;
-          title = data['title'] as String? ?? title;
-          auraPoints = (data['auraPoints'] as num?)?.toInt() ?? auraPoints;
-          videoUrl = data['videoUrl'] as String? ?? '';
-          instructions = data['instructions'] as String? ?? '';
-          challengeId = docs.first.id;
+        if (hero != null) {
+          title = hero['title'] as String? ?? title;
+          auraPoints = hero['starsCount'] as int? ?? auraPoints;
+          videoUrl = hero['videoUrl'] as String? ?? '';
+          instructions = hero['instructions'] as String? ?? '';
+          challengeId = hero['id'] as String? ?? '';
         }
 
         return Padding(
@@ -522,9 +541,7 @@ class _DashboardState extends State<Dashboard> {
                 children: [
                   _VideoThumbnailWidget(
                     videoUrl: videoUrl,
-                    thumbnailUrl: docs.isNotEmpty
-                        ? (docs.first.data() as Map<String, dynamic>)['thumbnailUrl'] as String? ?? ''
-                        : '',
+                    thumbnailUrl: '',
                   ),
                   // Bottom-to-top dark gradient for text readability
                   Container(
@@ -665,13 +682,10 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('challenges')
-              .limit(5)
-              .snapshots(),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _challengesFuture,
           builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
+            final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
             return Column(
@@ -681,13 +695,13 @@ class _DashboardState extends State<Dashboard> {
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: List.generate(docs.length.clamp(0, 3), (i) {
-                      final data = docs[i].data() as Map<String, dynamic>;
+                      final data = docs[i];
                       final title = data['title'] as String? ?? '';
                       final videoUrl = data['videoUrl'] as String? ?? '';
-                      final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                      final challengeId = docs[i].id;
+                      const thumbnailUrl = '';
+                      final challengeId = data['id'] as String? ?? '';
                       final instructions = data['instructions'] as String? ?? '';
-                      final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
+                      const brandLogoUrl = '';
 
                       return Expanded(
                         child: Padding(
@@ -765,15 +779,14 @@ class _DashboardState extends State<Dashboard> {
                     child: Row(
                       children: List.generate(
                           (docs.length - 3).clamp(0, 2), (i) {
-                        final doc = docs[3 + i];
-                        final data = doc.data() as Map<String, dynamic>;
+                        final data = docs[3 + i];
                         final title = data['title'] as String? ?? '';
                         final description = data['instructions'] as String? ?? '';
-                        final auraPoints = (data['auraPoints'] as num?)?.toInt() ?? 0;
+                        final auraPoints = data['starsCount'] as int? ?? 0;
                         final videoUrl = data['videoUrl'] as String? ?? '';
-                        final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                        final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
-                        final challengeId = doc.id;
+                        const thumbnailUrl = '';
+                        const brandLogoUrl = '';
+                        final challengeId = data['id'] as String? ?? '';
 
                         return Expanded(
                           child: Padding(
@@ -898,26 +911,23 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('challenges')
-              .limit(3)
-              .snapshots(),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _challengesFuture,
           builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
+            final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: List.generate(docs.length.clamp(0, 3), (i) {
-                  final data = docs[i].data() as Map<String, dynamic>;
+                  final data = docs[i];
                   final title = data['title'] as String? ?? '';
                   final videoUrl = data['videoUrl'] as String? ?? '';
-                  final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                  final challengeId = docs[i].id;
+                  const thumbnailUrl = '';
+                  final challengeId = data['id'] as String? ?? '';
                   final instructions = data['instructions'] as String? ?? '';
-                  final brandLogoUrl = data['brandLogoUrl'] as String? ?? '';
+                  const brandLogoUrl = '';
 
                   return Expanded(
                     child: Padding(
@@ -1104,17 +1114,14 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Banners ────────────────────────────────────────────────────────────────
   Widget _buildBannersSection(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('challenges')
-          .limit(3)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _challengesFuture,
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
+        final docs = snap.data ?? [];
         if (!snap.hasData) return const SizedBox.shrink();
 
         // If no backend data yet, show a static placeholder banner
-        final count = docs.isEmpty ? 1 : docs.length;
+        final count = docs.isEmpty ? 1 : docs.length.clamp(0, 3);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1136,13 +1143,13 @@ class _DashboardState extends State<Dashboard> {
                 itemCount: count,
                 itemBuilder: (_, i) {
                   final hasDoc = i < docs.length;
-                  final data = hasDoc ? docs[i].data() as Map<String, dynamic> : null;
+                  final data = hasDoc ? docs[i] : null;
                   final title = data?['title'] as String? ?? 'Featured Challenge';
                   final description = data?['instructions'] as String? ?? 'Complete this challenge to earn Aura points.';
-                  final auraPoints = (data?['auraPoints'] as num?)?.toInt() ?? 150;
+                  final auraPoints = data?['starsCount'] as int? ?? 150;
                   final videoUrl = data?['videoUrl'] as String? ?? '';
-                  final thumbnailUrl = data?['thumbnailUrl'] as String? ?? '';
-                  final challengeId = hasDoc ? docs[i].id : '';
+                  const thumbnailUrl = '';
+                  final challengeId = data?['id'] as String? ?? '';
 
                   return GestureDetector(
                     onTap: challengeId.isNotEmpty
@@ -1581,7 +1588,7 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Bottom Nav ─────────────────────────────────────────────────────────────
-  Widget _buildBottomNav(BuildContext context) {
+  Widget _buildBottomNav(BuildContext context, {required String displayName, required String photoUrl}) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -1646,14 +1653,10 @@ class _DashboardState extends State<Dashboard> {
                               builder: (_) => const LeaderboardScreen()),
                         ),
                       ),
-                      _navItem(
-                        icon: Icons.person_rounded,
-                        label: 'Profile',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const MyAccountScreen()),
-                        ),
+                      _profileNavItem(
+                        context,
+                        displayName: displayName,
+                        photoUrl: photoUrl,
                       ),
                     ],
                   ),
@@ -1694,6 +1697,48 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _profileNavItem(BuildContext context, {required String displayName, required String photoUrl}) {
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MyAccountScreen()),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 13,
+              backgroundColor: _accent.withValues(alpha: 0.30),
+              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+              child: photoUrl.isEmpty
+                  ? Text(initial,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold))
+                  : null,
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'Profile',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 9,
+                fontFamily: 'SpaceGrotesk',
+                height: 1.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1779,10 +1824,14 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
         imageFormat: ImageFormat.JPEG,
         maxWidth: 480,
         quality: 75,
-      );
+      ).timeout(const Duration(seconds: 12));
+      debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${bytes == null ? "null (no frame extracted)" : "${bytes.length} bytes"}');
       if (bytes != null) videoThumbnailCache[widget.videoUrl] = bytes;
       if (mounted) setState(() => _thumb = bytes);
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[VideoThumbnail] FAILED for ${widget.videoUrl}: $e');
+      debugPrint('$st');
+    }
   }
 
   @override

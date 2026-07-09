@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../challenges/screens/challenge_detail.dart';
+import '../../core/services/api_client.dart';
+import '../../core/services/auth_api_service.dart';
+import '../../core/services/challenges_service.dart';
+import '../../core/services/leaderboard_service.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -20,7 +24,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -53,6 +57,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
               fontWeight: FontWeight.w500, fontSize: 13, fontFamily: 'SpaceGrotesk'),
           tabs: const [
             Tab(text: 'Global'),
+            Tab(text: 'Friends'),
             Tab(text: 'Country'),
             Tab(text: 'City'),
             Tab(text: 'Challenge'),
@@ -61,38 +66,62 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
       ),
       body: TabBarView(
         controller: _tabs,
-        children: const [
-          _GlobalBoard(),
-          _CountryBoard(),
-          _CityBoard(),
-          _ChallengeBoard(),
+        children: [
+          _ApiBoard(
+            fetchPage: (page, limit) =>
+                LeaderboardService().fetchGlobal(page: page, limit: limit),
+            scoreSuffix: 'Auras',
+            emptyTitle: 'No players yet',
+            emptySubtitle: 'Complete challenges to appear here',
+          ),
+          _ApiBoard(
+            fetchPage: (page, limit) =>
+                LeaderboardService().fetchFriends(page: page, limit: limit),
+            scoreSuffix: 'Auras',
+            emptyTitle: 'No friends yet',
+            emptySubtitle: 'Add friends to see how you stack up',
+          ),
+          const _CountryBoard(),
+          const _CityBoard(),
+          const _ChallengeBoard(),
         ],
       ),
     );
   }
 }
 
-// ── Global Board ───────────────────────────────────────────────────────────────
+// ── API-backed Board (Global + Friends) ─────────────────────────────────────────
 
-class _GlobalBoard extends StatefulWidget {
-  const _GlobalBoard();
+class _ApiBoard extends StatefulWidget {
+  final Future<List<Map<String, dynamic>>> Function(int page, int limit)
+      fetchPage;
+  final String scoreSuffix;
+  final String emptyTitle;
+  final String emptySubtitle;
+
+  const _ApiBoard({
+    required this.fetchPage,
+    required this.scoreSuffix,
+    required this.emptyTitle,
+    required this.emptySubtitle,
+  });
 
   @override
-  State<_GlobalBoard> createState() => _GlobalBoardState();
+  State<_ApiBoard> createState() => _ApiBoardState();
 }
 
-class _GlobalBoardState extends State<_GlobalBoard>
+class _ApiBoardState extends State<_ApiBoard>
     with AutomaticKeepAliveClientMixin {
   static const _accent = Color(0xFF7B2CBF);
   static const _pageSize = 20;
 
   final _scrollCtrl = ScrollController();
-  final List<QueryDocumentSnapshot> _docs = [];
-  DocumentSnapshot? _lastDoc;
+  final List<Map<String, dynamic>> _entries = [];
+  int _page = 1;
   bool _loading = false;
   bool _initialLoading = true;
   bool _hasMore = true;
-  final _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  String? _myId;
 
   @override
   bool get wantKeepAlive => true;
@@ -100,6 +129,9 @@ class _GlobalBoardState extends State<_GlobalBoard>
   @override
   void initState() {
     super.initState();
+    ApiClient().userId.then((id) {
+      if (mounted) setState(() => _myId = id);
+    });
     _loadMore();
     _scrollCtrl.addListener(_onScroll);
   }
@@ -120,25 +152,16 @@ class _GlobalBoardState extends State<_GlobalBoard>
   Future<void> _loadMore() async {
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
-    try {
-      var q = FirebaseFirestore.instance
-          .collection('users')
-          .orderBy('totalRewards', descending: true)
-          .limit(_pageSize);
-      if (_lastDoc != null) q = q.startAfterDocument(_lastDoc!);
-      final snap = await q.get();
-      if (mounted) {
-        setState(() {
-          _docs.addAll(snap.docs);
-          _lastDoc = snap.docs.isEmpty ? null : snap.docs.last;
-          _hasMore = snap.docs.length == _pageSize;
-          _loading = false;
-          _initialLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() { _loading = false; _initialLoading = false; _hasMore = false; });
-    }
+    final page = _page;
+    final raw = await widget.fetchPage(page, _pageSize);
+    if (!mounted) return;
+    setState(() {
+      _entries.addAll(raw.map(normaliseLeaderboardEntry));
+      _hasMore = raw.length == _pageSize;
+      _page = page + 1;
+      _loading = false;
+      _initialLoading = false;
+    });
   }
 
   @override
@@ -147,16 +170,15 @@ class _GlobalBoardState extends State<_GlobalBoard>
     if (_initialLoading) {
       return const Center(child: CircularProgressIndicator(color: _accent));
     }
-    if (_docs.isEmpty) {
-      return _emptyState('No players yet', 'Complete challenges to appear here');
+    if (_entries.isEmpty) {
+      return _emptyState(widget.emptyTitle, widget.emptySubtitle);
     }
-    final userInList = _docs.any((d) => d.id == _uid);
-    return _BoardList(
-      docs: _docs,
-      currentUid: _uid,
-      scoreField: 'totalRewards',
-      scoreSuffix: 'Auras',
-      showCurrentUserFooter: !userInList && _uid.isNotEmpty,
+    final userInList = _myId != null && _entries.any((e) => e['id'] == _myId);
+    return _EntryList(
+      entries: _entries,
+      currentId: _myId,
+      scoreSuffix: widget.scoreSuffix,
+      showCurrentUserFooter: !userInList && _myId != null,
       scrollController: _scrollCtrl,
       loadingMore: _loading,
     );
@@ -348,85 +370,112 @@ class _ChallengeBoard extends StatefulWidget {
 class _ChallengeBoardState extends State<_ChallengeBoard> {
   static const _accent = Color(0xFF7B2CBF);
 
+  List<Map<String, dynamic>> _challenges = [];
+  bool _loadingChallenges = true;
+
   String? _challengeId;
   String _challengeTitle = '';
   String _challengeVideoUrl = '';
   String _challengeInstructions = '';
 
+  List<Map<String, dynamic>> _entries = [];
+  bool _loadingBoard = false;
+  String? _myId;
+
+  @override
+  void initState() {
+    super.initState();
+    ApiClient().userId.then((id) {
+      if (mounted) setState(() => _myId = id);
+    });
+    _loadChallenges();
+  }
+
+  Future<void> _loadChallenges() async {
+    final list = await ChallengesService().fetchChallenges(limit: 20);
+    if (!mounted) return;
+    setState(() {
+      _challenges = list;
+      _loadingChallenges = false;
+    });
+    if (list.isNotEmpty) _selectChallenge(list.first);
+  }
+
+  void _selectChallenge(Map<String, dynamic> c) {
+    setState(() {
+      _challengeId = c['_id'] as String?;
+      _challengeTitle = c['title'] as String? ?? '';
+      _challengeVideoUrl = c['videoUrl'] as String? ?? '';
+      _challengeInstructions =
+          (c['instructions'] as String?)?.isNotEmpty == true
+              ? c['instructions'] as String
+              : c['description'] as String? ?? '';
+    });
+    _loadBoard();
+  }
+
+  Future<void> _loadBoard() async {
+    final id = _challengeId;
+    if (id == null) return;
+    setState(() => _loadingBoard = true);
+    final raw = await LeaderboardService().fetchChallenge(id, limit: 50);
+    if (!mounted || _challengeId != id) return;
+    setState(() {
+      _entries = raw.map(normaliseLeaderboardEntry).toList();
+      _loadingBoard = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
     return Column(
       children: [
         // ── Challenge chip picker ──────────────────────────────────────────────
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('challenges').limit(20).snapshots(),
-          builder: (context, snap) {
-            final docs = snap.data?.docs ?? [];
-            if (docs.isEmpty) return const SizedBox.shrink();
+        if (_loadingChallenges)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: CircularProgressIndicator(color: _accent)),
+          )
+        else if (_challenges.isNotEmpty)
+          SizedBox(
+            height: 46,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+              itemCount: _challenges.length,
+              itemBuilder: (_, i) {
+                final c = _challenges[i];
+                final title = c['title'] as String? ?? '';
+                final sel = _challengeId == c['_id'];
 
-            // Auto-select first challenge on first load
-            if (_challengeId == null && docs.isNotEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final d = docs.first.data() as Map<String, dynamic>;
-                setState(() {
-                  _challengeId = docs.first.id;
-                  _challengeTitle = d['title'] as String? ?? '';
-                  _challengeVideoUrl = d['videoUrl'] as String? ?? '';
-                  _challengeInstructions = d['instructions'] as String? ?? '';
-                });
-              });
-            }
-
-            return SizedBox(
-              height: 46,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final doc = docs[i];
-                  final data = doc.data() as Map<String, dynamic>;
-                  final title = data['title'] as String? ?? '';
-                  final sel = _challengeId == doc.id;
-
-                  return GestureDetector(
-                    onTap: () => setState(() {
-                      _challengeId = doc.id;
-                      _challengeTitle = title;
-                      _challengeVideoUrl = data['videoUrl'] as String? ?? '';
-                      _challengeInstructions = data['instructions'] as String? ?? '';
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: sel ? _accent : const Color(0xFF111111),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: sel ? _accent : Colors.white12),
-                      ),
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: sel ? Colors.white : Colors.white54,
-                          fontSize: 12,
-                          fontWeight:
-                              sel ? FontWeight.bold : FontWeight.normal,
-                          fontFamily: 'SpaceGrotesk',
-                        ),
+                return GestureDetector(
+                  onTap: () => _selectChallenge(c),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(right: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: sel ? _accent : const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: sel ? _accent : Colors.white12),
+                    ),
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        color: sel ? Colors.white : Colors.white54,
+                        fontSize: 12,
+                        fontWeight:
+                            sel ? FontWeight.bold : FontWeight.normal,
+                        fontFamily: 'SpaceGrotesk',
                       ),
                     ),
-                  );
-                },
-              ),
-            );
-          },
-        ),
+                  ),
+                );
+              },
+            ),
+          ),
         const Divider(color: Colors.white10, height: 1),
 
         // ── Scores for selected challenge ──────────────────────────────────────
@@ -435,128 +484,81 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
             child: _emptyState(
                 'Select a challenge', 'Tap a chip above to see the board'),
           )
+        else if (_loadingBoard)
+          const Expanded(
+              child: Center(child: CircularProgressIndicator(color: _accent)))
+        else if (_entries.isEmpty)
+          Expanded(
+            child: _emptyState(
+              'No scores yet',
+              'Be the first to attempt this challenge!',
+            ),
+          )
         else
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('submissions')
-                  .where('challengeId', isEqualTo: _challengeId)
-                  .limit(200)
-                  .snapshots(),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                      child: CircularProgressIndicator(color: _accent));
-                }
-
-                // Filter: approved, not deleted, has aiScore
-                final all = (snap.data?.docs ?? []).where((d) {
-                  final data = d.data() as Map<String, dynamic>;
-                  return !(data['isDeleted'] as bool? ?? false) &&
-                      data['aiScore'] != null &&
-                      (data['status'] as String? ?? '') == 'approved';
-                }).toList();
-
-                if (all.isEmpty) {
-                  return _emptyState(
-                    'No scores yet',
-                    'Be the first to attempt this challenge!',
-                  );
-                }
-
-                // Deduplicate — keep best aiScore per user
-                final Map<String, QueryDocumentSnapshot> best = {};
-                for (final doc in all) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final userId = data['userId'] as String? ?? doc.id;
-                  final score = (data['aiScore'] as num?)?.toInt() ?? 0;
-                  final prev = best[userId];
-                  if (prev == null ||
-                      score >
-                          (((prev.data() as Map)['aiScore'] as num?)
-                                  ?.toInt() ??
-                              0)) {
-                    best[userId] = doc;
-                  }
-                }
-
-                final ranked = best.values.toList()
-                  ..sort((a, b) {
-                    final aS =
-                        ((a.data() as Map)['aiScore'] as num?)?.toInt() ?? 0;
-                    final bS =
-                        ((b.data() as Map)['aiScore'] as num?)?.toInt() ?? 0;
-                    return bS.compareTo(aS);
-                  });
-
-                return Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                        itemCount: ranked.length,
-                        itemBuilder: (_, i) {
-                          final data = ranked[i].data() as Map<String, dynamic>;
-                          final username = data['username'] as String? ?? 'User';
-                          final aiScore =
-                              (data['aiScore'] as num?)?.toInt() ?? 0;
-                          final stars =
-                              (data['starsCount'] as num?)?.toInt() ?? 0;
-                          final userId = data['userId'] as String? ?? '';
-                          return _SubmissionRow(
-                            rank: i + 1,
-                            username: username,
-                            score: aiScore,
-                            stars: stars,
-                            isCurrentUser: userId == uid,
-                            onTap: userId == uid
-                                ? null
-                                : () => _showPrivateProfile(context),
-                          );
-                        },
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    itemCount: _entries.length,
+                    itemBuilder: (_, i) {
+                      final e = _entries[i];
+                      final username = (e['username'] as String).isNotEmpty
+                          ? e['username'] as String
+                          : e['name'] as String;
+                      return _SubmissionRow(
+                        rank: i + 1,
+                        username: username,
+                        score: e['score'] as int,
+                        stars: e['stars'] as int,
+                        isCurrentUser: e['id'] == _myId,
+                        onTap: e['id'] == _myId
+                            ? null
+                            : () => _showPrivateProfile(context),
+                      );
+                    },
+                  ),
+                ),
+                // Try challenge CTA
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChallengeDetail(
+                          title: _challengeTitle,
+                          instructions: _challengeInstructions,
+                          videoUrl: _challengeVideoUrl,
+                          challengeId: _challengeId!,
+                        ),
                       ),
                     ),
-                    // Try challenge CTA
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      child: GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChallengeDetail(
-                              title: _challengeTitle,
-                              instructions: _challengeInstructions,
-                              videoUrl: _challengeVideoUrl,
-                              challengeId: _challengeId!,
-                            ),
-                          ),
+                    child: Container(
+                      width: double.infinity,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
                         ),
-                        child: Container(
-                          width: double.infinity,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
-                            ),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'Try $_challengeTitle',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'SpaceGrotesk',
-                              ),
-                            ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Try $_challengeTitle',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'SpaceGrotesk',
                           ),
                         ),
                       ),
                     ),
-                  ],
-                );
-              },
+                  ),
+                ),
+              ],
             ),
           ),
       ],
@@ -564,7 +566,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   }
 }
 
-// ── Board List (Global + City) ─────────────────────────────────────────────────
+// ── Board List (Country + City, still Firestore — no backend endpoint yet) ─────
 
 class _BoardList extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
@@ -572,8 +574,6 @@ class _BoardList extends StatelessWidget {
   final String scoreField;
   final String scoreSuffix;
   final bool showCurrentUserFooter;
-  final ScrollController? scrollController;
-  final bool loadingMore;
 
   const _BoardList({
     required this.docs,
@@ -581,18 +581,15 @@ class _BoardList extends StatelessWidget {
     required this.scoreField,
     required this.scoreSuffix,
     this.showCurrentUserFooter = false,
-    this.scrollController,
-    this.loadingMore = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // +2 items when footer needed: separator + user row; +1 for load-more spinner
+    // +2 items when footer needed: separator + user row
     final extra = showCurrentUserFooter ? 2 : 0;
-    final total = docs.length + extra + (loadingMore ? 1 : 0);
+    final total = docs.length + extra;
 
     return ListView.builder(
-      controller: scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: total,
       itemBuilder: (_, i) {
@@ -618,8 +615,111 @@ class _BoardList extends StatelessWidget {
           );
         }
 
-        // Compute offset past the normal rows (accounts for optional spinner)
-        var offset = i - docs.length;
+        // Compute offset past the normal rows
+        final offset = i - docs.length;
+
+        // 2. "Your position" separator
+        if (showCurrentUserFooter && offset == 0) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'Your position',
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        fontSize: 11,
+                        fontFamily: 'SpaceGrotesk'),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
+              ],
+            ),
+          );
+        }
+
+        // 3. Current user's own row (fetched live)
+        return StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUid)
+              .snapshots(),
+          builder: (_, snap) {
+            if (!snap.hasData) return const SizedBox.shrink();
+            final data =
+                snap.data!.data() as Map<String, dynamic>? ?? {};
+            final name =
+                (data['name'] as String?)?.trim().isNotEmpty == true
+                    ? data['name'] as String
+                    : data['username'] as String? ?? 'You';
+            final username = data['username'] as String? ?? '';
+            final score = (data[scoreField] as num?)?.toInt() ?? 0;
+            return _PlayerRow(
+              rank: docs.length + 1,
+              name: name,
+              username: username,
+              score: score,
+              scoreSuffix: scoreSuffix,
+              isCurrentUser: true,
+              rankLabel: '>${docs.length}',
+              onTap: null,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── Entry List (Global + Friends, API-backed) ───────────────────────────────────
+
+class _EntryList extends StatelessWidget {
+  final List<Map<String, dynamic>> entries;
+  final String? currentId;
+  final String scoreSuffix;
+  final bool showCurrentUserFooter;
+  final ScrollController? scrollController;
+  final bool loadingMore;
+
+  const _EntryList({
+    required this.entries,
+    required this.currentId,
+    required this.scoreSuffix,
+    this.showCurrentUserFooter = false,
+    this.scrollController,
+    this.loadingMore = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final extra = showCurrentUserFooter ? 2 : 0;
+    final total = entries.length + extra + (loadingMore ? 1 : 0);
+
+    return ListView.builder(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: total,
+      itemBuilder: (_, i) {
+        // 1. Normal rows
+        if (i < entries.length) {
+          final e = entries[i];
+          return _PlayerRow(
+            rank: i + 1,
+            name: e['name'] as String,
+            username: e['username'] as String,
+            score: e['score'] as int,
+            scoreSuffix: scoreSuffix,
+            isCurrentUser: e['id'] == currentId,
+            onTap: e['id'] == currentId
+                ? null
+                : () => _showPrivateProfile(context),
+          );
+        }
+
+        var offset = i - entries.length;
 
         // 2. Load-more spinner right after normal rows
         if (loadingMore) {
@@ -628,7 +728,8 @@ class _BoardList extends StatelessWidget {
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Center(
                 child: SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(
                       color: Color(0xFF7B2CBF), strokeWidth: 2),
                 ),
@@ -661,30 +762,27 @@ class _BoardList extends StatelessWidget {
           );
         }
 
-        // 4. Current user's own row (fetched live)
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUid)
-              .snapshots(),
+        // 4. Current user's own row
+        return FutureBuilder<Map<String, dynamic>?>(
+          future: AuthApiService().getProfile(),
           builder: (_, snap) {
             if (!snap.hasData) return const SizedBox.shrink();
-            final data =
-                snap.data!.data() as Map<String, dynamic>? ?? {};
-            final name =
-                (data['name'] as String?)?.trim().isNotEmpty == true
-                    ? data['name'] as String
-                    : data['username'] as String? ?? 'You';
-            final username = data['username'] as String? ?? '';
-            final score = (data[scoreField] as num?)?.toInt() ?? 0;
+            final data = snap.data!;
+            final name = (data['displayName'] as String?)?.trim().isNotEmpty == true
+                ? data['displayName'] as String
+                : data['name'] as String? ?? 'You';
+            final username =
+                data['username'] as String? ?? data['profileName'] as String? ?? '';
+            final score =
+                ((data['auraPoints'] ?? data['totalRewards']) as num?)?.toInt() ?? 0;
             return _PlayerRow(
-              rank: docs.length + 1,
+              rank: entries.length + 1,
               name: name,
               username: username,
               score: score,
               scoreSuffix: scoreSuffix,
               isCurrentUser: true,
-              rankLabel: '>${docs.length}',
+              rankLabel: '>${entries.length}',
               onTap: null,
             );
           },

@@ -62,6 +62,9 @@ class ChallengesService {
   Future<Map<String, dynamic>> presignSubmission(String challengeId) async {
     final res = await _client.post(
         '/challenges/$challengeId/submissions/presign', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to get upload URL';
+    }
     return res['data'] as Map<String, dynamic>;
   }
 
@@ -72,6 +75,9 @@ class ChallengesService {
       {'videoKey': videoKey},
       auth: true,
     );
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to create submission';
+    }
     return res['data']['submission'] as Map<String, dynamic>;
   }
 
@@ -124,6 +130,15 @@ class ChallengesService {
   }
 }
 
+// `creatorId`/`category` come back as a plain ID string for most challenges,
+// but as a populated object (e.g. {_id, role, displayName, avatar}) for some —
+// extract a stable string either way instead of crashing the cast.
+String _extractRefId(dynamic v) {
+  if (v is String) return v;
+  if (v is Map) return v['_id'] as String? ?? v['name'] as String? ?? '';
+  return '';
+}
+
 // Helper — normalises a backend challenge map into the fields the UI expects.
 Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
   return {
@@ -134,10 +149,10 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
         ? c['instructions']
         : c['description'] as String? ?? '',
     'videoUrl': c['videoUrl'] as String? ?? '',
-    'category': c['category'] as String? ?? '',
+    'category': _extractRefId(c['category']),
     'difficulty': c['difficulty'] as String? ?? '',
     'sourceType': c['sourceType'] as String? ?? '',
-    'creatorId': c['creatorId'] as String? ?? '',
+    'creatorId': _extractRefId(c['creatorId']),
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
     'isActive': c['isActive'] as bool? ?? true,

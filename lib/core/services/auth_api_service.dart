@@ -114,6 +114,16 @@ class AuthApiService {
     await _client.clearSession();
   }
 
+  /// Revokes every refresh token for this user (all devices), then clears
+  /// the local session. Access tokens on other devices stay valid until they
+  /// naturally expire (max 15 minutes).
+  Future<void> logoutAll() async {
+    try {
+      await _client.post('/auth/logout-all', {}, auth: true);
+    } catch (_) {}
+    await _client.clearSession();
+  }
+
   Future<void> updateProfile({
     required String gender,
     String? displayName,
@@ -122,7 +132,10 @@ class AuthApiService {
     final res = await _client.patch('/profile', {
       'gender': gender,
       if (displayName != null) 'displayName': displayName,
-      if (username != null) 'username': username,
+      // Backend field is `profileName`, not `username` (per Joi schema shared
+      // by backend team) — Dart-side param name kept as `username` since that's
+      // the UI concept everywhere else in the client.
+      if (username != null) 'profileName': username,
     });
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to update profile';
@@ -223,6 +236,81 @@ class AuthApiService {
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchRewards({
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final q = [
+        'page=$page',
+        'limit=$limit',
+        if (status != null) 'status=$status',
+      ].join('&');
+      final res = await _client.get('/profile/rewards?$q', auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return (data['rewards'] as List? ??
+                data['docs'] as List? ??
+                data['items'] as List? ??
+                [])
+            .cast<Map<String, dynamic>>();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> claimReward(String id) async {
+    final res = await _client.post('/profile/rewards/$id/claim', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to claim reward';
+    }
+    final data = res['data'] as Map<String, dynamic>;
+    return data['reward'] as Map<String, dynamic>?;
+  }
+
+  Future<int> fetchAuraBalance() async {
+    try {
+      final res = await _client.get('/aura/balance', auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return (data['auraPoints'] as num?)?.toInt() ?? 0;
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  Future<Map<String, dynamic>?> fetchStreak() async {
+    try {
+      final res = await _client.get('/profile/streak', auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return data['streak'] as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchReferralsList({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final res = await _client.get(
+          '/profile/referrals/list?page=$page&limit=$limit',
+          auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return (data['referrals'] as List? ??
+                data['docs'] as List? ??
+                data['items'] as List? ??
+                [])
+            .cast<Map<String, dynamic>>();
+      }
+    } catch (_) {}
+    return [];
   }
 
   Future<bool> isLoggedIn() => _client.isLoggedIn();
