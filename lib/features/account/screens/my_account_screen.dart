@@ -10,6 +10,7 @@ import '../../../core/models/aura_tier.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
+import 'all_videos_screen.dart';
 import 'settings_screen.dart';
 import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
@@ -944,7 +945,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             const Spacer(),
             if (_videos.length > 4)
               GestureDetector(
-                onTap: () {},
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AllVideosScreen()),
+                ),
                 child: const Text(
                   'VIEW ALL  ›',
                   style: TextStyle(
@@ -1148,7 +1152,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               cards: _achievements,
               username: _profile['profileName'] as String? ??
                   _profile['username'] as String? ?? '',
-              city: _profile['city'] as String?,
+              city: (_profile['city'] as Map<String, dynamic>?)?['name']
+                  as String?,
             ),
             _buildMyVideosSection(context),
             _SavedChallengesGrid(challenges: _savedChallenges),

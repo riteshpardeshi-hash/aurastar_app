@@ -1,9 +1,6 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
@@ -130,97 +127,38 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
     setState(() => _saving = true);
 
-    final uid = await ApiClient().userId;
-    if (uid == null) {
-      setState(() => _saving = false);
-      return;
-    }
-
     try {
-      final username = _usernameCtrl.text.trim();
-      final existing = await FirebaseFirestore.instance
-          .collection('users')
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
-      if (!mounted) return;
-      if (existing.docs.isNotEmpty) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Username already taken. Please choose another.')),
-        );
-        return;
-      }
+      final service = AuthApiService();
 
-      String photoUrl = '';
       if (_pickedImage != null) {
-        final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid');
-        await ref.putFile(_pickedImage!);
-        photoUrl = await ref.getDownloadURL();
-      }
-
-      // Update the REST API backend first — this sets isProfileComplete: true
-      // and stores displayName/username so getProfile() returns correct data.
-      bool apiSaveFailed = false;
-      try {
-        await AuthApiService().updateProfile(
-          displayName: _nameCtrl.text.trim(),
-          username: username,
-          gender: _genderApiValue(_gender),
+        final uploadData = await service.getAvatarUploadUrl('image/jpeg');
+        final uploadUrl = uploadData['uploadUrl'] as String;
+        final publicUrl = uploadData['publicUrl'] as String;
+        await ApiClient().uploadToS3(
+          uploadUrl,
+          _pickedImage!,
+          contentType: 'image/jpeg',
         );
-      } catch (_) {
-        apiSaveFailed = true;
+        await service.updateAvatar(publicUrl);
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': _nameCtrl.text.trim(),
-        'username': username,
-        'dob': _dob,
-        'gender': _gender ?? '',
-        'state': '',
-        'totalRewards': 0,
-        'isCreator': false,
-        'isAdmin': false,
-        'dailyValidScoreLimit': 3,
-        'starsReceived': 0,
-        'bio': '',
-        'profileImageUrl': photoUrl,
-        'pageName': '',
-        'streakDay': 0,
-        'lastStreakDate': '',
-        'streakTimezone': 'Asia/Kolkata',
-        'followerCount': 0,
-        'followingCount': 0,
-        'referralCode': _generateReferralCode(),
-        'referredBy': '',
-        'referralBonusApplied': false,
-        'referralCount': 0,
-        'referralCompletedCount': 0,
-        'city': '',
-        'interests': <String>[],
-        'createdAt': Timestamp.now(),
-      });
+      // The REST backend is the source of truth for the profile — if this
+      // fails, stay on this screen and let the user retry rather than
+      // silently advancing with a profile the backend never received.
+      await service.updateProfile(
+        displayName: _nameCtrl.text.trim(),
+        username: _usernameCtrl.text.trim(),
+        gender: _genderApiValue(_gender),
+      );
+
       if (!mounted) return;
-      if (apiSaveFailed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                "Profile saved, but we couldn't sync your username to the "
-                "server. Re-save it from Edit Profile later if it doesn't "
-                "show up."),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        await Future.delayed(const Duration(milliseconds: 1800));
-        if (!mounted) return;
-      }
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => const CityInterestsScreen()));
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save profile. Please try again.')),
+        SnackBar(content: Text(e.toString())),
       );
     }
   }
@@ -516,14 +454,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         ),
       ),
     );
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  String _generateReferralCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final rng = Random.secure();
-    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
   }
 
   // ── Shared UI helpers ──────────────────────────────────────────────────────

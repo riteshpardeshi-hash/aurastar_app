@@ -41,6 +41,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // Challenge data
   int _auraPoints = 150;
   bool _isPaused = false;
+  String _thumbnailUrl = '';
 
   // Bookmark
   bool _isSaved = false;
@@ -79,6 +80,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         _isPaused = false;
         _likesCount = 0;
         _liked = false;
+        _thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
       });
     } catch (_) {}
   }
@@ -837,7 +839,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 // Background / thumbnail
                 if (!_videoStarted || !_videoInitialized)
                   VideoThumbnailWidget(
-                      videoUrl: widget.videoUrl, fit: BoxFit.cover)
+                      videoUrl: widget.videoUrl,
+                      thumbnailUrl: _thumbnailUrl,
+                      fit: BoxFit.cover)
                 else
                   VideoPlayer(_videoController!),
 

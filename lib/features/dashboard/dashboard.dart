@@ -1,8 +1,11 @@
-﻿import 'dart:typed_data';
+﻿import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/api_client.dart';
+import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
+import '../../core/services/creator_page_service.dart';
+import '../../core/services/home_service.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
@@ -10,7 +13,6 @@ import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
-import '../explore/screens/explore_creators_screen.dart';
 import '../challenges/screens/trending_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
@@ -42,11 +44,90 @@ class _DashboardState extends State<Dashboard> {
           .fetchChallenges(limit: 20)
           .then((raw) => raw.map(normaliseChallenge).toList());
 
+  // Creator-page-tagged pages for the "Creator Videos" shelf.
+  late final Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
+      HomeService().fetchTrendingCreators(limit: 10);
+
+  String? _profileUserId;
+  Future<Map<String, dynamic>>? _profileFuture;
+  Timer? _profilePollTimer;
+
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
   static const int _xpPerLevel = 1300;
 
   int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
+
+  @override
+  void initState() {
+    super.initState();
+    // There's no REST equivalent of Firestore's live `users/{uid}` stream,
+    // so poll periodically to keep points/level-up detection reasonably
+    // fresh (e.g. after a challenge is scored while this screen is open).
+    _profilePollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      final uid = _profileUserId;
+      if (uid != null) _loadProfile(uid);
+    });
+  }
+
+  @override
+  void dispose() {
+    _profilePollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _loadProfile(String userId) {
+    if (!mounted) return;
+    setState(() {
+      _profileUserId = userId;
+      _profileFuture = _fetchDashboardProfile(userId);
+    });
+  }
+
+  Future<Map<String, dynamic>> _fetchDashboardProfile(String userId) async {
+    final results = await Future.wait([
+      AuthApiService().getProfile(),
+      AuthApiService().fetchStreak(),
+      CreatorPageService().fetchOwnPage(),
+    ]);
+    final profile = results[0];
+    if (profile == null) throw Exception('Failed to load profile');
+    final streak = results[1];
+    final hasCreatorPage = results[2] != null;
+
+    final displayName =
+        (profile['displayName'] as String?)?.trim().isNotEmpty == true
+            ? profile['displayName'] as String
+            : (profile['profileName'] as String? ??
+                profile['username'] as String? ??
+                profile['name'] as String? ??
+                'User');
+    final photoUrl = (profile['avatar'] as String? ?? '').isNotEmpty
+        ? profile['avatar'] as String
+        : profile['profileImageUrl'] as String? ?? '';
+    final points = (profile['auraPoints'] as num?)?.toInt() ??
+        (profile['totalRewards'] as num?)?.toInt() ??
+        0;
+    final streakDay = (streak?['currentStreak'] as num?)?.toInt() ?? 0;
+
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    // GET /profile/streak doesn't expose a "last streak day" date field yet,
+    // so default an active streak to "qualified today" — this suppresses the
+    // broken/at-risk banner states rather than risk false nags off a guessed
+    // field name.
+    final lastStreakDate = streakDay > 0 ? todayStr : '';
+
+    return {
+      'points': points,
+      'displayName': displayName,
+      'photoUrl': photoUrl,
+      'hasCreatorPage': hasCreatorPage,
+      'streakDay': streakDay,
+      'lastStreakDate': lastStreakDate,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,20 +147,22 @@ class _DashboardState extends State<Dashboard> {
               streakDay: 0,
               lastStreakDate: '');
         }
-        return _buildProfileStream(context, userId);
+        if (_profileUserId != userId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _loadProfile(userId);
+          });
+        }
+        return _buildProfileLoader(context, userId);
       },
     );
   }
 
-  Widget _buildProfileStream(BuildContext context, String userId) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .snapshots(),
+  Widget _buildProfileLoader(BuildContext context, String userId) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _profileFuture,
       builder: (context, snap) {
         if (snap.hasError) {
-          return Scaffold(
+          return const Scaffold(
             backgroundColor: _bg,
             body: Center(
               child: Text('Failed to load profile.',
@@ -94,19 +177,20 @@ class _DashboardState extends State<Dashboard> {
           );
         }
 
-        final userData = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final isAdmin = userData['isAdmin'] as bool? ?? false;
-        final isBrand = userData['isBrand'] as bool? ?? false;
-        final isCreator = userData['isCreator'] as bool? ?? false;
-        final points = (userData['totalRewards'] ?? 0) as int;
+        final data = snap.data!;
+        final points = data['points'] as int;
+        // No REST admin-role signal exists yet — admin UI stays hidden until
+        // the backend exposes one (the admin panel itself is still Firestore-
+        // only and out of scope for this pass).
+        const isAdmin = false;
+        final hasCreatorPage = data['hasCreatorPage'] as bool;
+        final isBrand = hasCreatorPage;
+        final isCreator = hasCreatorPage;
+        final displayName = data['displayName'] as String;
+        final photoUrl = data['photoUrl'] as String;
+        final streakDay = data['streakDay'] as int;
+        final lastStreakDate = data['lastStreakDate'] as String;
         final level = _level(points);
-        final displayName =
-            (userData['name'] as String?)?.trim().isNotEmpty == true
-                ? userData['name'] as String
-                : userData['username'] as String? ?? 'User';
-        final photoUrl = userData['profileImageUrl'] as String? ?? '';
-        final streakDay = (userData['streakDay'] as num?)?.toInt() ?? 0;
-        final lastStreakDate = userData['lastStreakDate'] as String? ?? '';
 
         if (_lastKnownLevel != null && level > _lastKnownLevel!) {
           final oldTier = auraTierForLevel(_lastKnownLevel!);
@@ -222,7 +306,7 @@ class _DashboardState extends State<Dashboard> {
                       child: _buildCreatorTools(context, userId)),
                 if (isBrand || isAdmin)
                   SliverToBoxAdapter(
-                      child: _buildBrandTools(context, userId, isBrand, points)),
+                      child: _buildBrandTools(context, isBrand, points)),
                 if (isAdmin)
                   SliverToBoxAdapter(child: _buildAdminButton(context)),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -514,6 +598,7 @@ class _DashboardState extends State<Dashboard> {
         String title = 'Bollywood Walk';
         int auraPoints = 150;
         String videoUrl = '';
+        String thumbnailUrl = '';
         String instructions = '';
         String challengeId = '';
 
@@ -521,6 +606,7 @@ class _DashboardState extends State<Dashboard> {
           title = hero['title'] as String? ?? title;
           auraPoints = hero['starsCount'] as int? ?? auraPoints;
           videoUrl = hero['videoUrl'] as String? ?? '';
+          thumbnailUrl = hero['thumbnailUrl'] as String? ?? '';
           instructions = hero['instructions'] as String? ?? '';
           challengeId = hero['id'] as String? ?? '';
         }
@@ -541,7 +627,7 @@ class _DashboardState extends State<Dashboard> {
                 children: [
                   _VideoThumbnailWidget(
                     videoUrl: videoUrl,
-                    thumbnailUrl: '',
+                    thumbnailUrl: thumbnailUrl,
                   ),
                   // Bottom-to-top dark gradient for text readability
                   Container(
@@ -698,7 +784,7 @@ class _DashboardState extends State<Dashboard> {
                       final data = docs[i];
                       final title = data['title'] as String? ?? '';
                       final videoUrl = data['videoUrl'] as String? ?? '';
-                      const thumbnailUrl = '';
+                      final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
                       final challengeId = data['id'] as String? ?? '';
                       final instructions = data['instructions'] as String? ?? '';
                       const brandLogoUrl = '';
@@ -784,7 +870,7 @@ class _DashboardState extends State<Dashboard> {
                         final description = data['instructions'] as String? ?? '';
                         final auraPoints = data['starsCount'] as int? ?? 0;
                         final videoUrl = data['videoUrl'] as String? ?? '';
-                        const thumbnailUrl = '';
+                        final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
                         const brandLogoUrl = '';
                         final challengeId = data['id'] as String? ?? '';
 
@@ -924,7 +1010,7 @@ class _DashboardState extends State<Dashboard> {
                   final data = docs[i];
                   final title = data['title'] as String? ?? '';
                   final videoUrl = data['videoUrl'] as String? ?? '';
-                  const thumbnailUrl = '';
+                  final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
                   final challengeId = data['id'] as String? ?? '';
                   final instructions = data['instructions'] as String? ?? '';
                   const brandLogoUrl = '';
@@ -1006,14 +1092,10 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Creator Videos ────────────────────────────────────────────────────────
   Widget _buildCreatorVideosSection(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('isCreator', isEqualTo: true)
-          .limit(10)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _trendingCreatorsFuture,
       builder: (context, snap) {
-        final docs = snap.data?.docs ?? [];
+        final docs = snap.data ?? [];
         if (docs.isEmpty) return const SizedBox.shrink();
 
         return Column(
@@ -1042,9 +1124,15 @@ class _DashboardState extends State<Dashboard> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: docs.length,
                 itemBuilder: (_, i) {
-                  final data     = docs[i].data() as Map<String, dynamic>;
-                  final pageName = data['pageName'] as String? ?? data['name'] as String? ?? 'Creator';
-                  final imgUrl   = data['profileImageUrl'] as String? ?? '';
+                  final data     = docs[i];
+                  final pageName = data['pageName'] as String? ??
+                      data['displayName'] as String? ??
+                      data['name'] as String? ??
+                      'Creator';
+                  final imgUrl   = data['profileImageUrl'] as String? ??
+                      data['avatar'] as String? ??
+                      data['profileImage'] as String? ??
+                      '';
 
                   return GestureDetector(
                     onTap: () => Navigator.push(context,
@@ -1148,7 +1236,7 @@ class _DashboardState extends State<Dashboard> {
                   final description = data?['instructions'] as String? ?? 'Complete this challenge to earn Aura points.';
                   final auraPoints = data?['starsCount'] as int? ?? 150;
                   final videoUrl = data?['videoUrl'] as String? ?? '';
-                  const thumbnailUrl = '';
+                  final thumbnailUrl = data?['thumbnailUrl'] as String? ?? '';
                   final challengeId = data?['id'] as String? ?? '';
 
                   return GestureDetector(
@@ -1464,7 +1552,7 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Brand Tools (brands/admin only) ────────────────────────────────────────
   Widget _buildBrandTools(
-      BuildContext context, String userId, bool isBrand, int points) {
+      BuildContext context, bool isBrand, int points) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
       child: Column(
@@ -1484,17 +1572,13 @@ class _DashboardState extends State<Dashboard> {
                   label: isBrand ? 'Brand Dashboard' : 'Start Brand Page',
                   colors: const [Color(0xFFF59E0B), Color(0xFFEF4444)],
                   onTap: () async {
-                    final doc = await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(userId)
-                        .get();
-                    final data = doc.data() ?? {};
-                    final alreadyBrand = data['isBrand'] as bool? ?? false;
-                    final currentPoints =
-                        (data['totalRewards'] as num?)?.toInt() ?? 0;
+                    final status = await CreatorPageService().fetchSetupStatus();
+                    final alreadyBrand =
+                        (status['currentStep'] as String? ?? 'NOT_ELIGIBLE') ==
+                            'ACTIVE';
                     if (!context.mounted) return;
-                    if (!alreadyBrand && currentPoints < 500) {
-                      _showCreatorGateSheet(context, currentPoints);
+                    if (!alreadyBrand && points < 500) {
+                      _showCreatorGateSheet(context, points);
                       return;
                     }
                     Navigator.push(
@@ -1637,11 +1721,9 @@ class _DashboardState extends State<Dashboard> {
                       _navItem(
                         icon: Icons.storefront_rounded,
                         label: 'Brand',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const ExploreCreatorsScreen()),
-                        ),
+                        // Brands section isn't built yet; stay on Dashboard for now.
+                        onTap: () =>
+                            Navigator.popUntil(context, (route) => route.isFirst),
                       ),
                       const SizedBox(width: 58),
                       _navItem(
@@ -1818,6 +1900,9 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
       if (mounted) setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
       return;
     }
+    // HLS manifests (.m3u8) can't be frame-extracted by video_thumbnail —
+    // skip straight to the placeholder instead of a wasted 12s timeout.
+    if (widget.videoUrl.toLowerCase().contains('.m3u8')) return;
     try {
       final bytes = await VideoThumbnail.thumbnailData(
         video: widget.videoUrl,

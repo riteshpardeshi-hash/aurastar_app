@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/reference_data_service.dart';
 import 'interests_screen.dart';
 
 class CityInterestsScreen extends StatefulWidget {
-  const CityInterestsScreen({super.key});
+  /// When true, this screen is being reopened from Settings to fix an
+  /// already-broken profile rather than during first-time onboarding:
+  /// pre-fills current selections, pops back to the caller on success
+  /// instead of chaining into InterestsScreen, and shows a back button.
+  final bool isEditMode;
+
+  const CityInterestsScreen({super.key, this.isEditMode = false});
 
   @override
   State<CityInterestsScreen> createState() => _CityInterestsScreenState();
@@ -27,6 +34,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   bool _loadingCountries = true;
   bool _loadingCities = false;
   bool _saving = false;
+  String? _errorText;
 
   @override
   void initState() {
@@ -46,6 +54,23 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
       if (!mounted) return;
       setState(() => _loadingCountries = false);
     }
+    if (widget.isEditMode) await _prefillFromProfile();
+  }
+
+  // Edit mode only — pre-fill with the user's currently-saved country/city
+  // so they see what's actually stored server-side, not a blank form.
+  Future<void> _prefillFromProfile() async {
+    final profile = await AuthApiService().getProfile();
+    if (!mounted || profile == null) return;
+    final country = profile['country'] as Map<String, dynamic>?;
+    final city = profile['city'] as Map<String, dynamic>?;
+    if (country != null) {
+      setState(() => _selectedCountry = country);
+      await _loadCities(country['id'] as String,
+          countryCode: country['code'] as String?);
+    }
+    if (!mounted || city == null) return;
+    setState(() => _selectedCity = city);
   }
 
   Future<void> _loadCities(String countryId, {String? countryCode}) async {
@@ -78,33 +103,31 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
       return;
     }
 
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
     try {
       await _refService.saveCountry(_selectedCountry!['id'] as String);
+      await _refService.saveCity(_selectedCity!['id'] as String);
     } catch (e) {
+      // Country/city must both actually be saved server-side — the backend
+      // marks a profile complete only once country + city + interests are
+      // all set. Silently continuing past a failure here left users stuck
+      // with an incomplete profile and no way to tell why uploads failed
+      // later. Surface it and let them retry instead.
       if (!mounted) return;
-      setState(() => _saving = false);
-      _showSnack('Failed to save country. Please try again.');
+      setState(() {
+        _saving = false;
+        _errorText = 'Failed to save your location. Please try again.';
+      });
       return;
     }
 
-    // City save can fail even for a valid selection — the backend has no
-    // seeded city records yet, so a real cityId can still come back
-    // "not found". Don't let that block onboarding; let the user through
-    // and they can set their city later once the backend has data.
-    bool citySaveFailed = false;
-    try {
-      await _refService.saveCity(_selectedCity!['id'] as String);
-    } catch (_) {
-      citySaveFailed = true;
-    }
-
     if (!mounted) return;
-    if (citySaveFailed) {
-      _showSnack(
-          "Country saved. City isn't available on the server yet — you can set it later from your profile.");
-      await Future.delayed(const Duration(milliseconds: 1800));
-      if (!mounted) return;
+    if (widget.isEditMode) {
+      Navigator.pop(context, true);
+      return;
     }
     Navigator.pushReplacement(
       context,
@@ -184,17 +207,31 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: List.generate(4, (i) => Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        width: i == 1 ? 24 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: i == 1 ? _purple : Colors.white.withValues(alpha: 0.20),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      )),
-                    ),
+                    widget.isEditMode
+                        ? GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_back_rounded,
+                                  color: Colors.white, size: 20),
+                            ),
+                          )
+                        : Row(
+                            children: List.generate(4, (i) => Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              width: i == 1 ? 24 : 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: i == 1 ? _purple : Colors.white.withValues(alpha: 0.20),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            )),
+                          ),
                     SizedBox(height: size.height * 0.04),
                     const Text(
                       'Personalise\nyour feed',
@@ -241,6 +278,15 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                             onTap: _openCityPicker,
                           ),
 
+                    if (_errorText != null) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        _errorText!,
+                        style: const TextStyle(
+                            color: Colors.redAccent, fontSize: 13),
+                      ),
+                    ],
+
                     SizedBox(height: size.height * 0.05),
 
                     // ── Continue button ───────────────────────────────────────
@@ -276,6 +322,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                       ),
                     ),
 
+                    if (!widget.isEditMode) ...[
                     const SizedBox(height: 16),
 
                     Center(
@@ -292,6 +339,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                         ),
                       ),
                     ),
+                    ],
                   ],
                 ),
               ),

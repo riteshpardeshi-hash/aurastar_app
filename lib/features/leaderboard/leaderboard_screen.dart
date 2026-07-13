@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
@@ -194,18 +192,13 @@ class _CityBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: uid.isEmpty
-          ? null
-          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, userSnap) {
-        if (uid.isEmpty || !userSnap.hasData) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: AuthApiService().getProfile(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator(color: _accent));
         }
-        final userData = userSnap.data?.data() as Map<String, dynamic>? ?? {};
-        final city = (userData['city'] as String?)?.trim() ?? '';
+        final city = (snap.data?['city'] as String?)?.trim() ?? '';
 
         if (city.isEmpty) {
           return _emptyState(
@@ -235,34 +228,11 @@ class _CityBoard extends StatelessWidget {
                 ],
               ),
             ),
+            // City rankings need a backend /leaderboard/city endpoint that
+            // doesn't exist yet — Global/Friends boards above already work.
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .where('city', isEqualTo: city)
-                    .orderBy('totalRewards', descending: true)
-                    .limit(50)
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator(color: _accent));
-                  }
-                  final docs = snap.data?.docs ?? [];
-
-                  if (docs.isEmpty) {
-                    return _emptyState(
-                        'No players in $city yet', 'Be the first to compete!');
-                  }
-                  final userInList = docs.any((d) => d.id == uid);
-                  return _BoardList(
-                    docs: docs,
-                    currentUid: uid,
-                    scoreField: 'totalRewards',
-                    scoreSuffix: 'Auras',
-                    showCurrentUserFooter: !userInList,
-                  );
-                },
-              ),
+              child: _emptyState(
+                  'City board coming soon', 'We\'re still wiring this up!'),
             ),
           ],
         );
@@ -280,18 +250,13 @@ class _CountryBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: uid.isEmpty
-          ? null
-          : FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, userSnap) {
-        if (uid.isEmpty || !userSnap.hasData) {
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: AuthApiService().getProfile(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator(color: _accent));
         }
-        final userData = userSnap.data?.data() as Map<String, dynamic>? ?? {};
-        final country = (userData['country'] as String?)?.trim() ?? '';
+        final country = (snap.data?['country'] as String?)?.trim() ?? '';
 
         if (country.isEmpty) {
           return _emptyState(
@@ -321,35 +286,11 @@ class _CountryBoard extends StatelessWidget {
                 ],
               ),
             ),
+            // Country rankings need a backend /leaderboard/country endpoint
+            // that doesn't exist yet — Global/Friends boards above work.
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .where('country', isEqualTo: country)
-                    .orderBy('totalRewards', descending: true)
-                    .limit(50)
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(
-                        child: CircularProgressIndicator(color: _accent));
-                  }
-                  final docs = snap.data?.docs ?? [];
-
-                  if (docs.isEmpty) {
-                    return _emptyState(
-                        'No players in $country yet', 'Be the first to compete!');
-                  }
-                  final userInList = docs.any((d) => d.id == uid);
-                  return _BoardList(
-                    docs: docs,
-                    currentUid: uid,
-                    scoreField: 'totalRewards',
-                    scoreSuffix: 'Auras',
-                    showCurrentUserFooter: !userInList,
-                  );
-                },
-              ),
+              child: _emptyState(
+                  'Country board coming soon', 'We\'re still wiring this up!'),
             ),
           ],
         );
@@ -562,114 +503,6 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
             ),
           ),
       ],
-    );
-  }
-}
-
-// ── Board List (Country + City, still Firestore — no backend endpoint yet) ─────
-
-class _BoardList extends StatelessWidget {
-  final List<QueryDocumentSnapshot> docs;
-  final String currentUid;
-  final String scoreField;
-  final String scoreSuffix;
-  final bool showCurrentUserFooter;
-
-  const _BoardList({
-    required this.docs,
-    required this.currentUid,
-    required this.scoreField,
-    required this.scoreSuffix,
-    this.showCurrentUserFooter = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // +2 items when footer needed: separator + user row
-    final extra = showCurrentUserFooter ? 2 : 0;
-    final total = docs.length + extra;
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: total,
-      itemBuilder: (_, i) {
-        // 1. Normal rows
-        if (i < docs.length) {
-          final doc = docs[i];
-          final data = doc.data() as Map<String, dynamic>;
-          final name = (data['name'] as String?)?.trim().isNotEmpty == true
-              ? data['name'] as String
-              : data['username'] as String? ?? 'User';
-          final username = data['username'] as String? ?? '';
-          final score = (data[scoreField] as num?)?.toInt() ?? 0;
-          return _PlayerRow(
-            rank: i + 1,
-            name: name,
-            username: username,
-            score: score,
-            scoreSuffix: scoreSuffix,
-            isCurrentUser: doc.id == currentUid,
-            onTap: doc.id == currentUid
-                ? null
-                : () => _showPrivateProfile(context),
-          );
-        }
-
-        // Compute offset past the normal rows
-        final offset = i - docs.length;
-
-        // 2. "Your position" separator
-        if (showCurrentUserFooter && offset == 0) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'Your position',
-                    style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        fontSize: 11,
-                        fontFamily: 'SpaceGrotesk'),
-                  ),
-                ),
-                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
-              ],
-            ),
-          );
-        }
-
-        // 3. Current user's own row (fetched live)
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUid)
-              .snapshots(),
-          builder: (_, snap) {
-            if (!snap.hasData) return const SizedBox.shrink();
-            final data =
-                snap.data!.data() as Map<String, dynamic>? ?? {};
-            final name =
-                (data['name'] as String?)?.trim().isNotEmpty == true
-                    ? data['name'] as String
-                    : data['username'] as String? ?? 'You';
-            final username = data['username'] as String? ?? '';
-            final score = (data[scoreField] as num?)?.toInt() ?? 0;
-            return _PlayerRow(
-              rank: docs.length + 1,
-              name: name,
-              username: username,
-              score: score,
-              scoreSuffix: scoreSuffix,
-              isCurrentUser: true,
-              rankLabel: '>${docs.length}',
-              onTap: null,
-            );
-          },
-        );
-      },
     );
   }
 }

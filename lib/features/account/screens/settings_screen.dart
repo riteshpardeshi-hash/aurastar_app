@@ -5,6 +5,8 @@ import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import '../../splash/screens/splash_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
+import '../../auth/screens/city_interests_screen.dart';
+import '../../auth/screens/interests_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -40,6 +42,26 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ArchivedVideosScreen()),
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.location_on_outlined,
+            label: 'Country & City',
+            onTap: () => _editAndConfirm(
+              context,
+              const CityInterestsScreen(isEditMode: true),
+              'Location saved.',
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.interests_outlined,
+            label: 'Interests',
+            onTap: () => _editAndConfirm(
+              context,
+              const InterestsScreen(isEditMode: true),
+              'Interests saved.',
             ),
           ),
           const SizedBox(height: 24),
@@ -130,6 +152,23 @@ class SettingsScreen extends StatelessWidget {
         onTap: onTap,
       ),
     );
+  }
+
+  // Pushes an edit-mode onboarding screen (Country & City / Interests) and
+  // shows a confirmation once it pops back with a successful save. Used to
+  // let a user fix a profile that got stuck incomplete because onboarding
+  // silently swallowed a save failure.
+  Future<void> _editAndConfirm(
+      BuildContext context, Widget screen, String successMessage) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+    if (saved == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
+    }
   }
 
   Future<void> _logout(BuildContext context) async {

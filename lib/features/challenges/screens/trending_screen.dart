@@ -215,6 +215,7 @@ class _TrendingScreenState extends State<TrendingScreen>
   Widget _buildCard(_TrendingItem item, int index, int tab) {
     final title        = item.data['title']        as String? ?? '';
     final videoUrl     = item.data['videoUrl']     as String? ?? '';
+    final thumbnailUrl = item.data['thumbnailUrl'] as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
     final category     = item.data['category']     as String? ?? '';
     final isTop3       = index < 3;
@@ -266,7 +267,9 @@ class _TrendingScreenState extends State<TrendingScreen>
                       fit: StackFit.expand,
                       children: [
                         VideoThumbnailWidget(
-                            videoUrl: videoUrl, fit: BoxFit.cover),
+                            videoUrl: videoUrl,
+                            thumbnailUrl: thumbnailUrl,
+                            fit: BoxFit.cover),
                         Positioned.fill(
                           child: DecoratedBox(
                             decoration: BoxDecoration(

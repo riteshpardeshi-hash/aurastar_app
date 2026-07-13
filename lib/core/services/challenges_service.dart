@@ -69,10 +69,10 @@ class ChallengesService {
   }
 
   Future<Map<String, dynamic>> createSubmission(
-      String challengeId, String videoKey) async {
+      String challengeId, String videoId) async {
     final res = await _client.post(
       '/challenges/$challengeId/submissions',
-      {'videoKey': videoKey},
+      {'videoId': videoId},
       auth: true,
     );
     if (res['status'] != 'success') {
@@ -92,7 +92,7 @@ class ChallengesService {
     String? instructions,
     required String categoryId,
     required String difficulty,
-    required String videoKey,
+    required String videoId,
   }) async {
     final res = await _client.post('/challenges', {
       'title': title,
@@ -101,7 +101,7 @@ class ChallengesService {
         'instructions': instructions,
       'category': categoryId,
       'difficulty': difficulty,
-      'videoKey': videoKey,
+      'videoId': videoId,
     }, auth: true);
     return res['data']['challenge'] as Map<String, dynamic>;
   }
@@ -149,6 +149,7 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
         ? c['instructions']
         : c['description'] as String? ?? '',
     'videoUrl': c['videoUrl'] as String? ?? '',
+    'thumbnailUrl': c['thumbnailUrl'] as String? ?? '',
     'category': _extractRefId(c['category']),
     'difficulty': c['difficulty'] as String? ?? '',
     'sourceType': c['sourceType'] as String? ?? '',

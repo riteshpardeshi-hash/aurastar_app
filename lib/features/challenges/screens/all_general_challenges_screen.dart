@@ -3,7 +3,6 @@ import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
 import '../../../features/account/screens/my_account_screen.dart';
-import '../../../features/explore/screens/explore_creators_screen.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
 import '../../../core/services/challenges_service.dart';
 import 'challenge_detail.dart';
@@ -261,7 +260,7 @@ class _AllGeneralChallengesScreenState
         challengeId: c['id'] as String,
         title: c['title'] as String,
         videoUrl: c['videoUrl'] as String,
-        thumbnailUrl: '',
+        thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
         auraPoints: c['starsCount'] as int,
         views: c['submissionsCount'] as int,
         instructions: c['instructions'] as String,
@@ -311,12 +310,9 @@ class _AllGeneralChallengesScreenState
                       _navItem(
                         icon: Icons.storefront_rounded,
                         label: 'Brand Challenges',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const ExploreCreatorsScreen()),
-                        ),
+                        // Brands section isn't built yet; go back to Dashboard for now.
+                        onTap: () =>
+                            Navigator.popUntil(context, (route) => route.isFirst),
                       ),
                       const SizedBox(width: 58),
                       _navItem(

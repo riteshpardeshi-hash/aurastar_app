@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/api_client.dart';
 import '../../video/widgets/video_player_widget.dart';
 
 class UserVideoDetailScreen extends StatefulWidget {
@@ -31,7 +31,7 @@ class UserVideoDetailScreen extends StatefulWidget {
 }
 
 class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
-  final _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  String _uid = '';
 
   bool _starred = false;
   int _starsCount = 0;
@@ -46,6 +46,13 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final uid = await ApiClient().userId;
+    if (!mounted) return;
+    setState(() => _uid = uid ?? '');
     _loadStars();
   }
 

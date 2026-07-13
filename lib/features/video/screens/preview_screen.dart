@@ -7,6 +7,7 @@ import '../../../core/services/challenges_service.dart';
 import '../../../core/services/upload_queue_service.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
+import '../../account/screens/settings_screen.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String videoPath;
@@ -124,10 +125,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
     try {
       final service = ChallengesService();
 
-      // Step 1: get presigned S3 URL
+      // Step 1: get presigned S3 URL + claim an unclaimed Video placeholder
       final presign = await service.presignSubmission(widget.challengeId);
       final uploadUrl = presign['uploadUrl'] as String;
-      final videoKey = presign['key'] as String;
+      final videoId = presign['videoId'] as String;
 
       // Step 2: upload directly to S3
       await ApiClient().uploadToS3(
@@ -138,10 +139,11 @@ class _PreviewScreenState extends State<PreviewScreen> {
         },
       );
 
-      // Step 3: create submission record + get AI score
+      // Step 3: create submission record + get AI score — claims the
+      // presigned Video placeholder by videoId (ADR 036), not by S3 key.
       if (mounted) setState(() => _progress = 0.95);
       final submission =
-          await service.createSubmission(widget.challengeId, videoKey);
+          await service.createSubmission(widget.challengeId, videoId);
 
       await UploadQueueService.clear();
 
@@ -198,6 +200,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
   String _describeError(Object e) {
     final text = e.toString();
     return text.startsWith('Exception: ') ? text.substring(11) : text;
+  }
+
+  // The backend rejects uploads with this message when the user's profile
+  // is missing country/city/interests — a distinct fix (finish onboarding),
+  // not something a plain retry will resolve.
+  bool get _isProfileIncomplete {
+    final text = (_lastError ?? '').toLowerCase();
+    return text.contains('onboarding') ||
+        (text.contains('profile') && text.contains('complete'));
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -506,7 +517,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
                 Expanded(
                   flex: 2,
                   child: GestureDetector(
-                    onTap: _upload,
+                    onTap: _isProfileIncomplete
+                        ? () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const SettingsScreen()),
+                            )
+                        : _upload,
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
@@ -520,9 +537,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
                           )
                         ],
                       ),
-                      child: const Center(
-                        child: Text('Retry Upload',
-                            style: TextStyle(
+                      child: Center(
+                        child: Text(
+                            _isProfileIncomplete
+                                ? 'Complete Your Profile'
+                                : 'Retry Upload',
+                            style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700)),

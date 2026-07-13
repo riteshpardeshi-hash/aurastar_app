@@ -71,6 +71,7 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
     final id           = c['id']           as String? ?? '';
     final title        = c['title']        as String? ?? 'Challenge';
     final videoUrl     = c['videoUrl']     as String? ?? '';
+    final thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
     final instructions = c['instructions'] as String? ?? '';
     final category     = c['category']     as String? ?? '';
     final difficulty   = c['difficulty']   as String? ?? '';
@@ -98,7 +99,10 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                    VideoThumbnailWidget(
+                        videoUrl: videoUrl,
+                        thumbnailUrl: thumbnailUrl,
+                        fit: BoxFit.cover),
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(

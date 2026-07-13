@@ -61,10 +61,10 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
     try {
       final service = ChallengesService();
 
-      // Step 1: get presigned S3 URL
+      // Step 1: get presigned S3 URL + claim an unclaimed Video placeholder
       final presign = await service.presignChallenge();
       final uploadUrl = presign['uploadUrl'] as String;
-      final videoKey = presign['key'] as String;
+      final videoId = presign['videoId'] as String;
 
       // Step 2: upload to S3
       await ApiClient().uploadToS3(
@@ -91,7 +91,7 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
         instructions: instructions,
         categoryId: widget.categoryId,
         difficulty: widget.difficulty,
-        videoKey: videoKey,
+        videoId: videoId,
       );
 
       if (!mounted) return;

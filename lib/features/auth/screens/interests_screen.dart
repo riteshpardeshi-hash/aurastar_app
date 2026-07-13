@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/reference_data_service.dart';
 import 'rules_screen.dart';
 
 class InterestsScreen extends StatefulWidget {
-  const InterestsScreen({super.key});
+  /// When true, this screen is being reopened from Settings to fix an
+  /// already-broken profile rather than during first-time onboarding:
+  /// pre-fills current selections, pops back to the caller on success
+  /// instead of chaining into RulesScreen, and shows a back button.
+  final bool isEditMode;
+
+  const InterestsScreen({super.key, this.isEditMode = false});
 
   @override
   State<InterestsScreen> createState() => _InterestsScreenState();
@@ -16,18 +23,18 @@ class _InterestsScreenState extends State<InterestsScreen> {
 
   final _refService = ReferenceDataService();
 
-  static const _categories = [
-    {'name': 'Dance',   'asset': 'assets/images/your interest/Asset 89.png'},
-    {'name': 'Fashion', 'asset': 'assets/images/your interest/Asset 90.png'},
-    {'name': 'Comedy',  'asset': 'assets/images/your interest/Asset 91.png'},
-    {'name': 'Fitness', 'asset': 'assets/images/your interest/Asset 92.png'},
-    {'name': 'Sports',  'asset': 'assets/images/your interest/Asset 93.png'},
-    {'name': 'Skill',   'asset': 'assets/images/your interest/Asset 94.png'},
-  ];
+  // Real interests fetched from GET /interests — the old build used a fixed
+  // 6-category grid (Dance/Fashion/Comedy/Fitness/Sports/Skill) that never
+  // matched any real backend interest name, so every selection silently sent
+  // an invalid id and PATCH /profile/interests always failed. Driving the
+  // grid from the live catalog and selecting by real id fixes that at the
+  // source instead of guessing a name mapping.
+  List<Map<String, dynamic>> _interests = [];
+  bool _loading = true;
 
   final Set<String> _selected = {};
-  Map<String, String> _nameToId = {};
   bool _saving = false;
+  String? _errorText;
 
   @override
   void initState() {
@@ -36,16 +43,32 @@ class _InterestsScreenState extends State<InterestsScreen> {
   }
 
   Future<void> _loadInterests() async {
-    try {
-      final interests = await _refService.fetchInterests();
-      if (!mounted) return;
-      setState(() {
-        _nameToId = {
-          for (final i in interests)
-            (i['name'] as String).toLowerCase(): i['id'] as String,
-        };
-      });
-    } catch (_) {}
+    setState(() => _loading = true);
+    final interests = await _refService.fetchInterests();
+    if (!mounted) return;
+    setState(() {
+      _interests = interests.where((i) => i['isActive'] != false).toList();
+      _loading = false;
+    });
+    if (widget.isEditMode) await _prefillFromProfile();
+  }
+
+  // Edit mode only — pre-select whichever real interests the user's profile
+  // already has, matched by id (the profile's `interests` are full Interest
+  // objects, same shape as GET /interests).
+  Future<void> _prefillFromProfile() async {
+    final profile = await AuthApiService().getProfile();
+    if (!mounted || profile == null) return;
+    final interests = profile['interests'] as List?;
+    if (interests == null) return;
+    final savedIds = interests
+        .map((i) => ((i as Map)['id'] as String?) ??
+            (i['_id'] as String?) ??
+            '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (!mounted) return;
+    setState(() => _selected.addAll(savedIds));
   }
 
   Future<void> _continue() async {
@@ -55,16 +78,29 @@ class _InterestsScreenState extends State<InterestsScreen> {
       );
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _errorText = null;
+    });
     try {
-      final ids = _selected
-          .map((name) => _nameToId[name.toLowerCase()] ?? name)
-          .toList();
-      await _refService.saveInterests(ids);
-    } catch (_) {
-      // Non-fatal: navigate regardless if API isn't ready yet.
+      await _refService.saveInterests(_selected.toList());
+    } catch (e) {
+      // Interests must actually be saved server-side — the backend marks a
+      // profile complete only once country + city + interests are all set.
+      // Silently continuing past a failure here left users stuck with an
+      // incomplete profile and no way to tell why uploads failed later.
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _errorText = 'Failed to save your interests. Please try again.';
+      });
+      return;
     }
     if (!mounted) return;
+    if (widget.isEditMode) {
+      Navigator.pop(context, true);
+      return;
+    }
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const RulesScreen()),
@@ -88,6 +124,25 @@ class _InterestsScreenState extends State<InterestsScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                   child: Column(
                     children: [
+                      if (widget.isEditMode) ...[
+                        SizedBox(height: size.height * 0.02),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_back_rounded,
+                                  color: Colors.white, size: 20),
+                            ),
+                          ),
+                        ),
+                      ],
                       SizedBox(height: size.height * 0.06),
 
                       // ── Title (asset includes text + underline) ────────────
@@ -111,69 +166,51 @@ class _InterestsScreenState extends State<InterestsScreen> {
 
                       SizedBox(height: size.height * 0.045),
 
-                      // ── Interest grid ──────────────────────────────────────
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.55,
+                      // ── Interest chips ──────────────────────────────────────
+                      if (_loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                              child: CircularProgressIndicator(
+                                  color: _purple)),
+                        )
+                      else if (_interests.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 30),
+                          child: Column(
+                            children: [
+                              Text(
+                                "Couldn't load interests. Please try again.",
+                                style: TextStyle(
+                                    color: Colors.white
+                                        .withValues(alpha: 0.55),
+                                    fontSize: 13),
+                              ),
+                              const SizedBox(height: 10),
+                              TextButton(
+                                onPressed: _loadInterests,
+                                child: const Text('Retry',
+                                    style: TextStyle(color: _purple)),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children:
+                              _interests.map(_interestChip).toList(),
                         ),
-                        itemCount: _categories.length,
-                        itemBuilder: (_, i) {
-                          final cat = _categories[i];
-                          final name = cat['name']!;
-                          final asset = cat['asset']!;
-                          final selected = _selected.contains(name);
 
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              selected
-                                  ? _selected.remove(name)
-                                  : _selected.add(name);
-                            }),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: selected
-                                      ? _purple
-                                      : Colors.transparent,
-                                  width: 2,
-                                ),
-                                boxShadow: selected
-                                    ? [
-                                        BoxShadow(
-                                          color:
-                                              _purple.withValues(alpha: 0.50),
-                                          blurRadius: 14,
-                                          spreadRadius: 1,
-                                        )
-                                      ]
-                                    : null,
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    Image.asset(asset, fit: BoxFit.cover),
-                                    if (!selected)
-                                      Container(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.38),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                      if (_errorText != null) ...[
+                        const SizedBox(height: 14),
+                        Text(
+                          _errorText!,
+                          style: const TextStyle(
+                              color: Colors.redAccent, fontSize: 13),
+                        ),
+                      ],
 
                       SizedBox(height: size.height * 0.055),
 
@@ -238,5 +275,77 @@ class _InterestsScreenState extends State<InterestsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _interestChip(Map<String, dynamic> interest) {
+    final id = interest['id'] as String;
+    final name = interest['name'] as String? ?? '';
+    final icon = interest['icon'] as String?;
+    final selected = _selected.contains(id);
+
+    return GestureDetector(
+      onTap: () => setState(() {
+        selected ? _selected.remove(id) : _selected.add(id);
+      }),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? _purple.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(
+            color: selected ? _purple : Colors.white.withValues(alpha: 0.18),
+            width: 1.2,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: _purple.withValues(alpha: 0.40),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  )
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _interestIcon(icon),
+            const SizedBox(width: 8),
+            Text(
+              name,
+              style: TextStyle(
+                color:
+                    selected ? Colors.white : Colors.white.withValues(alpha: 0.65),
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _interestIcon(String? icon) {
+    if (icon == null || icon.isEmpty) {
+      return const Icon(Icons.star_rounded, color: Colors.white54, size: 16);
+    }
+    if (icon.startsWith('http')) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Image.network(
+          icon,
+          width: 18,
+          height: 18,
+          errorBuilder: (_, __, ___) => const Icon(Icons.star_rounded,
+              color: Colors.white54, size: 16),
+        ),
+      );
+    }
+    // Backend also returns plain emoji strings (e.g. "🎮") for some entries.
+    return Text(icon, style: const TextStyle(fontSize: 16));
   }
 }

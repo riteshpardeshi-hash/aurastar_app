@@ -70,6 +70,7 @@ Map<String, dynamic> normaliseHomeSummary(Map<String, dynamic> c) {
     'title': c['title'] as String? ?? '',
     'instructions': c['description'] as String? ?? c['title'] as String? ?? '',
     'videoUrl': videoUrl,
+    'thumbnailUrl': c['thumbnailUrl'] as String? ?? '',
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
     'sourceType': c['sourceType'] as String? ?? '',

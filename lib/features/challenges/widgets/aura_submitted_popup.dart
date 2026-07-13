@@ -192,7 +192,9 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     try {
       final profile = await AuthApiService().getProfile();
       if (!mounted || profile == null) return;
-      final city = profile['city'] as String? ?? '';
+      final city =
+          (profile['city'] as Map<String, dynamic>?)?['name'] as String? ??
+              '';
       final name = profile['displayName'] as String? ??
           profile['profileName'] as String? ??
           profile['username'] as String? ?? '';
@@ -321,6 +323,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                             fontSize: 64,
                             fontWeight: FontWeight.w700,
                             height: 1,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       );
@@ -345,11 +348,16 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           height: 1.4,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     ),
                   ] else ...[
-                    const Text('Taking longer than usual...', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    const Text('Taking longer than usual...',
+                        style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 13,
+                            decoration: TextDecoration.none)),
                     const SizedBox(height: 14),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(false),
@@ -360,7 +368,12 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: const Color(0xFF9B4DCA).withValues(alpha: 0.5)),
                         ),
-                        child: const Text('Check My Account later', style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13, fontWeight: FontWeight.w600)),
+                        child: const Text('Check My Account later',
+                            style: TextStyle(
+                                color: Color(0xFFD4A8FF),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.none)),
                       ),
                     ),
                   ],
@@ -529,6 +542,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       fontSize: 56,
                       fontWeight: FontWeight.w700,
                       height: 1,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ),
@@ -592,7 +606,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           children: [
             const Text(
               'Score Analysis',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  decoration: TextDecoration.none),
             ),
             const SizedBox(height: 12),
             Row(
@@ -612,7 +630,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             Text(
               widget.challengeTitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFC978F0), fontSize: 18, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                  color: Color(0xFFC978F0),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.none),
             ),
             const SizedBox(height: 20),
             Container(
@@ -623,7 +645,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               ),
               child: RichText(
                 text: TextSpan(
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.none),
                   children: [
                     const TextSpan(text: 'AI Score : ', style: TextStyle(color: Colors.white)),
                     TextSpan(text: '$_aiScore', style: const TextStyle(color: Color(0xFFFF6EC7), fontWeight: FontWeight.w800)),
@@ -645,7 +670,12 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       Padding(padding: const EdgeInsets.only(top: 3), child: Image.asset(dot, width: 12, height: 12)),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(entry.value, style: const TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4)),
+                        child: Text(entry.value,
+                            style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13.5,
+                                height: 1.4,
+                                decoration: TextDecoration.none)),
                       ),
                     ],
                   ),
@@ -697,6 +727,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                 color: _isBestForChallenge ? Colors.greenAccent : Colors.orange,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
             ),
           ),
@@ -748,7 +779,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   SizedBox(width: 6),
                   Text(
                     'Share Card',
-                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.none),
                   ),
                 ],
               ),
@@ -768,7 +803,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         ),
         child: const Text(
           'Continue',
-          style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none),
         ),
       ),
     );
@@ -813,6 +852,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       color: Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ],
@@ -859,7 +899,12 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                         Text(
                           _kAuraSenseTrivia[_triviaIndex],
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              height: 1.4,
+                              decoration: TextDecoration.none),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -902,7 +947,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                           Text(
                             widget.challengeTitle,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: Color(0xFFC978F0), fontSize: 16, fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                                color: Color(0xFFC978F0),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                decoration: TextDecoration.none),
                           ),
                           const SizedBox(height: 18),
                           Container(height: 1, color: Colors.white.withValues(alpha: 0.15)),
@@ -927,7 +976,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                                     Expanded(
                                       child: Text(
                                         reason,
-                                        style: const TextStyle(color: Colors.white70, fontSize: 13.5, height: 1.4),
+                                        style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 13.5,
+                                            height: 1.4,
+                                            decoration: TextDecoration.none),
                                       ),
                                     ),
                                   ],
@@ -976,14 +1029,23 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 52),
         ),
         const SizedBox(height: 18),
-        const Text('Review Unavailable', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        const Text('Review Unavailable',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.none)),
         const SizedBox(height: 10),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 24),
           child: Text(
             'AI couldn\'t process your video right now. Check My Account — an admin will review it shortly.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.4),
+            style: TextStyle(
+                color: Colors.white54,
+                fontSize: 13,
+                height: 1.4,
+                decoration: TextDecoration.none),
           ),
         ),
         const SizedBox(height: 20),
@@ -996,7 +1058,12 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
             ),
-            child: const Text('OK', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.w600)),
+            child: const Text('OK',
+                style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none)),
           ),
         ),
       ],

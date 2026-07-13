@@ -82,6 +82,14 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
       return;
     }
 
+    // HLS manifests (.m3u8) can't be frame-extracted by video_thumbnail — it
+    // expects a direct video file. Skip straight to the fallback icon instead
+    // of wasting a 12s timeout per card.
+    if (_isHlsUrl(widget.videoUrl)) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+
     // Slow path — extract frame from video (downloads the file)
     try {
       final data = await VideoThumbnail.thumbnailData(
@@ -130,6 +138,8 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         ),
       );
 }
+
+bool _isHlsUrl(String url) => url.toLowerCase().contains('.m3u8');
 
 /// Animated shimmer shown while the thumbnail is loading.
 class VideoThumbnailSkeleton extends StatefulWidget {

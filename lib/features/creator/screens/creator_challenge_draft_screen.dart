@@ -34,7 +34,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
   final List<String> _scoringCriteria = [];
 
   File? _pickedVideo;
-  String? _existingVideoKey;
   bool _loadingCategories = true;
   bool _saving = false;
 
@@ -51,7 +50,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       _descCtrl.text = d['description'] as String? ?? '';
       _difficulty = (d['difficulty'] as String?)?.isNotEmpty == true ? d['difficulty'] as String : 'Medium';
       _categoryId = (d['categoryId'] as String?)?.isNotEmpty == true ? d['categoryId'] as String : null;
-      _existingVideoKey = d['videoKey'] as String?;
     }
     _loadCategories();
   }
@@ -169,14 +167,14 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       } else {
         final uploadData = await service.getReferenceVideoUploadUrl();
         final uploadUrl = uploadData['uploadUrl'] as String;
-        final videoKey = uploadData['key'] as String;
+        final videoId = uploadData['videoId'] as String;
         await ApiClient().uploadToS3(uploadUrl, _pickedVideo!, contentType: 'video/mp4');
 
         await service.createDraft(
           title: title,
           category: _categoryId!,
           difficulty: _difficulty,
-          videoKey: videoKey,
+          videoId: videoId,
           description: _descCtrl.text.trim(),
           challengeInstructions: instructions.isEmpty ? null : instructions,
         );
@@ -318,10 +316,10 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                     const Icon(Icons.videocam_rounded, color: Colors.white38, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(_existingVideoKey ?? 'Uploaded',
+                      child: const Text('Uploaded',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          style: TextStyle(color: Colors.white54, fontSize: 12)),
                     ),
                   ],
                 ),

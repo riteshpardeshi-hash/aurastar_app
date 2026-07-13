@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
 import 'core/services/api_client.dart';
+import 'core/services/challenges_service.dart';
 import 'firebase_options.dart';
 import 'features/challenges/screens/challenge_detail.dart';
 import 'features/splash/screens/splash_screen.dart';
@@ -61,18 +61,15 @@ class _MyAppState extends State<MyApp> {
     if (segments[0] == 'challenge') {
       final challengeId = segments[1];
       if (challengeId.isEmpty) return;
-      final doc = await FirebaseFirestore.instance
-          .collection('challenges')
-          .doc(challengeId)
-          .get();
-      if (!doc.exists) return;
-      final data = doc.data()!;
+      final raw = await ChallengesService().fetchChallenge(challengeId);
+      if (raw == null) return;
+      final data = normaliseChallenge(raw);
       _navigatorKey.currentState?.push(MaterialPageRoute(
         builder: (_) => ChallengeDetail(
           challengeId: challengeId,
-          title: data['title'] as String? ?? '',
-          instructions: data['instructions'] as String? ?? '',
-          videoUrl: data['videoUrl'] as String? ?? '',
+          title: data['title'] as String,
+          instructions: data['instructions'] as String,
+          videoUrl: data['videoUrl'] as String,
         ),
       ));
     } else if (segments[0] == 'ref') {

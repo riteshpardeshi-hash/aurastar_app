@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/models/aura_tier.dart';
+import '../../core/services/auth_api_service.dart';
 
 class LevelRewardsScreen extends StatelessWidget {
   const LevelRewardsScreen({super.key});
@@ -11,7 +10,6 @@ class LevelRewardsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
@@ -24,16 +22,13 @@ class LevelRewardsScreen extends StatelessWidget {
         centerTitle: true,
         elevation: 0,
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: user == null
-            ? null
-            : FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+      body: FutureBuilder<Map<String, dynamic>?>(
+        future: AuthApiService().getProfile(),
         builder: (context, snap) {
-          int points = 0;
-          if (snap.hasData && snap.data!.exists) {
-            final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-            points = (data['totalRewards'] ?? 0) as int;
-          }
+          final profile = snap.data;
+          final points = (profile?['auraPoints'] as num?)?.toInt() ??
+              (profile?['totalRewards'] as num?)?.toInt() ??
+              0;
           final currentLevel = (points ~/ 1300) + 1;
           final currentTier = auraTierForLevel(currentLevel);
 

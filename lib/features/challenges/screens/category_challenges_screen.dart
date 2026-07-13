@@ -235,6 +235,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   Widget _buildCard(Map<String, dynamic> c) {
     final title        = c['title']        as String? ?? '';
     final videoUrl     = c['videoUrl']     as String? ?? '';
+    final thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
     final instructions = c['instructions'] as String? ?? '';
     final starsCount   = c['starsCount']   as int?    ?? 0;
     final difficulty   = c['difficulty']   as String? ?? '';
@@ -266,7 +267,10 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                    VideoThumbnailWidget(
+                        videoUrl: videoUrl,
+                        thumbnailUrl: thumbnailUrl,
+                        fit: BoxFit.cover),
                     // Gradient
                     Positioned.fill(
                       child: DecoratedBox(

@@ -51,7 +51,7 @@ class CreatorChallengesService {
     }
   }
 
-  /// `key` must be passed back as `videoKey` to [createDraft]/[updateDraft].
+  /// `videoId` must be passed back to [createDraft] to claim this placeholder.
   Future<Map<String, dynamic>> getReferenceVideoUploadUrl() async {
     final res =
         await _client.post('/creator/challenge/reference-video', {}, auth: true);
@@ -65,7 +65,7 @@ class CreatorChallengesService {
     required String title,
     required String category,
     required String difficulty,
-    required String videoKey,
+    required String videoId,
     String? description,
     String? thumbnailKey,
     Map<String, dynamic>? challengeInstructions,
@@ -76,7 +76,7 @@ class CreatorChallengesService {
         'title': title,
         'category': category,
         'difficulty': difficulty,
-        'videoKey': videoKey,
+        'videoId': videoId,
         if (description != null && description.isNotEmpty)
           'description': description,
         if (thumbnailKey != null && thumbnailKey.isNotEmpty)
@@ -400,7 +400,7 @@ Map<String, dynamic> normaliseCreatorChallenge(Map<String, dynamic> c) {
     'categoryId': categoryId,
     'categoryName': categoryName,
     'difficulty': c['difficulty'] as String? ?? '',
-    'videoKey': c['videoKey'] as String? ?? '',
+    'videoUrl': c['videoUrl'] as String? ?? '',
     'submissionStatus': c['submissionStatus'] as String? ?? 'DRAFT',
     'auraScore': (c['auraScore'] as num?)?.toInt(),
     'changeRequests': (c['changeRequests'] as List?)?.cast<String>() ?? [],
