@@ -151,6 +151,28 @@ String _extractRefId(dynamic v) {
   return '';
 }
 
+// Maps a Submission's backend `status`/`verdict` to the four-value
+// vocabulary ('approved'/'rejected'/'ai_error'/'pending') the result UI
+// (AuraSubmittedPopup, PostScoreActionScreen, MyAccountScreen/AllVideosScreen
+// video grids) is built around. Per openapi.yaml's Submission schema,
+// `status` is `pending | scored | failed | flagged` and `verdict` (only set
+// once scored) is `EXCELLENT | GOOD | AVERAGE | WEAK | INVALID` — the API
+// never sends the literal strings 'PASS'/'FAIL' that earlier client code
+// checked for, so that comparison always fell through to the failure
+// branch even for a fully approved, points-awarding submission.
+String submissionStatusFromApi(Map<String, dynamic> s) {
+  switch (s['status'] as String?) {
+    case 'scored':
+      return s['verdict'] == 'INVALID' ? 'rejected' : 'approved';
+    case 'flagged':
+      return 'rejected';
+    case 'failed':
+      return 'ai_error';
+    default:
+      return 'pending';
+  }
+}
+
 // Helper — normalises a backend challenge map into the fields the UI expects.
 Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
   return {

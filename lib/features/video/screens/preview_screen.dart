@@ -7,8 +7,10 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/upload_queue_service.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
+import '../../challenges/widgets/aura_sense_loading_view.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
 import '../../account/screens/settings_screen.dart';
+import '../../dashboard/dashboard.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String videoPath;
@@ -162,7 +164,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
       // Step 3: create submission record + get AI score — claims the
       // presigned Video placeholder by videoId (ADR 036), not by S3 key.
-      if (mounted) setState(() => _progress = 0.95);
+      // This call runs content-safety, face verification, and rubric
+      // scoring synchronously server-side and can legitimately take up to
+      // _scoringTimeout (90s) — swap to the full-screen "Aura Sense"
+      // animation for this wait instead of leaving the progress bar frozen
+      // at 95% with no explanation of what's happening.
+      if (mounted) {
+        setState(() => _uploadState = _UploadState.scoring);
+        _player.pause();
+      }
       final submission =
           await service.createSubmission(widget.challengeId, videoId);
 
@@ -170,11 +180,10 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.done);
-      _player.pause();
 
       final submissionId = submission['_id'] as String? ?? '';
 
-      await showDialog<bool>(
+      final action = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         barrierColor: Colors.black.withValues(alpha: 0.85),
@@ -187,6 +196,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
 
       if (!mounted) return;
+      if (action == 'retry') {
+        // CameraScreen pushed this screen (not a replacement), so it's
+        // still alive underneath — pop back to it for another take of the
+        // same challenge instead of pushing a fresh camera session.
+        Navigator.of(context).pop();
+        return;
+      }
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -249,8 +265,24 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   // ── Build ───────────────────────────────────────────────────────────────────
 
+  void _giveUpOnScoring() {
+    // The scoring request keeps running server-side regardless — _doUpload's
+    // `if (!mounted) return;` guards make it safe to abandon here and let
+    // the result show up next time the user checks their profile.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const Dashboard()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_uploadState == _UploadState.scoring) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: AuraSenseLoadingView(onGiveUp: _giveUpOnScoring),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -340,6 +372,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
         return _idleControls();
       case _UploadState.uploading:
         return _uploadingView();
+      // build() returns the full-screen AuraSenseLoadingView before ever
+      // reaching _buildBottom() for this state.
+      case _UploadState.scoring:
       case _UploadState.failed:
         return _failedView();
       case _UploadState.done:
@@ -609,4 +644,4 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
 }
 
-enum _UploadState { idle, uploading, failed, done }
+enum _UploadState { idle, uploading, scoring, failed, done }

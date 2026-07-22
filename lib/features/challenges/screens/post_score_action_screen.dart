@@ -45,15 +45,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   }
 
   Map<String, dynamic> _normaliseApiSubmission(Map<String, dynamic> s) {
-    final verdict = s['verdict'] as String? ?? '';
-    return {
-      ...s,
-      'status': verdict == 'PASS'
-          ? 'approved'
-          : verdict == 'FAIL'
-              ? 'rejected'
-              : 'ai_error',
-    };
+    return {...s, 'status': submissionStatusFromApi(s)};
   }
 
   Future<void> _fetchSubmission() async {

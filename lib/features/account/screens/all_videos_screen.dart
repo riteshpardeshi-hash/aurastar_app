@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'user_video_detail_screen.dart';
 
@@ -34,19 +35,10 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
   }
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
-    final verdict = s['verdict'] as String?;
-    final rawStatus = s['status'] as String?;
-    final status = verdict != null
-        ? (verdict == 'PASS'
-            ? 'approved'
-            : verdict == 'FAIL'
-                ? 'rejected'
-                : 'ai_error')
-        : rawStatus ?? 'pending';
     return {
       'submissionId': s['_id'] as String? ?? s['id'] as String? ?? '',
       'videoUrl': s['videoUrl'] as String? ?? '',
-      'status': status,
+      'status': submissionStatusFromApi(s),
       'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
       'aiScore': s['aiScore'],
       'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',

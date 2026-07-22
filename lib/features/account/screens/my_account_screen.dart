@@ -392,19 +392,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
-    final verdict = s['verdict'] as String?;
-    final rawStatus = s['status'] as String?;
-    final status = verdict != null
-        ? (verdict == 'PASS'
-            ? 'approved'
-            : verdict == 'FAIL'
-                ? 'rejected'
-                : 'ai_error')
-        : rawStatus ?? 'pending';
     return {
       'submissionId': s['_id'] as String? ?? s['id'] as String? ?? '',
       'videoUrl': s['videoUrl'] as String? ?? '',
-      'status': status,
+      'status': submissionStatusFromApi(s),
       'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
       'aiScore': s['aiScore'],
       'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',

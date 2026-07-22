@@ -107,11 +107,9 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     if (widget.initialResult != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final data = widget.initialResult!;
-        final verdict = data['verdict'] as String? ?? '';
-        final rawStatus = data['status'] as String? ?? 'pending';
-        // If already scored, apply immediately; otherwise poll
-        if (verdict == 'PASS' || verdict == 'FAIL' ||
-            rawStatus == 'approved' || rawStatus == 'rejected' || rawStatus == 'ai_error') {
+        // Backend `status` is pending/scored/failed/flagged (openapi.yaml) —
+        // anything but 'pending' is a terminal result ready to apply now.
+        if (data['status'] != null && data['status'] != 'pending') {
           _applyResult(data);
         } else {
           _startPolling();
@@ -137,10 +135,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       try {
         final data = await ChallengesService().fetchMySubmission(widget.challengeId);
         if (data == null || !mounted || _resultStatus != null) return;
-        final verdict = data['verdict'] as String? ?? '';
-        final rawStatus = data['status'] as String? ?? 'pending';
-        if (verdict == 'PASS' || verdict == 'FAIL' ||
-            rawStatus == 'approved' || rawStatus == 'rejected' || rawStatus == 'ai_error') {
+        if (data['status'] != null && data['status'] != 'pending') {
           _pollTimer?.cancel();
           _applyResult(data);
         }
@@ -150,16 +145,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
   void _applyResult(Map<String, dynamic> data) {
     if (!mounted || _resultStatus != null) return;
-    final verdict = data['verdict'] as String? ?? '';
-    final rawStatus = data['status'] as String? ?? '';
-    final String status;
-    if (verdict == 'PASS' || rawStatus == 'approved') {
-      status = 'approved';
-    } else if (verdict == 'FAIL' || rawStatus == 'rejected') {
-      status = 'rejected';
-    } else {
-      status = 'ai_error';
-    }
+    final status = submissionStatusFromApi(data);
     final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
     final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
     final score = (data['aiScore'] as num?)?.toInt() ?? 0;
@@ -183,7 +169,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       _fetchUserInfoForCard();
     } else if (status == 'ai_error') {
       Future.delayed(const Duration(seconds: 8), () {
-        if (mounted) Navigator.of(context).pop(true);
+        if (mounted) Navigator.of(context).pop('continue');
       });
     }
   }
@@ -333,7 +319,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   Image.asset('assets/images/analysing/Asset 135.png', height: 16),
                   const SizedBox(height: 18),
                   Image.asset('assets/images/analysing/Asset 136.png', height: 60),
-                  const Spacer(flex: 6),
+                  const Spacer(flex: 3),
                   if (!_timedOut) ...[
                     Image.asset('assets/images/analysing/Asset 137.png', height: 22),
                     const SizedBox(height: 10),
@@ -360,7 +346,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                             decoration: TextDecoration.none)),
                     const SizedBox(height: 14),
                     GestureDetector(
-                      onTap: () => Navigator.of(context).pop(false),
+                      onTap: () => Navigator.of(context).pop('continue'),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                         decoration: BoxDecoration(
@@ -495,7 +481,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                                 const SizedBox(width: 20),
                                 _buildAuraEarnedIconButton(
                                   'assets/images/aura earned/Asset 147.png',
-                                  onTap: () => Navigator.of(context).pop(true),
+                                  onTap: () => Navigator.of(context).pop('continue'),
                                 ),
                               ],
                             ),
@@ -570,7 +556,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             const SizedBox(width: 20),
             _buildAuraEarnedIconButton(
               'assets/images/aura earned/Asset 147.png',
-              onTap: () => Navigator.of(context).pop(true),
+              onTap: () => Navigator.of(context).pop('retry'),
             ),
           ],
         ),
@@ -793,7 +779,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
   Widget _buildContinueButton() {
     return GestureDetector(
-      onTap: () => Navigator.of(context).pop(true),
+      onTap: () => Navigator.of(context).pop('continue'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         decoration: BoxDecoration(
@@ -990,7 +976,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                           ),
                           const SizedBox(height: 8),
                           GestureDetector(
-                            onTap: () => Navigator.of(context).pop(true),
+                            onTap: () => Navigator.of(context).pop('continue'),
                             child: Image.asset(
                               'assets/images/video rejected/Asset 131.png',
                               width: double.infinity,
@@ -1050,7 +1036,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         ),
         const SizedBox(height: 20),
         GestureDetector(
-          onTap: () => Navigator.of(context).pop(false),
+          onTap: () => Navigator.of(context).pop('continue'),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
@@ -1086,7 +1072,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
     // Only 'ai_error' reaches this small dialog now.
     return GestureDetector(
-      onTap: () => Navigator.of(context).pop(true),
+      onTap: () => Navigator.of(context).pop('continue'),
       behavior: HitTestBehavior.opaque,
       child: Center(
         child: GestureDetector(
@@ -1129,7 +1115,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                         top: -14,
                         right: -14,
                         child: GestureDetector(
-                          onTap: () => Navigator.of(context).pop(true),
+                          onTap: () => Navigator.of(context).pop('continue'),
                           child: Container(
                             width: 32,
                             height: 32,

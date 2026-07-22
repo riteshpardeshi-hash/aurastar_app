@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,11 @@ class VideoCacheService {
   static const _recentKey = 'recently_viewed_videos';
   static const _maxEntries = 20;
   static const _downloadTimeout = Duration(seconds: 45);
+
+  // Overridable so tests can substitute a package:http/testing.dart
+  // MockClient instead of hitting the network.
+  @visibleForTesting
+  static http.Client httpClient = http.Client();
 
   // Dedupes concurrent ensureCached() calls for the same URL (e.g. a
   // ChallengeDetail prefetch racing CameraScreen's own request) so they
@@ -43,6 +49,18 @@ class VideoCacheService {
   /// download fails.
   static Future<String?> ensureCached(String videoUrl) {
     if (videoUrl.isEmpty) return Future.value(null);
+    // Once a challenge's reference video finishes processing, the backend
+    // serves it as an HLS master playlist (path ending .m3u8) rather than a
+    // single downloadable file — see Challenge.videoUrl in openapi.yaml.
+    // A plain GET on that URL only fetches the small text manifest, not
+    // playable video bytes, so caching it as a local "video" file corrupts
+    // the cache permanently (it downloads once, "succeeds", and every later
+    // call reuses the same unplayable file — see _download's exists check).
+    // Skip caching and let callers stream it directly; platform video
+    // players (AVPlayer/ExoPlayer) speak HLS natively over the network.
+    if (Uri.parse(videoUrl).path.toLowerCase().endsWith('.m3u8')) {
+      return Future.value(null);
+    }
     return _inFlight.putIfAbsent(videoUrl, () => _download(videoUrl));
   }
 
@@ -50,7 +68,7 @@ class VideoCacheService {
     try {
       final file = await _fileFor(videoUrl);
       if (await file.exists() && await file.length() > 0) return file.path;
-      final res = await http
+      final res = await httpClient
           .get(Uri.parse(videoUrl))
           .timeout(_downloadTimeout);
       if (res.statusCode != 200) return null;

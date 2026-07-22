@@ -11,8 +11,9 @@ const _fallbackMeta = (icon: Icons.category_rounded, color: Color(0xFF7B2CBF));
 // Maps the backend's actual category names to their designed icon in
 // assets/images/category icons/. Categories not listed here (e.g. a new one
 // an admin adds before an icon is designed for it) fall back to
-// _fallbackMeta's generic icon instead of breaking.
-const _categoryIconAsset = <String, String>{
+// _fallbackMeta's generic icon instead of breaking. Public — also used by
+// AllGeneralChallengesScreen's category tiles for the same icon set.
+const categoryIconAsset = <String, String>{
   'Beatboxing': 'assets/images/category icons/beatbox.svg',
   'Calisthenics': 'assets/images/category icons/Calesthenic.svg',
   'Cosplay Showdown': 'assets/images/category icons/Cosplay.svg',
@@ -99,7 +100,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 itemBuilder: (context, i) {
                   final name = _categories[i];
                   final meta = categoryMeta[name] ?? _fallbackMeta;
-                  final iconAsset = _categoryIconAsset[name];
+                  final iconAsset = categoryIconAsset[name];
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,

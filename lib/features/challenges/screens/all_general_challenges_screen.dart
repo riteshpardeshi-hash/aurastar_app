@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
@@ -305,40 +306,60 @@ class _AllGeneralChallengesScreenState
                     ],
                   ),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _navItem(
-                        icon: Icons.emoji_events_rounded,
-                        label: 'Challenges',
-                        active: true,
-                        onTap: () {},
-                      ),
-                      _navItem(
-                        icon: Icons.storefront_rounded,
-                        label: 'Brand Challenges',
-                        // Brands section isn't built yet; go back to Dashboard for now.
-                        onTap: () =>
-                            Navigator.popUntil(context, (route) => route.isFirst),
-                      ),
-                      const SizedBox(width: 58),
-                      _navItem(
-                        icon: Icons.leaderboard_rounded,
-                        label: 'Leaderboard',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const LeaderboardScreen()),
+                      // Each half is Expanded + spaceEvenly so the center
+                      // gap always lands at the row's true midpoint,
+                      // matching the FAB's independent Stack-centered
+                      // position — regardless of "Brand Challenges" being a
+                      // much wider label than "Leaderboard"/"Profile" (with
+                      // spaceAround across all 5 children, that width
+                      // difference used to drag the gap off-center).
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _navItem(
+                              icon: Icons.emoji_events_rounded,
+                              label: 'Challenges',
+                              active: true,
+                              onTap: () {},
+                            ),
+                            _navItem(
+                              icon: Icons.storefront_rounded,
+                              label: 'Brand Challenges',
+                              // Brands section isn't built yet; go back to Dashboard for now.
+                              onTap: () => Navigator.popUntil(
+                                  context, (route) => route.isFirst),
+                            ),
+                          ],
                         ),
                       ),
-                      _navItem(
-                        icon: Icons.person_rounded,
-                        label: 'Profile',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const MyAccountScreen()),
+                      const SizedBox(width: 58),
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _navItem(
+                              icon: Icons.leaderboard_rounded,
+                              label: 'Leaderboard',
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const LeaderboardScreen()),
+                              ),
+                            ),
+                            _navItem(
+                              icon: Icons.person_rounded,
+                              label: 'Profile',
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const MyAccountScreen()),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -469,6 +490,7 @@ class _CategoryTileState extends State<_CategoryTile> {
                     ),
                   ),
                 ),
+                Center(child: _CategoryIcon(category: widget.category)),
                 Positioned(
                   bottom: 7,
                   left: 0,
@@ -629,15 +651,34 @@ class _ChallengeCard extends StatelessWidget {
 }
 
 // ── Dark placeholder for missing thumbnails ────────────────────────────────────
+// Plain — _CategoryIcon is layered on top of every tile regardless of
+// whether a thumbnail loaded, so this no longer needs its own icon.
 class _DarkPlaceholder extends StatelessWidget {
   const _DarkPlaceholder();
 
   @override
-  Widget build(BuildContext context) => Container(
-        color: const Color(0xFF0F0F1A),
-        child: const Center(
-          child: Icon(Icons.play_circle_outline_rounded,
-              color: Colors.white12, size: 36),
-        ),
-      );
+  Widget build(BuildContext context) =>
+      Container(color: const Color(0xFF0F0F1A));
+}
+
+// ── Category icon overlay ───────────────────────────────────────────────────
+// Same icon set as AllCategoriesScreen (assets/images/category icons/*.svg).
+class _CategoryIcon extends StatelessWidget {
+  final String category;
+  const _CategoryIcon({required this.category});
+
+  @override
+  Widget build(BuildContext context) {
+    final iconAsset = categoryIconAsset[category];
+    final meta = categoryMeta[category];
+    return iconAsset != null
+        ? SvgPicture.asset(
+            iconAsset,
+            width: 50,
+            height: 50,
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          )
+        : Icon(meta?.icon ?? Icons.category_rounded,
+            color: Colors.white70, size: 50);
+  }
 }

@@ -1934,6 +1934,42 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
     );
   }
 
+  // The "X" looks like a routine dismiss-this-notification action, but it
+  // was wired to UploadQueueService.clear() — permanently discarding the
+  // only reference to the recorded video (and any Aura points it would have
+  // earned) with no way back. Confirm first so closing the banner can't be
+  // mistaken for a harmless "hide this" tap.
+  Future<void> _confirmDiscard() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF15122A),
+        title: const Text('Discard this video?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'This video hasn\'t been uploaded yet. Discarding it means it '
+          'won\'t be submitted and you won\'t earn any Aura points for it.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it',
+                style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Discard',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await UploadQueueService.clear();
+    if (mounted) setState(() => _dismissed = true);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_checked || _pending == null || _dismissed) return const SizedBox.shrink();
@@ -1989,10 +2025,7 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
           ),
           IconButton(
             icon: const Icon(Icons.close, color: Colors.white38, size: 18),
-            onPressed: () async {
-              await UploadQueueService.clear();
-              setState(() => _dismissed = true);
-            },
+            onPressed: _confirmDiscard,
           ),
         ],
       ),
