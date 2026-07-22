@@ -7,6 +7,7 @@ import '../../../shared/widgets/aura_action_sheet.dart';
 import '../../../core/services/challenges_service.dart';
 import 'challenge_detail.dart';
 import 'category_challenges_screen.dart';
+import 'all_categories_screen.dart';
 
 class AllGeneralChallengesScreen extends StatefulWidget {
   const AllGeneralChallengesScreen({super.key});
@@ -163,7 +164,12 @@ class _AllGeneralChallengesScreenState
                       fontWeight: FontWeight.bold,
                       fontFamily: 'ClashDisplay')),
               GestureDetector(
-                onTap: () {},
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AllCategoriesScreen(categories: _categories),
+                  ),
+                ),
                 child: const Text('See All >',
                     style: TextStyle(
                         color: Color(0xFF9B4DCA),

@@ -128,6 +128,7 @@ class AuthApiService {
     required String gender,
     String? displayName,
     String? username,
+    DateTime? dateOfBirth,
   }) async {
     final res = await _client.patch('/profile', {
       'gender': gender,
@@ -136,6 +137,12 @@ class AuthApiService {
       // by backend team) — Dart-side param name kept as `username` since that's
       // the UI concept everywhere else in the client.
       if (username != null) 'profileName': username,
+      // Backend expects ISO 8601 `YYYY-MM-DD`.
+      if (dateOfBirth != null)
+        'dateOfBirth':
+            '${dateOfBirth.year.toString().padLeft(4, '0')}-'
+            '${dateOfBirth.month.toString().padLeft(2, '0')}-'
+            '${dateOfBirth.day.toString().padLeft(2, '0')}',
     });
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to update profile';

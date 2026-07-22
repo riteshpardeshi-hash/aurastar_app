@@ -217,7 +217,13 @@ class _TrendingScreenState extends State<TrendingScreen>
     final videoUrl     = item.data['videoUrl']     as String? ?? '';
     final thumbnailUrl = item.data['thumbnailUrl'] as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
-    final category     = item.data['category']     as String? ?? '';
+    // Despite the API docs describing category as a populated object with a
+    // name, this endpoint's response actually returns a raw unresolved
+    // ObjectId string — showing it as-is renders a meaningless 24-char hex
+    // string as the "category" label. Hide it rather than resolve it, since
+    // there's no id→name lookup wired into this screen.
+    final rawCategory  = item.data['category']     as String? ?? '';
+    final category     = _looksLikeObjectId(rawCategory) ? '' : rawCategory;
     final isTop3       = index < 3;
 
     return GestureDetector(
@@ -338,9 +344,13 @@ class _TrendingScreenState extends State<TrendingScreen>
                     Row(
                       children: [
                         if (category.isNotEmpty) ...[
-                          Text(category,
-                              style: const TextStyle(
-                                  color: Colors.white38, fontSize: 11)),
+                          Flexible(
+                            child: Text(category,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 11)),
+                          ),
                           const Text(' · ',
                               style: TextStyle(
                                   color: Colors.white24, fontSize: 11)),
@@ -559,3 +569,7 @@ class _StatRow extends StatelessWidget {
     );
   }
 }
+
+// Detects an unresolved MongoDB ObjectId (24 hex chars) so it can be hidden
+// instead of shown as a meaningless "category" label.
+bool _looksLikeObjectId(String s) => RegExp(r'^[0-9a-f]{24}$').hasMatch(s);

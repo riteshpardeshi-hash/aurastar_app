@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/creator_account_service.dart';
-import '../../../core/services/creator_challenges_service.dart' show pickField, pickInt, pickString;
+import '../../../core/services/creator_challenges_service.dart' show pickInt, pickString;
+import '../../../core/services/creator_dashboard_service.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../challenges/screens/all_general_challenges_screen.dart';
+import 'creator_challenge_status_screen.dart';
 import 'creator_challenges_screen.dart';
 import 'creator_follow_list_screen.dart';
 import 'creator_insights_screen.dart';
@@ -25,7 +27,8 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
   bool _loading = true;
   Map<String, dynamic>? _page;
   Map<String, dynamic> _summary = {};
-  Map<String, dynamic> _analytics = {};
+  List<Map<String, dynamic>> _cards = [];
+  List<Map<String, dynamic>> _pendingActions = [];
   int _followingCount = 0;
   int _auraBalance = 0;
   List<Map<String, dynamic>> _videos = [];
@@ -41,16 +44,19 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     final results = await Future.wait([
       CreatorPageService().fetchOwnPage(),
       CreatorPageService().fetchDashboardSummary(),
-      CreatorPageService().fetchAnalytics(),
+      CreatorDashboardService().fetchOverview(),
       CreatorAccountService().fetchFollowingCount(),
       AuthApiService().fetchAuraBalance(),
       AuthApiService().fetchMyVideos(limit: 20),
     ]);
     if (!mounted) return;
+    final overview = results[2] as Map<String, dynamic>;
     setState(() {
       _page = results[0] as Map<String, dynamic>?;
       _summary = results[1] as Map<String, dynamic>;
-      _analytics = results[2] as Map<String, dynamic>;
+      _cards = (overview['cards'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _pendingActions =
+          (overview['pendingActions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _followingCount = results[3] as int;
       _auraBalance = results[4] as int;
       _videos = (results[5] as List)
@@ -147,12 +153,14 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
         if (!canUploadChallenge)
           SliverToBoxAdapter(
               child: _buildStatusBanner(profileComplete, creatorPageLive)),
+        if (_pendingActions.isNotEmpty)
+          SliverToBoxAdapter(child: _buildPendingActions(context)),
         SliverToBoxAdapter(
             child: _buildAuraProgress(
                 level, tier, nextTier, xpInLevel, progressFraction, _auraBalance)),
         SliverToBoxAdapter(
             child: _buildStats(_auraBalance, totalSubs, approvedSubs, approvalRate)),
-        if (_analytics.isNotEmpty) SliverToBoxAdapter(child: _buildAnalytics()),
+        if (_cards.isNotEmpty) SliverToBoxAdapter(child: _buildCards()),
         SliverToBoxAdapter(child: _buildQuickActions(context)),
         SliverToBoxAdapter(child: _buildRecentSubmissions(context, recentVideos)),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -447,11 +455,19 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     );
   }
 
-  Widget _buildAnalytics() {
-    final views = pickInt(_analytics, ['totalViews', 'views']);
-    final participants = pickInt(_analytics, ['totalParticipants', 'participants']);
-    final auraEarned = pickField(_analytics, ['totalAuraEarned', 'auraEarned', 'aura']);
+  static const _cardIcons = {
+    'total_participants': Icons.groups_rounded,
+    'total_views': Icons.visibility_rounded,
+    'total_likes': Icons.favorite_rounded,
+    'total_shares': Icons.share_rounded,
+    'aura_earned': Icons.auto_awesome,
+  };
 
+  /// Cards are a dynamic, backend-computed list (`key`/`title`/`value`) so
+  /// the backend can add new ones without a client change — render off
+  /// `title`/`value` generically, only using `key` to pick an icon (with a
+  /// sane fallback for keys not in [_cardIcons]).
+  Widget _buildCards() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
       child: Column(
@@ -464,18 +480,90 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                   fontWeight: FontWeight.bold,
                   fontFamily: 'ClashDisplay')),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(child: _statCard('Views', '$views', Icons.visibility_rounded, Colors.blue)),
-              const SizedBox(width: 10),
-              Expanded(child: _statCard('Participants', '$participants', Icons.groups_rounded, Colors.purple)),
-              if (auraEarned != null) ...[
-                const SizedBox(width: 10),
-                Expanded(child: _statCard('Aura Earned', '$auraEarned', Icons.auto_awesome, const Color(0xFFFFD700))),
-              ],
-            ],
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: _cards.map((card) {
+              final key = card['key'] as String? ?? '';
+              final title = card['title'] as String? ?? '';
+              final value = card['value'];
+              return SizedBox(
+                width: (MediaQuery.of(context).size.width - 16 * 2 - 10) / 2,
+                child: _statCard(
+                  title,
+                  value is num ? _formatCardValue(value) : '$value',
+                  _cardIcons[key] ?? Icons.insights_rounded,
+                  const Color(0xFF7B2CBF),
+                ),
+              );
+            }).toList(),
           ),
         ],
+      ),
+    );
+  }
+
+  String _formatCardValue(num v) => v == v.roundToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
+
+  Widget _buildPendingActions(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7B2CBF).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF7B2CBF).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Needs Your Attention (${_pendingActions.length})',
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          ..._pendingActions.map((a) => _pendingActionRow(context, a)),
+        ],
+      ),
+    );
+  }
+
+  Widget _pendingActionRow(BuildContext context, Map<String, dynamic> action) {
+    final type = action['type'] as String? ?? '';
+    final message = action['message'] as String? ?? '';
+    final challengeId = action['challengeId'] as String?;
+    final icon = switch (type) {
+      'challenge_pending_review' => Icons.hourglass_top_rounded,
+      'challenge_changes_requested' => Icons.rate_review_outlined,
+      'challenge_rejected' => Icons.cancel_outlined,
+      'gate_unlocked_unread' => Icons.lock_open_rounded,
+      'profile_not_verified' => Icons.verified_outlined,
+      'profile_incomplete' => Icons.person_outline_rounded,
+      _ => Icons.info_outline_rounded,
+    };
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: GestureDetector(
+        onTap: challengeId == null
+            ? null
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => CreatorChallengeStatusScreen(challengeId: challengeId)))
+                .then((_) => _load()),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: const Color(0xFF9B4DFF), size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(message,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4)),
+            ),
+            if (challengeId != null)
+              const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
+          ],
+        ),
       ),
     );
   }

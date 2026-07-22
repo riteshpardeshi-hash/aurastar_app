@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
@@ -35,8 +36,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _sendOtp() async {
     final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty || phone.length < 7) {
-      _snack('Enter a valid phone number');
+    if (phone.length != 10) {
+      _snack('Enter a valid 10-digit phone number');
       return;
     }
     setState(() => _isLoading = true);
@@ -210,6 +211,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     _SignInField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
                     ),
 
                     const SizedBox(height: 20),
@@ -346,11 +351,13 @@ class _SignInField extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType keyboardType;
   final bool focused;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _SignInField({
     required this.controller,
     this.keyboardType = TextInputType.text,
     this.focused = false,
+    this.inputFormatters,
   });
 
   @override
@@ -379,6 +386,7 @@ class _SignInField extends StatelessWidget {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: const TextStyle(color: Colors.white, fontSize: 16),
         cursorColor: accent,
         decoration: const InputDecoration(

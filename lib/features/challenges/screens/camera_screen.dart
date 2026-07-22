@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/globals.dart';
+import '../../../core/services/video_cache_service.dart';
 import '../../video/screens/preview_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -30,11 +33,19 @@ class _CameraScreenState extends State<CameraScreen>
   CameraController? _cam;
   int _camIndex = 0;
   bool _cameraError = false;
+  bool _permissionDenied = false;
+  bool _permissionPermanentlyDenied = false;
+  // Bumped on every _initCamera call so a stale (superseded) call can tell
+  // it's no longer current and avoid clobbering _cam / calling setState with
+  // outdated results. Needed because the OS permission dialog pauses/resumes
+  // the app lifecycle while a camera init can still be in flight.
+  int _initGen = 0;
 
   // Ghost overlay
   VideoPlayerController? _ghostCtrl;
   bool _ghostOn = true;
   bool _ghostReady = false;
+  bool _ghostFailed = false;
 
   // Recording
   bool _recording = false;
@@ -57,6 +68,10 @@ class _CameraScreenState extends State<CameraScreen>
       _timer?.cancel();
       _timer = null;
       _ghostCtrl?.pause();
+      // Invalidate any in-flight _initCamera call (e.g. one currently
+      // awaiting the OS permission dialog, which is itself what triggers
+      // this pause) so it won't touch _cam once it eventually settles.
+      _initGen++;
       final cam = _cam;
       _cam = null;
       if (mounted) setState(() => _recording = false);
@@ -71,30 +86,83 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _initCamera(int index) async {
     if (cameras.isEmpty) return;
-    _cam?.dispose();
-    _cam = CameraController(cameras[index], ResolutionPreset.high,
+    final gen = ++_initGen;
+
+    // Resolve camera/mic permission ourselves *before* constructing a
+    // CameraController. Letting CameraController.initialize() trigger the
+    // native prompt itself is what used to race with the app-lifecycle
+    // pause/resume that same prompt causes (especially on Android), leading
+    // to a live controller being disposed mid-initialize and a stale
+    // callback stomping state afterwards → crash. Resolving permission first
+    // keeps controller construction and the OS dialog from overlapping.
+    final camStatus = await Permission.camera.request();
+    final micStatus = await Permission.microphone.request();
+    if (gen != _initGen) return; // superseded by a newer call meanwhile
+
+    if (!camStatus.isGranted || !micStatus.isGranted) {
+      _cam?.dispose();
+      _cam = null;
+      if (mounted) {
+        setState(() {
+          _cameraError = true;
+          _permissionDenied = true;
+          _permissionPermanentlyDenied =
+              camStatus.isPermanentlyDenied || micStatus.isPermanentlyDenied;
+        });
+      }
+      return;
+    }
+
+    final controller = CameraController(cameras[index], ResolutionPreset.high,
         enableAudio: true);
+    _cam?.dispose();
+    _cam = controller;
     try {
-      await _cam!.initialize();
+      await controller.initialize();
     } catch (_) {
-      if (mounted) setState(() { _cam = null; _cameraError = true; });
+      if (gen != _initGen) return; // stale — a newer call already took over
+      if (mounted) {
+        setState(() {
+          _cam = null;
+          _cameraError = true;
+          _permissionDenied = false;
+        });
+      }
+      return;
+    }
+    if (gen != _initGen) {
+      controller.dispose(); // superseded — don't leak it
       return;
     }
     if (!mounted) return;
-    setState(() { _camIndex = index; _cameraError = false; });
+    setState(() {
+      _camIndex = index;
+      _cameraError = false;
+      _permissionDenied = false;
+    });
   }
 
   Future<void> _initGhost() async {
-    _ghostCtrl =
-        VideoPlayerController.networkUrl(Uri.parse(widget.referenceVideoUrl));
+    // Prefer a locally cached copy (usually already warmed by
+    // ChallengeDetail while the user was still reading the challenge) so
+    // playback starts instantly instead of waiting on a network stream.
+    final cachedPath = await VideoCacheService.ensureCached(widget.referenceVideoUrl);
+    if (!mounted) return;
+    _ghostCtrl = cachedPath != null
+        ? VideoPlayerController.file(File(cachedPath))
+        : VideoPlayerController.networkUrl(Uri.parse(widget.referenceVideoUrl));
     try {
       await _ghostCtrl!.initialize();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('CameraScreen: ghost reference video failed to load: $e');
+      if (mounted) setState(() => _ghostFailed = true);
       return;
     }
     if (!mounted) return;
     _ghostCtrl!.setLooping(true);
-    _ghostCtrl!.setVolume(0);
+    // Muted: this is a visual overlay guide only — its audio must not bleed
+    // into the mic recording of the user's own take.
+    _ghostCtrl!.setVolume(0.0);
     setState(() => _ghostReady = true);
   }
 
@@ -109,7 +177,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startRecording() async {
     await _cam!.startVideoRecording();
-    _ghostCtrl?.play();
+    if (_ghostReady) _ghostCtrl?.play();
     _elapsed = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
@@ -190,22 +258,60 @@ class _CameraScreenState extends State<CameraScreen>
         child: CircularProgressIndicator(color: Color(0xFF7B2CBF)),
       );
 
-  Widget _buildCameraError() => Center(
+  Widget _buildCameraError() {
+    final title =
+        _permissionDenied ? 'Camera access needed' : 'Camera unavailable';
+    final message = _permissionDenied
+        ? (_permissionPermanentlyDenied
+            ? 'Camera and microphone access are turned off for Aura Arena. Go to Settings to enable them and record challenge videos.'
+            : 'Aura Arena needs camera and microphone access to record challenge videos.')
+        : 'Something went wrong starting the camera.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 52),
+            Icon(
+                _permissionDenied
+                    ? Icons.no_photography_rounded
+                    : Icons.videocam_off_rounded,
+                color: Colors.white38,
+                size: 52),
             const SizedBox(height: 12),
-            const Text('Camera unavailable',
-                style: TextStyle(color: Colors.white54, fontSize: 15)),
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () { setState(() => _cameraError = false); _initCamera(_camIndex); },
-              child: const Text('Retry', style: TextStyle(color: Color(0xFF7B2CBF))),
+            Text(title,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
+            const SizedBox(height: 20),
+            if (_permissionPermanentlyDenied)
+              ElevatedButton(
+                onPressed: openAppSettings,
+                style: ElevatedButton.styleFrom(backgroundColor: _purple),
+                child: const Text('Open Settings'),
+              )
+            else
+              TextButton(
+                onPressed: () {
+                  setState(() => _cameraError = false);
+                  _initCamera(_camIndex);
+                },
+                child: Text(_permissionDenied ? 'Allow access' : 'Retry',
+                    style: const TextStyle(color: Color(0xFF7B2CBF))),
+              ),
           ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _buildCamera() {
     return Stack(
@@ -215,7 +321,10 @@ class _CameraScreenState extends State<CameraScreen>
         CameraPreview(_cam!),
 
         // ── Ghost overlay — small PiP in bottom-right corner ───────────────
-        if (_ghostReady && _ghostOn && _ghostCtrl != null)
+        // Always reserve the slot (not just once the video is ready) so the
+        // reference clip never looks "missing" while it loads — a spinner
+        // fills the box until playback is ready.
+        if (widget.referenceVideoUrl.isNotEmpty && _ghostOn && !_ghostFailed)
           Positioned(
             right: 12,
             bottom: 148,
@@ -225,17 +334,27 @@ class _CameraScreenState extends State<CameraScreen>
                 width: 100,
                 height: 140,
                 decoration: BoxDecoration(
+                  color: Colors.black45,
                   border: Border.all(color: Colors.white30, width: 1.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _ghostCtrl!.value.size.width,
-                    height: _ghostCtrl!.value.size.height,
-                    child: VideoPlayer(_ghostCtrl!),
-                  ),
-                ),
+                child: _ghostReady && _ghostCtrl != null
+                    ? FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: _ghostCtrl!.value.size.width,
+                          height: _ghostCtrl!.value.size.height,
+                          child: VideoPlayer(_ghostCtrl!),
+                        ),
+                      )
+                    : const Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: _purple, strokeWidth: 2),
+                        ),
+                      ),
               ),
             ),
           ),
@@ -343,35 +462,47 @@ class _CameraScreenState extends State<CameraScreen>
                 // Ghost toggle
                 if (widget.referenceVideoUrl.isNotEmpty && !_recording)
                   GestureDetector(
-                    onTap: () => setState(() => _ghostOn = !_ghostOn),
+                    onTap: _ghostFailed
+                        ? null
+                        : () => setState(() => _ghostOn = !_ghostOn),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 20),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: _ghostOn
-                            ? _purple.withValues(alpha: 0.30)
-                            : Colors.black45,
+                        color: _ghostFailed
+                            ? Colors.black45
+                            : _ghostOn
+                                ? _purple.withValues(alpha: 0.30)
+                                : Colors.black45,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: _ghostOn ? _purple : Colors.white30,
+                          color: _ghostFailed
+                              ? Colors.white24
+                              : _ghostOn
+                                  ? _purple
+                                  : Colors.white30,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _ghostOn
-                                ? Icons.visibility_rounded
-                                : Icons.visibility_off_rounded,
-                            color: Colors.white,
+                            _ghostFailed
+                                ? Icons.visibility_off_rounded
+                                : _ghostOn
+                                    ? Icons.visibility_rounded
+                                    : Icons.visibility_off_rounded,
+                            color: _ghostFailed ? Colors.white38 : Colors.white,
                             size: 16,
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Ghost ${_ghostOn ? 'ON' : 'OFF'}',
-                            style: const TextStyle(
-                              color: Colors.white,
+                            _ghostFailed
+                                ? 'Ghost unavailable'
+                                : 'Ghost ${_ghostOn ? 'ON' : 'OFF'}',
+                            style: TextStyle(
+                              color: _ghostFailed ? Colors.white38 : Colors.white,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),

@@ -42,6 +42,12 @@ post_install do |installer|
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+
+      # permission_handler: opt in to only the permission types this app
+      # actually uses (camera_screen.dart's camera/mic gating).
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_CAMERA=1'
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_MICROPHONE=1'
     end
 
     target.build_phases.each do |phase|

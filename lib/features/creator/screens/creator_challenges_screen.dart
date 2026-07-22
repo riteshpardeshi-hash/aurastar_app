@@ -16,19 +16,22 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
   static const _accent = Color(0xFF7B2CBF);
 
   static const _allStatuses = [
-    'DRAFT', 'PENDING_REVIEW', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'LIVE', 'ARCHIVED',
+    'DRAFT', 'PENDING_REVIEW', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'LIVE', 'PAUSED', 'ARCHIVED',
   ];
 
   final _service = CreatorChallengesService();
   bool _loading = true;
   List<Map<String, dynamic>> _challenges = [];
   List<String> _statusOptions = _allStatuses;
+  Map<String, int> _statusCounts = {};
+  int _totalCount = 0;
   String? _statusFilter;
 
   @override
   void initState() {
     super.initState();
     _loadFilters();
+    _loadStatusSummary();
     _load();
   }
 
@@ -37,6 +40,16 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
     final statuses = pickField(filters, ['statuses', 'status', 'submissionStatuses']);
     if (!mounted || statuses is! List || statuses.isEmpty) return;
     setState(() => _statusOptions = statuses.map((e) => e.toString()).toList());
+  }
+
+  Future<void> _loadStatusSummary() async {
+    final summary = await _service.fetchStatusSummary();
+    if (!mounted) return;
+    final byStatus = summary['byStatus'] as Map<String, dynamic>? ?? {};
+    setState(() {
+      _statusCounts = byStatus.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
+      _totalCount = (summary['total'] as num?)?.toInt() ?? 0;
+    });
   }
 
   Future<void> _load() async {
@@ -103,6 +116,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
       await _service.archive(id);
       _snack('Challenge archived');
       _load();
+      _loadStatusSummary();
     } catch (e) {
       _snack(e.toString());
     }
@@ -113,6 +127,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
       await _service.duplicate(id);
       _snack('Duplicated as a new draft');
       _load();
+      _loadStatusSummary();
     } catch (e) {
       _snack(e.toString());
     }
@@ -143,17 +158,21 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _statusChip('All', _statusFilter == null, () {
+                  _statusChip(_totalCount > 0 ? 'All ($_totalCount)' : 'All', _statusFilter == null, () {
                     setState(() => _statusFilter = null);
                     _load();
                   }),
-                  ..._statusOptions.map((s) => Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: _statusChip(_statusLabel(s), _statusFilter == s, () {
-                          setState(() => _statusFilter = s);
-                          _load();
-                        }),
-                      )),
+                  ..._statusOptions.map((s) {
+                    final count = _statusCounts[s];
+                    final label = count != null ? '${_statusLabel(s)} ($count)' : _statusLabel(s);
+                    return Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: _statusChip(label, _statusFilter == s, () {
+                        setState(() => _statusFilter = s);
+                        _load();
+                      }),
+                    );
+                  }),
                 ],
               ),
             ),
@@ -249,6 +268,7 @@ class _ChallengeCard extends StatelessWidget {
     'CHANGES_REQUESTED': (Color(0xFFF59E0B), Icons.rate_review_outlined, 'Changes Requested'),
     'ARCHIVED': (Color(0xFF6B7280), Icons.archive_outlined, 'Archived'),
     'LIVE': (Color(0xFF7B2CBF), Icons.bolt_rounded, 'Live'),
+    'PAUSED': (Color(0xFF64748B), Icons.pause_circle_outline_rounded, 'Paused'),
   };
 
   @override

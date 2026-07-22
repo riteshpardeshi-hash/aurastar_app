@@ -36,6 +36,13 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   bool _saving = false;
   String? _errorText;
 
+  // Bumped on every _loadCities call so a slow/out-of-order response from a
+  // country the user has since changed away from can't clobber _cities with
+  // a list that no longer matches _selectedCountry (which would let a city
+  // from the wrong country get selected and saved, and the backend rejects
+  // cityId/countryId mismatches).
+  int _citiesRequestId = 0;
+
   @override
   void initState() {
     super.initState();
@@ -62,8 +69,16 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   Future<void> _prefillFromProfile() async {
     final profile = await AuthApiService().getProfile();
     if (!mounted || profile == null) return;
-    final country = profile['country'] as Map<String, dynamic>?;
-    final city = profile['city'] as Map<String, dynamic>?;
+    // /profile nests these as {_id, name, ...} — normalise to 'id' since
+    // that's the key _continue()/the pickers expect everywhere else.
+    final rawCountry = profile['country'] as Map<String, dynamic>?;
+    final rawCity = profile['city'] as Map<String, dynamic>?;
+    final country = rawCountry == null
+        ? null
+        : {...rawCountry, 'id': rawCountry['id'] ?? rawCountry['_id']};
+    final city = rawCity == null
+        ? null
+        : {...rawCity, 'id': rawCity['id'] ?? rawCity['_id']};
     if (country != null) {
       setState(() => _selectedCountry = country);
       await _loadCities(country['id'] as String,
@@ -74,6 +89,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   }
 
   Future<void> _loadCities(String countryId, {String? countryCode}) async {
+    final requestId = ++_citiesRequestId;
     setState(() {
       _loadingCities = true;
       _cities = [];
@@ -82,13 +98,13 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     try {
       final cities =
           await _refService.fetchCities(countryId, countryCode: countryCode);
-      if (!mounted) return;
+      if (!mounted || requestId != _citiesRequestId) return;
       setState(() {
         _cities = cities;
         _loadingCities = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _citiesRequestId) return;
       setState(() => _loadingCities = false);
     }
   }
@@ -110,6 +126,16 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     try {
       await _refService.saveCountry(_selectedCountry!['id'] as String);
       await _refService.saveCity(_selectedCity!['id'] as String);
+      // PATCH /profile/country resets city to null server-side as a side
+      // effect (confirmed even when the country value is unchanged), so a
+      // success response from both calls doesn't guarantee city actually
+      // stuck — re-read the profile and confirm before trusting it.
+      final profile = await AuthApiService().getProfile();
+      final savedCityId = (profile?['city']
+              as Map<String, dynamic>?)?['_id'] as String?;
+      if (savedCityId != _selectedCity!['id']) {
+        throw Exception('City did not save — please try again.');
+      }
     } catch (e) {
       // Country/city must both actually be saved server-side — the backend
       // marks a profile complete only once country + city + interests are
@@ -117,9 +143,10 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
       // with an incomplete profile and no way to tell why uploads failed
       // later. Surface it and let them retry instead.
       if (!mounted) return;
+      final reason = e.toString().replaceFirst('Exception: ', '');
       setState(() {
         _saving = false;
-        _errorText = 'Failed to save your location. Please try again.';
+        _errorText = 'Failed to save your location: $reason';
       });
       return;
     }

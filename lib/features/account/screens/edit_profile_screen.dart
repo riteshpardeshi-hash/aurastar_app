@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/utils/error_message.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -23,6 +25,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   static const _accent = Color(0xFF7B2CBF);
   static const _bg     = Color(0xFF080810);
+  static final _nameRegExp = RegExp(r'^[a-zA-Z ]+$');
+  static final _nameCharRegExp = RegExp(r'[a-zA-Z ]');
 
   @override
   void initState() {
@@ -115,6 +119,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
       return;
     }
+    if (!_nameRegExp.hasMatch(_nameCtrl.text.trim())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name can only contain letters.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
 
     try {
@@ -131,11 +141,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           contentType: 'image/jpeg',
         );
         await service.updateAvatar(publicUrl);
+        // The backend may reuse the same S3 key per user (so old orphaned
+        // files don't pile up), meaning the URL string never changes between
+        // uploads. Flutter's ImageCache keys purely by URL, so without
+        // evicting + cache-busting here, every NetworkImage/Image.network
+        // showing this avatar (this screen, My Account, dashboard, ...)
+        // keeps rendering the old cached bytes even after a correct save.
+        PaintingBinding.instance.imageCache.evict(NetworkImage(publicUrl));
+        _currentPhotoUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
       }
 
       // Update profile fields
       await service.updateProfile(
-        gender:      _currentGender.isNotEmpty ? _currentGender : 'other',
+        gender:      _currentGender.isNotEmpty ? _currentGender : 'prefer not to say',
         displayName: _nameCtrl.text.trim(),
         username:    _usernameCtrl.text.trim(),
       );
@@ -155,7 +173,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(humanizeError(e))),
       );
     }
   }
@@ -233,7 +251,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                   ? Image.file(_pickedImage!, fit: BoxFit.cover)
                                   : _currentPhotoUrl.isNotEmpty
                                       ? Image.network(_currentPhotoUrl,
-                                          fit: BoxFit.cover)
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(Icons.person_rounded,
+                                                  color: Colors.white,
+                                                  size: 44))
                                       : const Icon(Icons.person_rounded,
                                           color: Colors.white, size: 44),
                             ),
@@ -273,6 +295,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     hint: 'Your full name',
                     icon: Icons.badge_outlined,
                     capitalization: TextCapitalization.words,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(_nameCharRegExp),
+                    ],
                   ),
                   const SizedBox(height: 20),
 
@@ -307,6 +332,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     String? prefix,
     int maxLines = 1,
     TextCapitalization capitalization = TextCapitalization.none,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -318,6 +344,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         controller: controller,
         maxLines: maxLines,
         textCapitalization: capitalization,
+        inputFormatters: inputFormatters,
         style: const TextStyle(color: Colors.white, fontSize: 15),
         cursorColor: _accent,
         decoration: InputDecoration(

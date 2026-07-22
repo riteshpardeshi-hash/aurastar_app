@@ -68,12 +68,24 @@ class ChallengesService {
     return res['data'] as Map<String, dynamic>;
   }
 
+  // POST /challenges/{id}/submissions runs the full scoring pipeline
+  // synchronously server-side — content-safety moderation, face
+  // verification, and rubric-driven AI scoring are each their own Gemini
+  // call before the response comes back (see openapi.yaml). That routinely
+  // runs past ApiClient's default 15s CRUD timeout even when nothing is
+  // wrong, which was surfacing a real "video doesn't match the challenge"
+  // verdict as a misleading "network error, retrying" screen instead.
+  // 90s matches AuraSubmittedPopup's own client-side polling timeout — the
+  // point at which the app already considers scoring unusually slow.
+  static const _scoringTimeout = Duration(seconds: 90);
+
   Future<Map<String, dynamic>> createSubmission(
       String challengeId, String videoId) async {
     final res = await _client.post(
       '/challenges/$challengeId/submissions',
       {'videoId': videoId},
       auth: true,
+      timeout: _scoringTimeout,
     );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create submission';

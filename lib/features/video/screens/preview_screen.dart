@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
@@ -39,6 +40,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
   int _retryIntervalSeconds = 5;
   String? _lastError;
   bool _isNetworkError = false;
+  // Guards against the auto-retry timer and a manual "Retry Upload" tap
+  // both calling _upload() at once: the auto-retry branch awaits
+  // hasInternet() before flipping state out of `failed`, and during that
+  // gap the Retry button is still visible and tappable. Without this,
+  // two concurrent runs could each presign + upload + create a submission
+  // (a duplicate), and whichever finished last would clobber
+  // _uploadState — so a successful run could get overwritten back to
+  // `failed`, leaving the user stuck on an error despite the upload
+  // having actually gone through.
+  bool _uploadInFlight = false;
 
   @override
   void initState() {
@@ -90,6 +101,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
   }
 
   Future<void> _upload({bool isAutoRetry = false}) async {
+    if (_uploadInFlight) return;
+    _uploadInFlight = true;
+    try {
+      await _doUpload(isAutoRetry: isAutoRetry);
+    } finally {
+      _uploadInFlight = false;
+    }
+  }
+
+  Future<void> _doUpload({bool isAutoRetry = false}) async {
     final online = await UploadQueueService.hasInternet();
     if (!online) {
       if (!mounted) return;
@@ -180,7 +201,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
     } catch (e, st) {
       debugPrint('[Upload] failed: $e\n$st');
       if (!mounted) return;
-      final isNetworkError = e is SocketException;
+      // A dropped/stalled connection can surface as any of these — not just
+      // SocketException — depending on which step (presign, S3 PUT, or
+      // create-submission) it hit. Misclassifying it as a server error meant
+      // showing the raw exception string with no auto-retry instead of the
+      // friendly "we'll retry automatically" flow.
+      final isNetworkError =
+          e is SocketException || e is TimeoutException || e is http.ClientException;
       setState(() {
         _uploadState = _UploadState.failed;
         _isNetworkError = isNetworkError;
@@ -209,6 +236,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
     final text = (_lastError ?? '').toLowerCase();
     return text.contains('onboarding') ||
         (text.contains('profile') && text.contains('complete'));
+  }
+
+  // The backend rejects the submission with this message when the challenge
+  // itself was never assigned a scoring rubric (an admin/data setup gap) —
+  // nothing to do with the recorded video, and retrying just fails the same
+  // way again since there's nothing on the client to fix.
+  bool get _isMissingRubric {
+    final text = (_lastError ?? '').toLowerCase();
+    return text.contains('no scoring rubric');
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -439,15 +475,17 @@ class _PreviewScreenState extends State<PreviewScreen> {
             Row(
               children: [
                 Icon(
-                    _isNetworkError
-                        ? Icons.wifi_off_rounded
-                        : Icons.error_outline_rounded,
-                    color: Colors.redAccent,
+                    _isMissingRubric
+                        ? Icons.rule_folder_outlined
+                        : _isNetworkError
+                            ? Icons.wifi_off_rounded
+                            : Icons.error_outline_rounded,
+                    color: _isMissingRubric ? Colors.amber : Colors.redAccent,
                     size: 18),
                 const SizedBox(width: 8),
-                const Text('Upload failed',
+                Text(_isMissingRubric ? 'Challenge not ready' : 'Upload failed',
                     style: TextStyle(
-                        color: Colors.redAccent,
+                        color: _isMissingRubric ? Colors.amber : Colors.redAccent,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 if (_isNetworkError) ...[
@@ -472,10 +510,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              _isNetworkError
-                  ? 'Your video is saved. We\'ll retry automatically when you\'re back online.'
-                  : (_lastError ??
-                      'Something went wrong. Please try again.'),
+              _isMissingRubric
+                  ? 'This challenge hasn\'t been set up for scoring yet. Your video wasn\'t the problem — please try a different challenge instead.'
+                  : _isNetworkError
+                      ? 'Your video is saved. We\'ll retry automatically when you\'re back online.'
+                      : (_lastError ??
+                          'Something went wrong. Please try again.'),
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.55), fontSize: 12),
             ),
@@ -523,15 +563,23 @@ class _PreviewScreenState extends State<PreviewScreen> {
                               MaterialPageRoute(
                                   builder: (_) => const SettingsScreen()),
                             )
-                        : _upload,
+                        // A missing rubric is a challenge-setup problem, not
+                        // something a retry can fix — send the user back
+                        // instead of re-running the same failing upload.
+                        : _isMissingRubric
+                            ? () => Navigator.pop(context)
+                            : _upload,
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
-                        color: Colors.redAccent,
+                        color: _isMissingRubric ? Colors.amber : Colors.redAccent,
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.redAccent.withValues(alpha: 0.40),
+                            color: (_isMissingRubric
+                                    ? Colors.amber
+                                    : Colors.redAccent)
+                                .withValues(alpha: 0.40),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           )
@@ -541,9 +589,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         child: Text(
                             _isProfileIncomplete
                                 ? 'Complete Your Profile'
-                                : 'Retry Upload',
-                            style: const TextStyle(
-                                color: Colors.white,
+                                : _isMissingRubric
+                                    ? 'Choose Another Challenge'
+                                    : 'Retry Upload',
+                            style: TextStyle(
+                                color: _isMissingRubric
+                                    ? Colors.black87
+                                    : Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700)),
                       ),

@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/utils/error_message.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../../shared/widgets/avatar_widget.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import 'user_video_detail_screen.dart';
 import 'all_videos_screen.dart';
@@ -314,6 +316,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   static const _card = Color(0xFF0E0C1E);
 
   bool _loading = true;
+  String? _error;
   String? _uid;
   Map<String, dynamic> _profile = {};
   List<Map<String, dynamic>> _videos = [];
@@ -329,29 +332,53 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   Future<void> _loadAll() async {
-    final uid = await ApiClient().userId;
-    final results = await Future.wait<dynamic>([
-      AuthApiService().getProfile(),
-      AuthApiService().fetchMyVideos(limit: 10),
-      AuthApiService().fetchAchievements(),
-      AuthApiService().fetchSavedChallenges(limit: 4),
-      AuthApiService().fetchReferralStats(),
-      AuthApiService().fetchStreak(),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _uid = uid;
-      _profile = results[0] as Map<String, dynamic>? ?? {};
-      _videos = (results[1] as List).cast<Map<String, dynamic>>();
-      _achievements = (results[2] as List).cast<Map<String, dynamic>>();
-      _savedChallenges = (results[3] as List)
-          .cast<Map<String, dynamic>>()
-          .map(normaliseChallenge)
-          .toList();
-      _referral = results[4] as Map<String, dynamic>?;
-      _streak = results[5] as Map<String, dynamic>?;
-      _loading = false;
-    });
+    // Only the first load (before we have a uid/profile) takes over the
+    // whole screen with a spinner/error state; later refreshes (e.g. after
+    // returning from EditProfileScreen) keep showing existing content.
+    final isInitialLoad = _uid == null;
+    if (isInitialLoad) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final uid = await ApiClient().userId;
+      final results = await Future.wait<dynamic>([
+        AuthApiService().getProfile(),
+        AuthApiService().fetchMyVideos(limit: 10),
+        AuthApiService().fetchAchievements(),
+        AuthApiService().fetchSavedChallenges(limit: 4),
+        AuthApiService().fetchReferralStats(),
+        AuthApiService().fetchStreak(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _uid = uid;
+        _profile = results[0] as Map<String, dynamic>? ?? {};
+        _videos = (results[1] as List).cast<Map<String, dynamic>>();
+        _achievements = (results[2] as List).cast<Map<String, dynamic>>();
+        _savedChallenges = (results[3] as List)
+            .cast<Map<String, dynamic>>()
+            .map(normaliseChallenge)
+            .toList();
+        _referral = results[4] as Map<String, dynamic>?;
+        _streak = results[5] as Map<String, dynamic>?;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      if (isInitialLoad) {
+        setState(() {
+          _error = humanizeError(e);
+          _loading = false;
+        });
+      } else {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(humanizeError(e))));
+      }
+    }
   }
 
   int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
@@ -394,6 +421,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final username = _profile['profileName'] as String? ??
         _profile['username'] as String? ?? '';
     final gender = (_profile['gender'] as String? ?? '').trim();
+    final city =
+        (_profile['city'] as Map<String, dynamic>?)?['name'] as String? ?? '';
     final photoUrl = (_profile['avatar'] as String? ?? '').isNotEmpty
         ? _profile['avatar'] as String
         : _profile['profileImageUrl'] as String? ?? '';
@@ -419,22 +448,16 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           children: [
             Stack(
               children: [
-                CircleAvatar(
+                AvatarWidget(
+                  photoUrl: photoUrl,
+                  fallbackText: name.isNotEmpty ? name[0].toUpperCase() : 'U',
                   radius: 38,
                   backgroundColor: _accent.withValues(alpha: 0.20),
-                  backgroundImage: photoUrl.isNotEmpty
-                      ? NetworkImage(photoUrl)
-                      : null,
-                  child: photoUrl.isEmpty
-                      ? Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      : null,
+                  textStyle: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Positioned(
                   bottom: 0,
@@ -469,6 +492,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   const SizedBox(height: 2),
                   Text('@$username',
                       style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                  if (city.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            color: Colors.white38, size: 14),
+                        const SizedBox(width: 4),
+                        Text(city,
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 12)),
+                      ],
+                    ),
+                  ],
                   if (gender.isNotEmpty) ...[
                     const SizedBox(height: 5),
                     Row(
@@ -1095,6 +1131,34 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: _bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded, color: Colors.white38, size: 40),
+                const SizedBox(height: 16),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _loadAll,
+                  style: ElevatedButton.styleFrom(backgroundColor: _accent),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (_loading || _uid == null) {
       return const Scaffold(
         backgroundColor: _bg,
@@ -1911,24 +1975,18 @@ class _ReferralsSheetState extends State<_ReferralsSheet> {
                             ),
                             child: Row(
                               children: [
-                                CircleAvatar(
+                                AvatarWidget(
+                                  photoUrl: avatar,
+                                  fallbackText: name.isNotEmpty
+                                      ? name[0].toUpperCase()
+                                      : 'U',
                                   radius: 20,
-                                  backgroundColor: const Color(0xFF7B2CBF)
-                                      .withValues(alpha: 0.20),
-                                  backgroundImage: avatar.isNotEmpty
-                                      ? NetworkImage(avatar)
-                                      : null,
-                                  child: avatar.isEmpty
-                                      ? Text(
-                                          name.isNotEmpty
-                                              ? name[0].toUpperCase()
-                                              : 'U',
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold),
-                                        )
-                                      : null,
+                                  backgroundColor:
+                                      const Color(0xFF7B2CBF).withValues(alpha: 0.20),
+                                  textStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../core/services/creator_gates_service.dart';
+import 'creator_challenge_analytics_screen.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_participants_screen.dart';
 import 'creator_gate_history_screen.dart';
@@ -49,7 +50,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     }
     Map<String, dynamic>? gateProgress;
     Map<String, dynamic> stats = {};
-    if (status == 'LIVE') {
+    if (status == 'LIVE' || status == 'PAUSED') {
       gateProgress = await _gatesService.fetchGateProgress(widget.challengeId);
       stats = await _service.fetchStats(widget.challengeId);
     }
@@ -164,6 +165,44 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     }
   }
 
+  Future<void> _transitionStatus(String newStatus, {String? confirmTitle, String? confirmBody}) async {
+    if (confirmTitle != null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF12102A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Text(confirmTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text(confirmBody ?? '', style: const TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm', style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+
+    setState(() => _acting = true);
+    try {
+      await _service.updateStatus(widget.challengeId, newStatus);
+      if (!mounted) return;
+      _snack('Updated');
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e.toString());
+    } finally {
+      if (mounted) setState(() => _acting = false);
+    }
+  }
+
   void _snack(String msg) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -210,7 +249,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _statusBanner(status, auraScore),
-          if (status == 'LIVE') ...[
+          if (status == 'LIVE' || status == 'PAUSED') ...[
             const SizedBox(height: 16),
             _gateProgressCard(),
             const SizedBox(height: 12),
@@ -289,6 +328,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       'CHANGES_REQUESTED' => (Color(0xFFF59E0B), 'Changes Requested', 'Address the feedback below, then resubmit.'),
       'ARCHIVED' => (Color(0xFF6B7280), 'Archived', 'This challenge has been archived.'),
       'LIVE' => (Color(0xFF7B2CBF), 'Live', 'Your challenge is live and visible to all players.'),
+      'PAUSED' => (Color(0xFF64748B), 'Paused', 'Hidden from player feeds until resumed. Existing progress is preserved.'),
       _ => (Colors.white38, status, ''),
     };
 
@@ -469,6 +509,13 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           button('Submit for Review', _submitForReview),
           button('Edit Draft', _editDraft, outline: true),
         ];
+      case 'PENDING_REVIEW':
+        return [
+          button('Cancel Submission', () => _transitionStatus('DRAFT',
+              confirmTitle: 'Cancel Submission',
+              confirmBody: 'This returns the challenge to Draft so you can keep editing it. You\'ll need to resubmit when ready.'),
+              outline: true),
+        ];
       case 'CHANGES_REQUESTED':
         return [
           button('Resubmit for Review', _resubmit),
@@ -477,11 +524,20 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       case 'APPROVED':
         return [button('Publish Challenge', _publish)];
       case 'LIVE':
+      case 'PAUSED':
         return [
+          if (status == 'PAUSED')
+            button('Resume Challenge', () => _transitionStatus('LIVE')),
           button('View Participants', () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (_) => CreatorChallengeParticipantsScreen(challengeId: widget.challengeId)))),
+                  builder: (_) => CreatorChallengeParticipantsScreen(challengeId: widget.challengeId))),
+              outline: status == 'PAUSED'),
+          button('Analytics', () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => CreatorChallengeAnalyticsScreen(challengeId: widget.challengeId))),
+              outline: true),
           button(_sharing ? 'Sharing…' : 'Share Challenge', _shareChallenge, outline: true),
           button('Reward History', () => Navigator.push(
               context,
@@ -492,6 +548,11 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
               context,
               MaterialPageRoute(builder: (_) => const CreatorGateRulesScreen())),
               outline: true),
+          if (status == 'LIVE')
+            button('Pause Challenge', () => _transitionStatus('PAUSED',
+                confirmTitle: 'Pause Challenge',
+                confirmBody: 'This hides the challenge from player feeds until you resume it. Existing progress is preserved.'),
+                outline: true),
         ];
       default:
         return [];

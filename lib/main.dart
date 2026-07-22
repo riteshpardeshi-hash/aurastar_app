@@ -8,6 +8,7 @@ import 'core/globals.dart';
 import 'core/services/api_client.dart';
 import 'core/services/challenges_service.dart';
 import 'firebase_options.dart';
+import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
 import 'features/splash/screens/splash_screen.dart';
 
@@ -35,13 +36,36 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<void>? _sessionExpiredSub;
+  // Guards against a burst of near-simultaneous 401s (e.g. Dashboard's
+  // Future.wait of several authed calls) each firing onSessionExpired and
+  // triggering a duplicate navigation reset.
+  bool _handlingSessionExpiry = false;
 
   @override
   void initState() {
     super.initState();
     _initDeepLinks();
+    _sessionExpiredSub =
+        ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
+  }
+
+  void _handleSessionExpired() {
+    if (_handlingSessionExpiry) return;
+    _handlingSessionExpiry = true;
+    _navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+      (route) => false,
+    );
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Your session has expired. Please log in again.')),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      _handlingSessionExpiry = false;
+    });
   }
 
   Future<void> _initDeepLinks() async {
@@ -86,6 +110,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     _linkSub?.cancel();
+    _sessionExpiredSub?.cancel();
     super.dispose();
   }
 
@@ -93,6 +118,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         fontFamily: 'ClashDisplay',

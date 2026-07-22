@@ -5,6 +5,7 @@ import '../../../core/services/challenges_service.dart';
 import '../../../core/services/api_client.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/services/video_cache_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../widgets/achievement_card.dart' show kChallengeBaseUrl;
 import 'camera_screen.dart';
@@ -42,31 +43,27 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   int _auraPoints = 150;
   bool _isPaused = false;
   String _thumbnailUrl = '';
-
-  // Bookmark
-  bool _isSaved = false;
-  bool _savingBookmark = false;
-
-  // Like
-  bool _liked = false;
-  int _likesCount = 0;
-  bool _likingBusy = false;
+  // Some entry points (e.g. search results) construct this screen without a
+  // videoUrl/instructions — they're filled in from the full challenge fetch
+  // below. Seeded from the widget so screens that already have this data
+  // (trending, dashboard, etc.) render instantly without waiting on the fetch.
+  late String _videoUrl = widget.videoUrl;
+  late String _instructions = widget.instructions;
 
   // Submissions
   List<Map<String, dynamic>> _submissions = [];
   Map<String, dynamic>? _mySubmission;
   bool _submissionsLoading = true;
 
-  void _onVideoUpdate() {
-    if (mounted) setState(() => _isPlaying = _videoController!.value.isPlaying);
-  }
-
   @override
   void initState() {
     super.initState();
     _fetchChallengeData();
-    _checkSaved();
     _fetchSubmissions();
+    // Start warming the reference-video cache immediately — by the time the
+    // user reads the challenge, opens the rules sheet, and taps Record,
+    // CameraScreen's ghost overlay can play from disk instead of streaming.
+    if (_videoUrl.isNotEmpty) VideoCacheService.ensureCached(_videoUrl);
   }
 
   Future<void> _fetchChallengeData() async {
@@ -78,10 +75,13 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       setState(() {
         _auraPoints = c['starsCount'] as int;
         _isPaused = false;
-        _likesCount = 0;
-        _liked = false;
         _thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
+        if (_videoUrl.isEmpty) _videoUrl = c['videoUrl'] as String? ?? '';
+        if (_instructions.isEmpty) {
+          _instructions = c['instructions'] as String? ?? '';
+        }
       });
+      if (_videoUrl.isNotEmpty) VideoCacheService.ensureCached(_videoUrl);
     } catch (_) {}
   }
 
@@ -101,71 +101,16 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     }
   }
 
-  Future<void> _checkSaved() async {
-    final uid = await ApiClient().userId;
-    if (uid == null || widget.challengeId.isEmpty) return;
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users').doc(uid)
-          .collection('saved_challenges').doc(widget.challengeId)
-          .get();
-      if (mounted) setState(() => _isSaved = doc.exists);
-    } catch (_) {}
-  }
+  // Bookmark/save removed — no backend endpoint exists to persist it
+  // (only GET /profile/saved-challenges exists, no write). The old Firestore
+  // write here also had no Firebase Auth session backing it for REST-API
+  // authenticated users, so it silently failed with a permission error on
+  // every attempt. Re-add once a real POST endpoint exists.
 
-  Future<void> _toggleSave() async {
-    final uid = await ApiClient().userId;
-    if (uid == null || widget.challengeId.isEmpty || _savingBookmark) return;
-    setState(() => _savingBookmark = true);
-    final ref = FirebaseFirestore.instance
-        .collection('users').doc(uid)
-        .collection('saved_challenges').doc(widget.challengeId);
-    try {
-      if (_isSaved) {
-        await ref.delete();
-        if (mounted) setState(() { _isSaved = false; _savingBookmark = false; });
-      } else {
-        await ref.set({
-          'challengeId': widget.challengeId,
-          'title': widget.title,
-          'instructions': widget.instructions,
-          'videoUrl': widget.videoUrl,
-          'auraPoints': _auraPoints,
-          'savedAt': FieldValue.serverTimestamp(),
-        });
-        if (mounted) setState(() { _isSaved = true; _savingBookmark = false; });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _savingBookmark = false);
-    }
-  }
-
-  Future<void> _toggleLike() async {
-    final uid = await ApiClient().userId;
-    if (uid == null || widget.challengeId.isEmpty || _likingBusy) return;
-    setState(() => _likingBusy = true);
-    final ref = FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(widget.challengeId);
-    final wasLiked = _liked;
-    try {
-      await ref.update({
-        'likedBy': wasLiked
-            ? FieldValue.arrayRemove([uid])
-            : FieldValue.arrayUnion([uid]),
-        'likesCount': FieldValue.increment(wasLiked ? -1 : 1),
-      });
-      if (mounted) {
-        setState(() {
-          _liked = !wasLiked;
-          _likesCount += wasLiked ? -1 : 1;
-          _likingBusy = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _likingBusy = false);
-    }
-  }
+  // Like removed — same issue as bookmark/save: no backend endpoint for a
+  // challenge-level like (only POST /videos/{id}/like exists, unrelated),
+  // and the old Firestore write had no Firebase Auth session backing it for
+  // REST-API authenticated users, so it silently failed every time.
 
   void _share() {
     final link = '$kChallengeBaseUrl/${widget.challengeId}';
@@ -203,12 +148,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
     setState(() => _videoStarted = true);
 
-    if (widget.videoUrl.isEmpty) return;
+    if (_videoUrl.isEmpty) return;
     _videoController =
-        VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+        VideoPlayerController.networkUrl(Uri.parse(_videoUrl));
     await _videoController!.initialize();
     if (!mounted) return;
-    _videoController!.addListener(_onVideoUpdate);
     setState(() => _videoInitialized = true);
     _videoController!.play();
     setState(() => _isPlaying = true);
@@ -243,7 +187,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               builder: (_) => CameraScreen(
                 challengeTitle: widget.title,
                 challengeId: widget.challengeId,
-                referenceVideoUrl: widget.videoUrl,
+                referenceVideoUrl: _videoUrl,
               ),
             ),
           );
@@ -344,7 +288,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    _videoController?.removeListener(_onVideoUpdate);
     _videoController?.dispose();
     super.dispose();
   }
@@ -449,38 +392,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                       backgroundColor: Colors.white.withValues(alpha: 0.12),
                       shape: const CircleBorder(),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    onPressed: _savingBookmark ? null : _toggleSave,
-                    icon: _savingBookmark
-                        ? const SizedBox(
-                            width: 18, height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
-                          )
-                        : Icon(
-                            _isSaved
-                                ? Icons.bookmark_rounded
-                                : Icons.bookmark_outline_rounded,
-                            color: _isSaved
-                                ? const Color(0xFFD4A8FF)
-                                : Colors.white,
-                            size: 20,
-                          ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: _isSaved
-                          ? _accent.withValues(alpha: 0.30)
-                          : Colors.white.withValues(alpha: 0.12),
-                      shape: const CircleBorder(),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  _LikeButton(
-                    liked: _liked,
-                    count: _likesCount,
-                    busy: _likingBusy,
-                    onTap: _toggleLike,
                   ),
                   const SizedBox(width: 4),
                   IconButton(
@@ -839,7 +750,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 // Background / thumbnail
                 if (!_videoStarted || !_videoInitialized)
                   VideoThumbnailWidget(
-                      videoUrl: widget.videoUrl,
+                      videoUrl: _videoUrl,
                       thumbnailUrl: _thumbnailUrl,
                       fit: BoxFit.cover)
                 else
@@ -919,9 +830,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('• ',
-                      style: TextStyle(
-                          color: Colors.white, fontSize: 15, height: 1.5)),
+                  // Numbered steps already carry their own "1. "/"2. " marker
+                  // — don't also prepend a bullet.
+                  if (!_isNumberedInstructions)
+                    const Text('• ',
+                        style: TextStyle(
+                            color: Colors.white, fontSize: 15, height: 1.5)),
                   Expanded(
                     child: Text(
                       b,
@@ -978,18 +892,35 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+  static final _numberedLineRegExp = RegExp(r'^\d+\.\s');
+
+  // Challenge-creation screens join steps as "1. ...\n2. ...\n3. ...", so
+  // every line is already its own numbered step — not a one-line tagline
+  // followed by free-form details. Treating line 1 as a "subtitle" in that
+  // case rips the first step out of the list, and prefixing the rest with
+  // "• " on top of their own "2. "/"3. " produces "• 2. Execute cleanly.".
+  bool get _isNumberedInstructions {
+    final lines = _instructions
+        .trim()
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    return lines.isNotEmpty && lines.every(_numberedLineRegExp.hasMatch);
+  }
+
   String get _subtitle {
-    final text = widget.instructions.trim();
-    if (text.isEmpty) return '';
+    final text = _instructions.trim();
+    if (text.isEmpty || _isNumberedInstructions) return '';
     final firstLine = text.split('\n').first.trim();
-    if (firstLine.length <= 80 && widget.instructions.contains('\n')) {
+    if (firstLine.length <= 80 && _instructions.contains('\n')) {
       return firstLine;
     }
     return '';
   }
 
   List<String> get _bulletPoints {
-    final text = widget.instructions.trim();
+    final text = _instructions.trim();
     if (text.isEmpty) return [];
 
     // If multi-line, split by newlines
@@ -1411,111 +1342,6 @@ class _ReportSheetState extends State<_ReportSheet> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Like button with animated heart + count ───────────────────────────────────
-
-class _LikeButton extends StatefulWidget {
-  final bool liked;
-  final int count;
-  final bool busy;
-  final VoidCallback onTap;
-
-  const _LikeButton({
-    required this.liked,
-    required this.count,
-    required this.busy,
-    required this.onTap,
-  });
-
-  @override
-  State<_LikeButton> createState() => _LikeButtonState();
-}
-
-class _LikeButtonState extends State<_LikeButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-      lowerBound: 0.75,
-      upperBound: 1.0,
-      value: 1.0,
-    );
-  }
-
-  @override
-  void didUpdateWidget(_LikeButton old) {
-    super.didUpdateWidget(old);
-    if (widget.liked != old.liked) {
-      _ctrl.reverse().then((_) => _ctrl.forward());
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.busy ? null : widget.onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ScaleTransition(
-            scale: _ctrl,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: widget.liked
-                    ? Colors.pinkAccent.withValues(alpha: 0.28)
-                    : Colors.white.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: widget.busy
-                  ? const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            color: Colors.pinkAccent, strokeWidth: 2),
-                      ),
-                    )
-                  : Icon(
-                      widget.liked
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_outline_rounded,
-                      color:
-                          widget.liked ? Colors.pinkAccent : Colors.white,
-                      size: 20,
-                    ),
-            ),
-          ),
-          if (widget.count > 0) ...[
-            const SizedBox(height: 2),
-            Text(
-              widget.count >= 1000
-                  ? '${(widget.count / 1000).toStringAsFixed(1)}k'
-                  : '${widget.count}',
-              style: TextStyle(
-                color: widget.liked ? Colors.pinkAccent : Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
         ],
       ),
     );

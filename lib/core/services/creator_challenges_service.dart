@@ -8,15 +8,17 @@ import 'api_client.dart';
 class CreatorChallengesService {
   final _client = ApiClient();
 
+  /// Throws with the backend's message (e.g. a 403 "Access denied. Requires
+  /// one of: creator") instead of swallowing it, so callers can show the
+  /// real reason instead of a silently-empty category list.
   Future<List<Map<String, dynamic>>> fetchCategories() async {
-    try {
-      final res = await _client.get('/creator/challenge/categories', auth: true);
-      if (res['status'] != 'success') return [];
-      final data = res['data'];
-      return data is List ? data.cast<Map<String, dynamic>>() : [];
-    } catch (_) {
-      return [];
+    final res = await _client.get('/creator/challenge/categories', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to load categories');
     }
+    final data = res['data'];
+    final list = data is Map<String, dynamic> ? data['categories'] : data;
+    return list is List ? list.cast<Map<String, dynamic>>() : [];
   }
 
   Future<List<Map<String, dynamic>>> fetchSubmissionRules() async {
@@ -380,6 +382,168 @@ class CreatorChallengesService {
       };
     } catch (_) {
       return {'items': <Map<String, dynamic>>[], 'totalCount': 0, 'page': page, 'totalPages': 1};
+    }
+  }
+
+  /// Total challenge count plus a zero-filled breakdown by submissionStatus
+  /// (every known status present, even at 0). Fully documented schema
+  /// (`CreatorStatusSummaryResponse`) — no guessing needed.
+  Future<Map<String, dynamic>> fetchStatusSummary() async {
+    try {
+      final res = await _client.get('/creator/challenges/status-summary', auth: true);
+      if (res['status'] != 'success') return {'total': 0, 'byStatus': <String, dynamic>{}};
+      return res['data'] as Map<String, dynamic>? ?? {'total': 0, 'byStatus': <String, dynamic>{}};
+    } catch (_) {
+      return {'total': 0, 'byStatus': <String, dynamic>{}};
+    }
+  }
+
+  /// Generic status transition for the cases with no dedicated endpoint:
+  /// PENDING_REVIEW→DRAFT (cancel submission), LIVE→PAUSED (pause),
+  /// PAUSED→LIVE (resume). Submit/resubmit/publish/archive keep their own
+  /// endpoints — don't route those through this.
+  Future<void> updateStatus(String id, String status) async {
+    final res = await _client.patch('/creator/challenges/$id/status', {'status': status});
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to update status');
+    }
+  }
+
+  /// Base per-challenge analytics — views/participants/totalAttempts/likes/
+  /// shares/saves/completionRate/averageScore/auraPointsGenerated/
+  /// gateProgress. Distinct from (fuller than) [fetchStats]. Fully documented
+  /// schema (`CreatorChallengeAnalyticsResponse`).
+  Future<Map<String, dynamic>> fetchAnalytics(String id) async {
+    try {
+      final res = await _client.get('/creator/challenges/$id/analytics', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  String _rangeQuery({String dateRange = '30d', DateTime? startDate, DateTime? endDate, String? granularity}) {
+    return [
+      'dateRange=$dateRange',
+      if (dateRange == 'custom' && startDate != null) 'startDate=${startDate.toUtc().toIso8601String()}',
+      if (dateRange == 'custom' && endDate != null) 'endDate=${endDate.toUtc().toIso8601String()}',
+      if (granularity != null) 'granularity=$granularity',
+    ].join('&');
+  }
+
+  Future<Map<String, dynamic>> fetchParticipantAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate);
+      final res = await _client.get('/creator/challenges/$id/analytics/participants?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchAttemptAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate, String? granularity}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate, granularity: granularity);
+      final res = await _client.get('/creator/challenges/$id/analytics/attempts?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchScoreAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate, String? granularity}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate, granularity: granularity);
+      final res = await _client.get('/creator/challenges/$id/analytics/scores?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// `uniqueViews`/`comments`/`averageWatchTime` come back null — not an
+  /// integration bug, the backend has no tracking for them yet (per Swagger
+  /// description). Render those as "—", don't treat null as a fetch failure.
+  Future<Map<String, dynamic>> fetchEngagementAnalytics(String id) async {
+    try {
+      final res = await _client.get('/creator/challenges/$id/analytics/engagement', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// `platformDistribution` is always `[]` today — no per-platform share
+  /// tracking exists yet backend-side, not a client parsing gap.
+  Future<Map<String, dynamic>> fetchShareAnalytics(String id) async {
+    try {
+      final res = await _client.get('/creator/challenges/$id/analytics/shares', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// `newFollowers` is creator-wide (`scope: "creator-wide"`), not proven
+  /// attributable to this specific challenge — Follow documents aren't
+  /// linked to a challenge in this schema.
+  Future<Map<String, dynamic>> fetchFollowerAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate);
+      final res = await _client.get('/creator/challenges/$id/analytics/followers?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchGateProgressAnalytics(String id) async {
+    try {
+      final res = await _client.get('/creator/challenges/$id/analytics/gate-progress', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// `attemptsTrend`/`participantsTrend` are real time series; anything else
+  /// requested shows up in the `unavailable` list instead of being fabricated.
+  Future<Map<String, dynamic>> fetchTrendsAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate, String? granularity}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate, granularity: granularity);
+      final res = await _client.get('/creator/challenges/$id/analytics/trends?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Current vs. immediately-preceding period of equal length. Only metrics
+  /// with real per-period backing (participants/attempts/averageScore/
+  /// newFollowers) are compared — the rest are listed in `unavailable`.
+  Future<Map<String, dynamic>> fetchComparisonAnalytics(String id,
+      {String dateRange = '30d', DateTime? startDate, DateTime? endDate}) async {
+    try {
+      final q = _rangeQuery(dateRange: dateRange, startDate: startDate, endDate: endDate);
+      final res = await _client.get('/creator/challenges/$id/analytics/comparison?$q', auth: true);
+      if (res['status'] != 'success') return {};
+      return res['data'] as Map<String, dynamic>? ?? {};
+    } catch (_) {
+      return {};
     }
   }
 }

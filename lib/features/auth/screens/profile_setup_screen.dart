@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/utils/error_message.dart';
 import 'city_interests_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -24,27 +25,37 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   static const _purple = Color(0xFF7B2CBF);
   static const _genders = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+  static final _nameRegExp = RegExp(r'^[a-zA-Z ]+$');
+  static final _nameCharRegExp = RegExp(r'[a-zA-Z ]');
 
-  // Backend only accepts male/female/other — map the UI labels to it.
+  // The docs say the backend only accepts male/female/other, but the live
+  // validation error actually lists 4 distinct values — collapsing
+  // Non-binary/Prefer not to say into 'other' made both selections fail.
   String _genderApiValue(String? uiGender) {
     switch (uiGender) {
       case 'Male':
         return 'male';
       case 'Female':
         return 'female';
+      case 'Non-binary':
+        return 'non-binary';
+      case 'Prefer not to say':
+        return 'prefer not to say';
       default:
-        return 'other';
+        return 'prefer not to say';
     }
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
   Future<void> _pickDob() async {
+    // Backend requires the user to be at least 13 years old.
+    final maxDob = DateTime.now().subtract(const Duration(days: 365 * 13));
     final picked = await showDatePicker(
       context: context,
       initialDate: DateTime(2000),
       firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
+      lastDate: maxDob,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
           colorScheme: const ColorScheme.dark(
@@ -125,6 +136,24 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       );
       return;
     }
+    if (!_nameRegExp.hasMatch(_nameCtrl.text.trim())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name can only contain letters.')),
+      );
+      return;
+    }
+    if (_dob == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select your date of birth.')),
+      );
+      return;
+    }
+    if (_gender == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select your gender.')),
+      );
+      return;
+    }
     setState(() => _saving = true);
 
     try {
@@ -149,6 +178,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         displayName: _nameCtrl.text.trim(),
         username: _usernameCtrl.text.trim(),
         gender: _genderApiValue(_gender),
+        dateOfBirth: _dob,
       );
 
       if (!mounted) return;
@@ -158,7 +188,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(content: Text(humanizeError(e))),
       );
     }
   }
@@ -314,6 +344,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       hint: 'Enter your full name',
                       icon: Icons.badge_outlined,
                       textCapitalization: TextCapitalization.words,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(_nameCharRegExp),
+                      ],
                     ),
 
                     const SizedBox(height: 20),
@@ -474,6 +507,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     required IconData icon,
     String? prefix,
     TextCapitalization textCapitalization = TextCapitalization.none,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -484,6 +518,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       child: TextField(
         controller: controller,
         textCapitalization: textCapitalization,
+        inputFormatters: inputFormatters,
         style: const TextStyle(color: Colors.white, fontSize: 15),
         cursorColor: const Color(0xFF7B2CBF),
         decoration: InputDecoration(

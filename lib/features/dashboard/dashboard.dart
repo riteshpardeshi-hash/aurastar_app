@@ -10,6 +10,7 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
 import '../../shared/widgets/level_up_sheet.dart';
+import '../../shared/widgets/avatar_widget.dart';
 import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
@@ -18,10 +19,8 @@ import '../explore/screens/creator_videos_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../account/screens/my_account_screen.dart';
-import '../creator/admin/creator_admin_screen.dart';
-import '../creator/screens/creator_dashboard_screen.dart';
-import '../creator/screens/brand_dashboard_screen.dart';
 import '../creator/screens/create_creator_profile_screen.dart';
+import '../creator/screens/become_creator_screen.dart';
 import '../admin/screens/admin_screen.dart';
 import '../video/screens/preview_screen.dart';
 import '../../core/services/upload_queue_service.dart';
@@ -51,6 +50,12 @@ class _DashboardState extends State<Dashboard> {
   String? _profileUserId;
   Future<Map<String, dynamic>>? _profileFuture;
   Timer? _profilePollTimer;
+  // Cold-start network hiccups (e.g. connectivity not fully up yet right as
+  // the app launches) can make the very first profile fetch fail with no
+  // underlying persistent problem. Retry once automatically so that doesn't
+  // strand the user on an error screen — reset whenever a new user session
+  // starts so each login gets its own single free retry.
+  bool _autoRetriedProfile = false;
 
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
@@ -148,6 +153,7 @@ class _DashboardState extends State<Dashboard> {
               lastStreakDate: '');
         }
         if (_profileUserId != userId) {
+          _autoRetriedProfile = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _loadProfile(userId);
           });
@@ -162,11 +168,35 @@ class _DashboardState extends State<Dashboard> {
       future: _profileFuture,
       builder: (context, snap) {
         if (snap.hasError) {
-          return const Scaffold(
+          if (!_autoRetriedProfile) {
+            _autoRetriedProfile = true;
+            Future.delayed(const Duration(seconds: 2), () {
+              if (mounted) _loadProfile(userId);
+            });
+          }
+          return Scaffold(
             backgroundColor: _bg,
             body: Center(
-              child: Text('Failed to load profile.',
-                  style: TextStyle(color: Colors.white54)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        color: Colors.white38, size: 40),
+                    const SizedBox(height: 16),
+                    const Text('Failed to load profile.',
+                        style: TextStyle(color: Colors.white54)),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () => _loadProfile(userId),
+                      style:
+                          ElevatedButton.styleFrom(backgroundColor: _accent),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         }
@@ -301,12 +331,8 @@ class _DashboardState extends State<Dashboard> {
                   SliverToBoxAdapter(
                       child:
                           _buildBecomeCreatorBanner(context, userId, points)),
-                if (isCreator)
-                  SliverToBoxAdapter(
-                      child: _buildCreatorTools(context, userId)),
-                if (isBrand || isAdmin)
-                  SliverToBoxAdapter(
-                      child: _buildBrandTools(context, isBrand, points)),
+                if (!isCreator && !isBrand && !isAdmin)
+                  SliverToBoxAdapter(child: _buildBecomeCreatorButton(context)),
                 if (isAdmin)
                   SliverToBoxAdapter(child: _buildAdminButton(context)),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -1414,30 +1440,34 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Creator Tools (content creators only) ─────────────────────────────────
-  Widget _buildCreatorTools(BuildContext context, String userId) {
+  // ── Become Creator button (standalone entry point) ─────────────────────────
+  Widget _buildBecomeCreatorButton(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Creator Tools',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
-          const SizedBox(height: 10),
-          _toolButton(
-            label: 'Creator Dashboard',
-            colors: const [Color(0xFF7B2FF7), Color(0xFFF107A3)],
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => const CreatorDashboardScreen()),
-            ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: OutlinedButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
           ),
-        ],
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: BorderSide(color: _accent.withValues(alpha: 0.5)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
+          ),
+          icon: const Icon(Icons.diamond_rounded,
+              color: Color(0xFFD4A8FF), size: 18),
+          label: const Text(
+            'Become a Creator',
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'SpaceGrotesk'),
+          ),
+        ),
       ),
     );
   }
@@ -1550,67 +1580,6 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Brand Tools (brands/admin only) ────────────────────────────────────────
-  Widget _buildBrandTools(
-      BuildContext context, bool isBrand, int points) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Brand Tools',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _toolButton(
-                  label: isBrand ? 'Brand Dashboard' : 'Start Brand Page',
-                  colors: const [Color(0xFFF59E0B), Color(0xFFEF4444)],
-                  onTap: () async {
-                    final status = await CreatorPageService().fetchSetupStatus();
-                    final alreadyBrand =
-                        (status['currentStep'] as String? ?? 'NOT_ELIGIBLE') ==
-                            'ACTIVE';
-                    if (!context.mounted) return;
-                    if (!alreadyBrand && points < 500) {
-                      _showCreatorGateSheet(context, points);
-                      return;
-                    }
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => alreadyBrand
-                            ? const BrandDashboardScreen()
-                            : const CreateCreatorProfileScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _toolButton(
-                  label: 'Brand Analytics',
-                  colors: const [Color(0xFF5B2EFF), Color(0xFF9B4DFF)],
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const CreatorAdminScreen()),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAdminButton(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -1630,31 +1599,6 @@ class _DashboardState extends State<Dashboard> {
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  fontFamily: 'SpaceGrotesk')),
-        ),
-      ),
-    );
-  }
-
-  Widget _toolButton({
-    required String label,
-    required List<Color> colors,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 46,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: colors),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Center(
-          child: Text(label,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
                   fontFamily: 'SpaceGrotesk')),
         ),
       ),
@@ -1797,17 +1741,15 @@ class _DashboardState extends State<Dashboard> {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
+            AvatarWidget(
+              photoUrl: photoUrl,
+              fallbackText: initial,
               radius: 13,
               backgroundColor: _accent.withValues(alpha: 0.30),
-              backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-              child: photoUrl.isEmpty
-                  ? Text(initial,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold))
-                  : null,
+              textStyle: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 3),
             const Text(

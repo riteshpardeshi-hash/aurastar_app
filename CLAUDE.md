@@ -113,3 +113,26 @@ Uses `firebase_core`, `firebase_auth`, `cloud_firestore`, `firebase_storage`. Cl
 - Use `Colors.x.withValues(alpha: ...)` — **not** the deprecated `withOpacity`.
 - Auth screens share a full-bleed background image with a dark gradient overlay.
 - `InputDecoration` helpers named `input(String hint)` are defined locally per stateful screen (a duplicated pattern).
+
+## Engineering standards
+
+These apply to every change, not just ones Claude Code makes:
+
+- **Root cause over symptom patch.** A retry/try-catch that silences a
+  failure is not a fix until you can state *why* the failure happens. If you
+  can't explain it in one sentence, keep digging before shipping.
+- **Every bug fix ships with a regression test.** The test should fail
+  against the pre-fix code and pass against the post-fix code — verify this
+  by temporarily reverting the fix and confirming the test actually catches
+  it, not just that it's green.
+- **Non-trivial decisions get an ADR** in `docs/decisions/` — see that
+  folder's `README.md` for when one is warranted and the template to use.
+  This mirrors the backend team's own ADR convention.
+- **Ground claims in the spec, not assumption.** When behavior depends on
+  the backend (status codes, token lifetimes, response shapes), check the
+  live OpenAPI spec (`http://144.91.79.237:3786/docs/openapi.yaml`, or the
+  Scalar UI at `/docs`) rather than guessing from client-side symptoms
+  alone. It lives in the separate backend repo (`docs/api/openapi.yaml`
+  there), not this one.
+- **PRs explain "why," not "what."** The diff already shows what changed —
+  see `.github/pull_request_template.md`.

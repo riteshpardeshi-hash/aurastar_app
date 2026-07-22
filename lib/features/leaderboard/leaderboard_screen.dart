@@ -22,7 +22,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -56,8 +56,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           tabs: const [
             Tab(text: 'Global'),
             Tab(text: 'Friends'),
-            Tab(text: 'Country'),
-            Tab(text: 'City'),
             Tab(text: 'Challenge'),
           ],
         ),
@@ -79,8 +77,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             emptyTitle: 'No friends yet',
             emptySubtitle: 'Add friends to see how you stack up',
           ),
-          const _CountryBoard(),
-          const _CityBoard(),
           const _ChallengeBoard(),
         ],
       ),
@@ -179,122 +175,6 @@ class _ApiBoardState extends State<_ApiBoard>
       showCurrentUserFooter: !userInList && _myId != null,
       scrollController: _scrollCtrl,
       loadingMore: _loading,
-    );
-  }
-}
-
-// ── City Board ─────────────────────────────────────────────────────────────────
-
-class _CityBoard extends StatelessWidget {
-  const _CityBoard();
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: AuthApiService().getProfile(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
-        final city = (snap.data?['city'] as String?)?.trim() ?? '';
-
-        if (city.isEmpty) {
-          return _emptyState(
-            'No city set',
-            'Update your city in Settings to join the city board',
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on_rounded, color: _accent, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    city,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      fontFamily: 'SpaceGrotesk',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // City rankings need a backend /leaderboard/city endpoint that
-            // doesn't exist yet — Global/Friends boards above already work.
-            Expanded(
-              child: _emptyState(
-                  'City board coming soon', 'We\'re still wiring this up!'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-// ── Country Board ──────────────────────────────────────────────────────────────
-
-class _CountryBoard extends StatelessWidget {
-  const _CountryBoard();
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: AuthApiService().getProfile(),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
-        final country = (snap.data?['country'] as String?)?.trim() ?? '';
-
-        if (country.isEmpty) {
-          return _emptyState(
-            'No country set',
-            'Update your profile to join the country board',
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.public_rounded, color: _accent, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    country,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      fontFamily: 'SpaceGrotesk',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Country rankings need a backend /leaderboard/country endpoint
-            // that doesn't exist yet — Global/Friends boards above work.
-            Expanded(
-              child: _emptyState(
-                  'Country board coming soon', 'We\'re still wiring this up!'),
-            ),
-          ],
-        );
-      },
     );
   }
 }

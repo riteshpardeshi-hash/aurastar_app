@@ -35,6 +35,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
 
   File? _pickedVideo;
   bool _loadingCategories = true;
+  String? _categoriesError;
   bool _saving = false;
 
   static const _difficulties = ['Easy', 'Medium', 'Hard'];
@@ -55,12 +56,20 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
   }
 
   Future<void> _loadCategories() async {
-    final cats = await CreatorChallengesService().fetchCategories();
-    if (!mounted) return;
-    setState(() {
-      _categories = cats;
-      _loadingCategories = false;
-    });
+    try {
+      final cats = await CreatorChallengesService().fetchCategories();
+      if (!mounted) return;
+      setState(() {
+        _categories = cats;
+        _loadingCategories = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _categoriesError = e.toString().replaceFirst('Exception: ', '');
+        _loadingCategories = false;
+      });
+    }
   }
 
   @override
@@ -242,6 +251,14 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
+                  )
+                : _categoriesError != null
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      _categoriesError!,
+                      style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13),
+                    ),
                   )
                 : Wrap(
                     spacing: 8,

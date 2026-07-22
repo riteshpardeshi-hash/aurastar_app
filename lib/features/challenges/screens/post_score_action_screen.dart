@@ -2,8 +2,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../dashboard/dashboard.dart';
@@ -32,7 +30,6 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
 
   Map<String, dynamic>? _submission;
   bool _loading = true;
-  bool _actioning = false;
   bool _isInstagramSharing = false;
   final _cardKey = GlobalKey();
 
@@ -74,80 +71,10 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
-
-  Future<void> _archive() async {
-    final ok = await _confirm(
-      title: 'Archive Video',
-      body: 'Your video will be private. Your Auras are kept.',
-      confirmLabel: 'Archive',
-      confirmColor: Colors.orange,
-    );
-    if (!ok || !mounted) return;
-    setState(() => _actioning = true);
-    try {
-      await FirebaseFirestore.instance
-          .collection('submissions')
-          .doc(widget.submissionId)
-          .update({'isArchived': true, 'isPublic': false});
-      _navigateToDashboard();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _actioning = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Action failed. Please try again.')),
-      );
-    }
-  }
-
-  Future<void> _delete() async {
-    final auraPoints = (_submission?['auraPoints'] as num?)?.toInt() ?? 0;
-    final netAwarded = (_submission?['netAurasAwarded'] as num?)?.toInt() ?? auraPoints;
-    final deduct = netAwarded > 0 ? netAwarded : auraPoints;
-
-    final ok = await _confirm(
-      title: 'Delete Video',
-      body: deduct > 0
-          ? 'This will permanently remove your video and deduct $deduct Aura Points from your balance.'
-          : 'This will permanently remove your video.',
-      confirmLabel: 'Delete',
-      confirmColor: Colors.redAccent,
-    );
-    if (!ok || !mounted) return;
-
-    setState(() => _actioning = true);
-    final user = FirebaseAuth.instance.currentUser;
-
-    try {
-      final db = FirebaseFirestore.instance;
-      final batch = db.batch();
-      batch.update(
-        db.collection('submissions').doc(widget.submissionId),
-        {'isDeleted': true, 'isPublic': false, 'isArchived': false, 'isCountedForDailyAuras': false},
-      );
-      if (deduct > 0 && user != null) {
-        batch.update(
-          db.collection('users').doc(user.uid),
-          {'totalRewards': FieldValue.increment(-deduct)},
-        );
-        batch.set(db.collection('auraTransactions').doc(), {
-          'userId': user.uid,
-          'amount': -deduct,
-          'type': 'deleted_video_deduction',
-          'sourceId': widget.submissionId,
-          'description': 'Video deleted — $deduct Auras deducted',
-          'createdAt': Timestamp.now(),
-        });
-      }
-      await batch.commit();
-      _navigateToDashboard();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _actioning = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Action failed. Please try again.')),
-      );
-    }
-  }
+  // Archive/Delete removed — the backend has no per-submission archive or
+  // delete endpoint yet (submissions live in the REST/Mongo API now, not
+  // Firestore, so the old Firestore writes here always failed with
+  // not-found). Re-add once that endpoint exists.
 
   Future<void> _shareToInstagramStory() async {
     if (_isInstagramSharing) return;
@@ -187,40 +114,11 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     );
   }
 
-  Future<bool> _confirm({
-    required String title,
-    required String body,
-    required String confirmLabel,
-    required Color confirmColor,
-  }) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF12102A),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            content: Text(body, style: const TextStyle(color: Colors.white70, height: 1.4)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: Text(confirmLabel,
-                    style: TextStyle(color: confirmColor, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (_loading || _actioning) {
+    if (_loading) {
       return const Scaffold(
         backgroundColor: _bg,
         body: Center(child: CircularProgressIndicator(color: _accent)),
@@ -281,36 +179,20 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                     ),
                   ),
                 ),
-              const Text(
-                'What do you want to do\nwith your video?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  height: 1.35,
+              if (status != 'rejected') ...[
+                const Text(
+                  'Share your result',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    height: 1.35,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 28),
-              _buildAction(
-                label: 'Archive (Keep Private)',
-                subtitle: 'Only you can see it. Your Auras are kept.',
-                icon: Icons.archive_outlined,
-                gradient: const [Color(0xFF374151), Color(0xFF1F2937)],
-                onTap: _archive,
-              ),
-              const SizedBox(height: 12),
-              _buildInstagramAction(),
-              const SizedBox(height: 12),
-              _buildAction(
-                label: 'Delete Video',
-                subtitle: netAwarded > 0
-                    ? 'Removes video and deducts $netAwarded Aura Points.'
-                    : 'Removes your video permanently.',
-                icon: Icons.delete_outline_rounded,
-                gradient: const [Color(0xFF7F1D1D), Color(0xFF450A0A)],
-                onTap: _delete,
-              ),
+                const SizedBox(height: 28),
+                _buildInstagramAction(),
+              ],
             ],
           ),
         ),
@@ -502,47 +384,6 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     );
   }
 
-  Widget _buildAction({
-    required String label,
-    required String subtitle,
-    required IconData icon,
-    required List<Color> gradient,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 26),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 3),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: Colors.white60, fontSize: 12, height: 1.35)),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white30, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // ── Animated sub-score bar ─────────────────────────────────────────────────────

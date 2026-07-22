@@ -90,9 +90,10 @@ class _InterestsScreenState extends State<InterestsScreen> {
       // Silently continuing past a failure here left users stuck with an
       // incomplete profile and no way to tell why uploads failed later.
       if (!mounted) return;
+      final reason = e.toString().replaceFirst('Exception: ', '');
       setState(() {
         _saving = false;
-        _errorText = 'Failed to save your interests. Please try again.';
+        _errorText = 'Failed to save your interests: $reason';
       });
       return;
     }
