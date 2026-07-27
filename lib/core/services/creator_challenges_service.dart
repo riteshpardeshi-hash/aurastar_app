@@ -129,17 +129,6 @@ class CreatorChallengesService {
     return res['data']['challenge'] as Map<String, dynamic>;
   }
 
-  /// Full preview with real presigned `videoUrl`/`thumbnailUrl`, shown before submit.
-  Future<Map<String, dynamic>?> fetchPreview(String id) async {
-    try {
-      final res = await _client.get('/creator/challenges/$id/preview', auth: true);
-      if (res['status'] != 'success') return null;
-      return res['data'] as Map<String, dynamic>?;
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Lightweight polling endpoint for list cards.
   Future<Map<String, dynamic>?> fetchStatus(String id) async {
     try {
