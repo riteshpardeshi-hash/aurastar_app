@@ -3,20 +3,15 @@ import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
-// Category metadata — single source of truth used by both this screen and dashboard
-const categoryMeta = <String, ({IconData icon, Color color})>{
-  'Dance':   (icon: Icons.music_note_rounded,        color: Color(0xFF4B6EF6)),
-  'Fitness': (icon: Icons.fitness_center_rounded,    color: Color(0xFF22C55E)),
-  'Fashion': (icon: Icons.checkroom_rounded,         color: Color(0xFFFF6B9D)),
-  'Sports':  (icon: Icons.sports_basketball_rounded, color: Color(0xFFF97316)),
-  'Comedy':  (icon: Icons.mood_rounded,              color: Color(0xFFEAB308)),
-  'Skill':   (icon: Icons.psychology_rounded,        color: Color(0xFF06B6D4)),
-};
-
 class CategoryChallengesScreen extends StatefulWidget {
-  final String category;
+  final String categoryId;
+  final String categoryName;
 
-  const CategoryChallengesScreen({super.key, required this.category});
+  const CategoryChallengesScreen({
+    super.key,
+    required this.categoryId,
+    required this.categoryName,
+  });
 
   @override
   State<CategoryChallengesScreen> createState() => _CategoryChallengesScreenState();
@@ -43,8 +38,11 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   Future<void> _fetch() async {
     setState(() => _loading = true);
     try {
+      // GET /challenges' `category` param is the category's ObjectId, not
+      // its display name (confirmed against the live backend: passing the
+      // name gets a 400 "Category ID must be a valid 24-character ID").
       final raw = await ChallengesService().fetchChallenges(
-        category: widget.category,
+        category: widget.categoryId,
         limit: 40,
       );
       final challenges = raw.map(normaliseChallenge).toList();
@@ -98,16 +96,12 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final meta   = categoryMeta[widget.category];
-    final color  = meta?.color  ?? _accent;
-    final icon   = meta?.icon   ?? Icons.category_outlined;
-
     return Scaffold(
       backgroundColor: _bg,
       body: Column(
         children: [
-          _buildHeader(color, icon),
-          _buildFilterRow(color),
+          _buildHeader(),
+          _buildFilterRow(),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -122,7 +116,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
 
   // ── Header ────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(Color color, IconData icon) {
+  Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 8, 16, 14),
       decoration: BoxDecoration(
@@ -141,29 +135,18 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: color.withValues(alpha: 0.35)),
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.category,
+                  widget.categoryName,
                   style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
                 ),
                 if (_totalAttempts > 0)
                   Text(
                     '${_fmt(_totalAttempts)} attempts',
-                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: _accent, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
               ],
             ),
@@ -175,7 +158,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
 
   // ── Filter chips ──────────────────────────────────────────────────────────
 
-  Widget _buildFilterRow(Color color) {
+  Widget _buildFilterRow() {
     return Container(
       height: 48,
       color: _bg,
@@ -192,17 +175,17 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: active ? color.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.05),
+                color: active ? _accent.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: active ? color.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.10),
+                  color: active ? _accent.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.10),
                 ),
               ),
               child: Center(
                 child: Text(
                   _filters[i],
                   style: TextStyle(
-                    color: active ? color : Colors.white38,
+                    color: active ? _accent : Colors.white38,
                     fontSize: 12,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -363,7 +346,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   // ── Empty state ───────────────────────────────────────────────────────────
 
   Widget _buildEmpty() {
-    final label = _activeFilter == 2 ? 'No Easy challenges yet' : 'No ${widget.category} challenges yet';
+    final label = _activeFilter == 2 ? 'No Easy challenges yet' : 'No ${widget.categoryName} challenges yet';
     final sub   = _activeFilter == 2
         ? 'Try a different filter to see more.'
         : 'Check back soon — more are being added!';

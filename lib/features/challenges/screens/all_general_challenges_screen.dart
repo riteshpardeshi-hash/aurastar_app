@@ -27,9 +27,9 @@ class _AllGeneralChallengesScreenState
   List<Map<String, dynamic>>? _challenges;
   bool _loading = false;
 
-  List<String> _categories = const [
-    'Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill',
-  ];
+  // {_id, name} pairs — GET /challenges' `category` filter is the
+  // category's ObjectId, not its display name.
+  List<Map<String, dynamic>> _categories = const [];
   static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
 
   @override
@@ -40,9 +40,9 @@ class _AllGeneralChallengesScreenState
   }
 
   Future<void> _loadCategories() async {
-    final names = await ChallengesService().fetchCategories();
-    if (mounted && names.isNotEmpty) {
-      setState(() => _categories = names);
+    final cats = await ChallengesService().fetchCategoriesWithIds();
+    if (mounted && cats.isNotEmpty) {
+      setState(() => _categories = cats);
     }
   }
 
@@ -190,7 +190,10 @@ class _AllGeneralChallengesScreenState
             mainAxisSpacing: 6,
             childAspectRatio: 0.9,
             children: _categories
-                .map((cat) => _CategoryTile(category: cat))
+                .map((cat) => _CategoryTile(
+                      categoryId: cat['_id'] as String? ?? '',
+                      categoryName: cat['name'] as String? ?? '',
+                    ))
                 .toList(),
           ),
         ),
@@ -435,8 +438,9 @@ class _AllGeneralChallengesScreenState
 
 // ── Category tile ──────────────────────────────────────────────────────────────
 class _CategoryTile extends StatefulWidget {
-  final String category;
-  const _CategoryTile({required this.category});
+  final String categoryId;
+  final String categoryName;
+  const _CategoryTile({required this.categoryId, required this.categoryName});
 
   @override
   State<_CategoryTile> createState() => _CategoryTileState();
@@ -454,7 +458,7 @@ class _CategoryTileState extends State<_CategoryTile> {
   Future<void> _load() async {
     try {
       final list = await ChallengesService()
-          .fetchChallenges(category: widget.category, limit: 1);
+          .fetchChallenges(category: widget.categoryId, limit: 1);
       if (mounted && list.isNotEmpty) {
         setState(() => _videoUrl = list.first['videoUrl'] as String? ?? '');
       }
@@ -468,8 +472,9 @@ class _CategoryTileState extends State<_CategoryTile> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) =>
-                CategoryChallengesScreen(category: widget.category)),
+            builder: (_) => CategoryChallengesScreen(
+                categoryId: widget.categoryId,
+                categoryName: widget.categoryName)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -490,13 +495,13 @@ class _CategoryTileState extends State<_CategoryTile> {
                     ),
                   ),
                 ),
-                Center(child: _CategoryIcon(category: widget.category)),
+                Center(child: _CategoryIcon(categoryName: widget.categoryName)),
                 Positioned(
                   bottom: 7,
                   left: 0,
                   right: 0,
                   child: Text(
-                    widget.category,
+                    widget.categoryName,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
@@ -664,13 +669,12 @@ class _DarkPlaceholder extends StatelessWidget {
 // ── Category icon overlay ───────────────────────────────────────────────────
 // Same icon set as AllCategoriesScreen (assets/images/category icons/*.svg).
 class _CategoryIcon extends StatelessWidget {
-  final String category;
-  const _CategoryIcon({required this.category});
+  final String categoryName;
+  const _CategoryIcon({required this.categoryName});
 
   @override
   Widget build(BuildContext context) {
-    final iconAsset = categoryIconAsset[category];
-    final meta = categoryMeta[category];
+    final iconAsset = categoryIconAsset[categoryName];
     return iconAsset != null
         ? SvgPicture.asset(
             iconAsset,
@@ -678,7 +682,6 @@ class _CategoryIcon extends StatelessWidget {
             height: 50,
             colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
           )
-        : Icon(meta?.icon ?? Icons.category_rounded,
-            color: Colors.white70, size: 50);
+        : const Icon(Icons.category_rounded, color: Colors.white70, size: 50);
   }
 }

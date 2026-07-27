@@ -237,7 +237,8 @@ class _SearchScreenState extends State<SearchScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CategoryChallengesScreen(category: item.title),
+          builder: (_) => CategoryChallengesScreen(
+              categoryId: item.id, categoryName: item.title),
         ),
       );
     } else if (item.type == 'Brand' || item.type == 'Creator') {

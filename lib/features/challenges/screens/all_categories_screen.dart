@@ -3,9 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/challenges_service.dart';
 import 'category_challenges_screen.dart';
 
-// Fallback styling for categories the backend returns that aren't in the
-// known `categoryMeta` map (see category_challenges_screen.dart) or don't
-// have a custom icon asset below.
+// Fallback styling for a category that doesn't have a custom icon asset
+// below (e.g. a new one an admin adds before an icon is designed for it).
 const _fallbackMeta = (icon: Icons.category_rounded, color: Color(0xFF7B2CBF));
 
 // Maps the backend's actual category names to their designed icon in
@@ -26,7 +25,9 @@ const categoryIconAsset = <String, String>{
 };
 
 class AllCategoriesScreen extends StatefulWidget {
-  final List<String> categories;
+  // {_id, name} pairs — GET /challenges' `category` filter is the category's
+  // ObjectId, not its display name, so both are needed downstream.
+  final List<Map<String, dynamic>> categories;
 
   const AllCategoriesScreen({super.key, required this.categories});
 
@@ -42,7 +43,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   // resolved, it's still the hardcoded placeholder. Seed from it for an
   // instant first paint, then independently refetch so this screen is
   // correct even when it got here first.
-  late List<String> _categories = widget.categories;
+  late List<Map<String, dynamic>> _categories = widget.categories;
 
   @override
   void initState() {
@@ -51,8 +52,8 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   }
 
   Future<void> _refresh() async {
-    final names = await ChallengesService().fetchCategories();
-    if (mounted && names.isNotEmpty) setState(() => _categories = names);
+    final cats = await ChallengesService().fetchCategoriesWithIds();
+    if (mounted && cats.isNotEmpty) setState(() => _categories = cats);
   }
 
   @override
@@ -98,15 +99,16 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 ),
                 itemCount: _categories.length,
                 itemBuilder: (context, i) {
-                  final name = _categories[i];
-                  final meta = categoryMeta[name] ?? _fallbackMeta;
+                  final id = _categories[i]['_id'] as String? ?? '';
+                  final name = _categories[i]['name'] as String? ?? '';
+                  final meta = _fallbackMeta;
                   final iconAsset = categoryIconAsset[name];
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            CategoryChallengesScreen(category: name),
+                        builder: (_) => CategoryChallengesScreen(
+                            categoryId: id, categoryName: name),
                       ),
                     ),
                     child: Container(
