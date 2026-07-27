@@ -322,7 +322,7 @@ class _DashboardState extends State<Dashboard> {
                   child: SafeArea(
                     bottom: false,
                     child: _buildHeader(
-                        context, points, tier, displayName, userId),
+                        context, points, tier, displayName, userId, photoUrl),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -353,7 +353,7 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context, int points, AuraTier tier,
-      String displayName, String userId) {
+      String displayName, String userId, String photoUrl) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
@@ -437,22 +437,15 @@ class _DashboardState extends State<Dashboard> {
               height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF7C3AED), Color(0xFF4B6EF6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
                 border: Border.all(color: _accent, width: 1.5),
               ),
-              child: Center(
-                child: Text(
-                  displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
+              padding: const EdgeInsets.all(1.5),
+              child: AvatarWidget(
+                photoUrl: photoUrl,
+                fallbackText:
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A',
+                radius: 17,
+                backgroundColor: const Color(0xFF7C3AED),
               ),
             ),
           ),
