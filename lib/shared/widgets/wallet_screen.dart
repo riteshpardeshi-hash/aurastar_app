@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
+import '../../core/utils/wallet_today_total.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -47,15 +48,7 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
-  int get _todayTotal {
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    return _transactions.fold<int>(0, (acc, tx) {
-      final createdAt = DateTime.tryParse(tx['createdAt']?.toString() ?? '');
-      if (createdAt == null || createdAt.isBefore(todayStart)) return acc;
-      return acc + ((tx['amount'] as num?)?.toInt() ?? 0);
-    });
-  }
+  int get _todayTotal => sumTodayTransactions(_transactions);
 
   @override
   Widget build(BuildContext context) {
