@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -97,5 +98,80 @@ void main() {
 
     expect(find.text('Creator p2-19'), findsOneWidget,
         reason: 'page 2 results must be appended, not replace page 1');
+  });
+
+  testWidgets(
+      "an older query's slow response must not overwrite a newer query's "
+      'results', (tester) async {
+    // The first ("slow") query's response is held back until after the
+    // second ("fast") query's has already landed, mirroring real network
+    // jitter where responses can resolve out of order.
+    final slowResponseGate = Completer<void>();
+
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/search')) {
+        final q = request.url.queryParameters['q'];
+        if (q == 'slow') {
+          await slowResponseGate.future;
+          return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'data': {
+                'docs': [creator('stale-result')],
+                'pagination': {'page': 1, 'pages': 1, 'total': 1, 'limit': 20},
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'docs': [creator('fresh-result')],
+              'pagination': {'page': 1, 'pages': 1, 'total': 1, 'limit': 20},
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/search/recent')) {
+        return http.Response(
+          jsonEncode({'status': 'success', 'data': {'items': []}}), 200);
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(home: SearchScreen()));
+    await tester.pump();
+    await tester.tap(find.text('Creators'));
+    await tester.pump();
+
+    // Fire the slow query first, letting its debounce elapse so the request
+    // actually dispatches (and hangs on slowResponseGate).
+    await tester.enterText(find.byType(TextField), 'slow');
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Now fire a second, faster query before the first has resolved.
+    await tester.enterText(find.byType(TextField), 'fresh');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    expect(find.text('Creator fresh-result'), findsOneWidget,
+        reason: 'the newer query\'s results must be showing');
+
+    // Let the stale first response land after the fact.
+    slowResponseGate.complete();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    expect(find.text('Creator fresh-result'), findsOneWidget,
+        reason: 'the newer results must still be showing');
+    expect(find.text('Creator stale-result'), findsNothing,
+        reason: "the older, slower query's response must not overwrite the "
+            "newer query's results once it finally resolves");
   });
 }

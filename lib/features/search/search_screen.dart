@@ -34,6 +34,12 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _hasMore = false;
   bool _loadingMore = false;
 
+  // Bumped on every new search/filter change; a request only applies its
+  // result if this still matches the token it was issued with — guards
+  // against a slower, older query's response overwriting a newer one's
+  // results if responses resolve out of order.
+  int _searchToken = 0;
+
   static const _filters = ['All', 'Challenges', 'Brands', 'Creators'];
 
   static const _filterTypeMap = {
@@ -81,6 +87,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _search(String q) async {
+    final token = ++_searchToken;
     if (q.trim().isEmpty) {
       setState(() { _results = []; _searching = false; _hasMore = false; });
       return;
@@ -93,24 +100,27 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final type = _filterTypeMap[_filter] ?? 'all';
       final data = await _service.search(q, type: type, page: 1);
-      if (!mounted) return;
+      if (!mounted || token != _searchToken) return;
       setState(() {
         _results = _parseResults(data, type);
         _hasMore = _moreAvailable(data, type);
         _searching = false;
       });
     } catch (_) {
-      if (mounted) setState(() { _results = []; _searching = false; });
+      if (mounted && token == _searchToken) {
+        setState(() { _results = []; _searching = false; });
+      }
     }
   }
 
   Future<void> _loadMore() async {
+    final token = _searchToken;
     setState(() => _loadingMore = true);
     try {
       final type = _filterTypeMap[_filter] ?? 'all';
       final nextPage = _page + 1;
       final data = await _service.search(_query, type: type, page: nextPage);
-      if (!mounted) return;
+      if (!mounted || token != _searchToken) return;
       setState(() {
         _results = [..._results, ..._parseResults(data, type)];
         _page = nextPage;
@@ -118,7 +128,9 @@ class _SearchScreenState extends State<SearchScreen> {
         _loadingMore = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loadingMore = false);
+      if (mounted && token == _searchToken) {
+        setState(() => _loadingMore = false);
+      }
     }
   }
 
@@ -316,6 +328,7 @@ class _SearchScreenState extends State<SearchScreen> {
             GestureDetector(
               onTap: () {
                 _controller.clear();
+                _searchToken++; // invalidate any in-flight search response
                 setState(() { _query = ''; _results = []; });
               },
               child: Padding(
