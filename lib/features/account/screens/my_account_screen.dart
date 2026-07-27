@@ -22,11 +22,9 @@ import 'edit_profile_screen.dart';
 class _AchievementCardsSection extends StatelessWidget {
   final List<Map<String, dynamic>> cards;
   final String username;
-  final String? city;
   const _AchievementCardsSection({
     required this.cards,
     required this.username,
-    this.city,
   });
 
   @override
@@ -56,7 +54,6 @@ class _AchievementCardsSection extends StatelessWidget {
               cardData: cards[i],
               featured: i == 0,
               username: username,
-              city: city,
             ),
           ),
         ),
@@ -73,13 +70,11 @@ class _AchievementMiniCard extends StatelessWidget {
   final Map<String, dynamic> cardData;
   final bool featured;
   final String username;
-  final String? city;
 
   const _AchievementMiniCard({
     required this.cardData,
     required this.featured,
     required this.username,
-    this.city,
   });
 
   static const _accent = Color(0xFF7B2CBF);
@@ -181,7 +176,6 @@ class _AchievementMiniCard extends StatelessWidget {
         challengeId: challengeId,
         auraPoints: auraPoints,
         username: username,
-        city: city,
       ),
     );
   }
@@ -192,14 +186,12 @@ class _AchievementCardPreviewDialog extends StatefulWidget {
   final String challengeId;
   final int auraPoints;
   final String username;
-  final String? city;
 
   const _AchievementCardPreviewDialog({
     required this.challengeTitle,
     required this.challengeId,
     required this.auraPoints,
     required this.username,
-    this.city,
   });
 
   @override
@@ -261,7 +253,6 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
                   challengeId: widget.challengeId,
                   auraPoints: widget.auraPoints,
                   username: widget.username,
-                  city: widget.city,
                 ),
               ),
               const SizedBox(height: 18),
@@ -1172,8 +1163,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               cards: _achievements,
               username: _profile['profileName'] as String? ??
                   _profile['username'] as String? ?? '',
-              city: (_profile['city'] as Map<String, dynamic>?)?['name']
-                  as String?,
             ),
             _buildMyVideosSection(context),
             _SavedChallengesGrid(challenges: _savedChallenges),

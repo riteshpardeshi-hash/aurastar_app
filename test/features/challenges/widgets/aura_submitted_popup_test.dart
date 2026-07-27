@@ -51,5 +51,12 @@ void main() {
         reason: 'submissions are never actually archived server-side');
     expect(find.textContaining('deletes in 7 days'), findsNothing);
     expect(find.text('Not your best — no Auras earned'), findsOneWidget);
+
+    // Regression: the card used to have a "#X in {city}" rank badge fed by
+    // _cityRank, a field declared but never assigned anywhere — no backend
+    // endpoint exposes a city-scoped rank at all, so the badge could never
+    // render for a real user. Removed rather than left permanently dead.
+    expect(find.textContaining(RegExp(r'^#\d+ in ')), findsNothing,
+        reason: 'the city-rank badge has no real data source and was removed');
   });
 }

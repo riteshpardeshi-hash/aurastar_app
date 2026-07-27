@@ -51,8 +51,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   int _triviaIndex = 0;
 
   String _username = '';
-  String _city = '';
-  int? _cityRank;
   bool _isSharingCard = false;
   bool _isInstagramSharing = false;
   final _cardKey = GlobalKey();
@@ -178,14 +176,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     try {
       final profile = await AuthApiService().getProfile();
       if (!mounted || profile == null) return;
-      final city =
-          (profile['city'] as Map<String, dynamic>?)?['name'] as String? ??
-              '';
       final name = profile['displayName'] as String? ??
           profile['profileName'] as String? ??
           profile['username'] as String? ?? '';
       setState(() {
-        if (city.isNotEmpty) _city = city;
         if (name.isNotEmpty) _username = name;
       });
     } catch (_) {}
@@ -687,8 +681,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
               challengeId: widget.challengeId,
               auraPoints: _netAurasAwarded,
               username: _username,
-              city: _city.isNotEmpty ? _city : null,
-              cityRank: _cityRank,
             ),
           ),
           const SizedBox(height: 8),
