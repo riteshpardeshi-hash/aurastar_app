@@ -523,8 +523,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
     if (_mySubmission != null) {
       final score = (_mySubmission!['aiScore'] as num?)?.toInt() ?? 0;
-      final status = _mySubmission!['status'] as String? ?? '';
-      final approved = status == 'approved';
+      final approved = submissionStatusFromApi(_mySubmission!) == 'approved';
       return GestureDetector(
         onTap: _showTakeChallengeSheet,
         child: Container(
@@ -661,10 +660,14 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   Widget _buildSubmissionTile(Map<String, dynamic> sub, int rank) {
     final videoUrl = sub['videoUrl'] as String? ?? '';
     final score = (sub['aiScore'] as num?)?.toInt() ?? 0;
-    final status = sub['status'] as String? ?? '';
-    final approved = status == 'approved';
-    final user = sub['user'] as Map<String, dynamic>?;
-    final username = user?['displayName'] as String? ?? 'User';
+    final approved = submissionStatusFromApi(sub) == 'approved';
+    // GET /challenges/{id}/submissions never joins a display name for the
+    // submitter — `userId` comes back as either a bare id string or a
+    // populated `{_id}` object with no name field, and there's no public
+    // endpoint that resolves a player id to a name (creators/brands lookups
+    // 404 for regular players; player profiles are otherwise private). Fall
+    // back to a rank-based label instead of a fabricated or identical name.
+    final username = 'Player ${rank + 1}';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),

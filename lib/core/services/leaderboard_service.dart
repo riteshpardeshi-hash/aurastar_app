@@ -15,12 +15,12 @@ class LeaderboardService {
   }) =>
       _fetch('/leaderboard/friends', page: page, limit: limit, auth: true);
 
-  Future<List<Map<String, dynamic>>> fetchChallenge(
-    String challengeId, {
-    int page = 1,
-    int limit = 20,
-  }) =>
-      _fetch('/leaderboard/challenge/$challengeId', page: page, limit: limit);
+  // No fetchChallenge() here — GET /leaderboard/challenge/{id} is empirically
+  // broken (confirmed against the live backend: it returns an empty
+  // `responses` array for challenges that have real, scored public
+  // submissions via GET /challenges/{id}/submissions). Per-challenge boards
+  // use ChallengesService().fetchSubmissions() + normaliseSubmissionEntry
+  // instead — see leaderboard_screen.dart's _ChallengeBoard.
 
   Future<List<Map<String, dynamic>>> _fetch(
     String path, {

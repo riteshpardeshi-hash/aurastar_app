@@ -78,4 +78,51 @@ void main() {
       );
     });
   });
+
+  group('normaliseSubmissionEntry', () {
+    // Regression coverage: the challenge leaderboard (leaderboard_screen.dart
+    // and challenge_detail.dart's Top Submissions tile) used to read
+    // sub['user']?['displayName'] and sub['starsCount']/'stars' loosely, but
+    // GET /challenges/{id}/submissions — confirmed against the live
+    // backend — never includes a joined display name, and its `userId` field
+    // is populated with only `{_id}` (or comes back as a bare id string).
+    // starsCount IS a real field on the live Submission record (undocumented
+    // in the stale OpenAPI schema, confirmed present in production data),
+    // read directly here rather than guessed at through multiple fallback keys.
+    test('extracts id from a populated {_id} userId object', () {
+      final e = normaliseSubmissionEntry({
+        'userId': {'_id': 'user-42'},
+        'aiScore': 67,
+        'starsCount': 3,
+      });
+      expect(e['id'], 'user-42');
+      expect(e['score'], 67);
+      expect(e['stars'], 3);
+    });
+
+    test('extracts id from a bare userId string', () {
+      final e = normaliseSubmissionEntry({
+        'userId': 'user-7',
+        'aiScore': 40,
+        'starsCount': 0,
+      });
+      expect(e['id'], 'user-7');
+    });
+
+    test('never fabricates a name — leaves name/username blank for the '
+        'caller to apply an honest fallback', () {
+      final e = normaliseSubmissionEntry({
+        'userId': {'_id': 'user-1'},
+        'aiScore': 50,
+      });
+      expect(e['name'], '');
+      expect(e['username'], '');
+    });
+
+    test('missing aiScore/starsCount default to 0, not a crash', () {
+      final e = normaliseSubmissionEntry({'userId': 'user-1'});
+      expect(e['score'], 0);
+      expect(e['stars'], 0);
+    });
+  });
 }

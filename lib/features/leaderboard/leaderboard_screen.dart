@@ -239,10 +239,10 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
     final id = _challengeId;
     if (id == null) return;
     setState(() => _loadingBoard = true);
-    final raw = await LeaderboardService().fetchChallenge(id, limit: 50);
+    final raw = await ChallengesService().fetchSubmissions(id, limit: 50);
     if (!mounted || _challengeId != id) return;
     setState(() {
-      _entries = raw.map(normaliseLeaderboardEntry).toList();
+      _entries = raw.map(normaliseSubmissionEntry).toList();
       _loadingBoard = false;
     });
   }
@@ -325,9 +325,13 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                     itemCount: _entries.length,
                     itemBuilder: (_, i) {
                       final e = _entries[i];
-                      final username = (e['username'] as String).isNotEmpty
-                          ? e['username'] as String
-                          : e['name'] as String;
+                      final rawUsername = e['username'] as String;
+                      final rawName = e['name'] as String;
+                      final username = rawUsername.isNotEmpty
+                          ? rawUsername
+                          : rawName.isNotEmpty
+                              ? rawName
+                              : 'Player ${i + 1}';
                       return _SubmissionRow(
                         rank: i + 1,
                         username: username,

@@ -173,6 +173,24 @@ String submissionStatusFromApi(Map<String, dynamic> s) {
   }
 }
 
+// GET /challenges/{id}/submissions (the backend's own docs call this "the
+// public leaderboard" — already sorted by aiScore descending) never joins a
+// display name: `userId` comes back as a bare id string or a populated
+// `{_id}` object, never with a name. There's no public endpoint to resolve a
+// player id to a name (creators/brands lookups 404 for regular players;
+// player profiles are otherwise private) — name/username are left blank
+// here so callers can apply an honest, rank-based fallback instead of
+// fabricating an identity.
+Map<String, dynamic> normaliseSubmissionEntry(Map<String, dynamic> s) {
+  return {
+    'id': _extractRefId(s['userId']),
+    'name': '',
+    'username': '',
+    'score': (s['aiScore'] as num?)?.toInt() ?? 0,
+    'stars': (s['starsCount'] as num?)?.toInt() ?? 0,
+  };
+}
+
 // Helper — normalises a backend challenge map into the fields the UI expects.
 Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
   return {
