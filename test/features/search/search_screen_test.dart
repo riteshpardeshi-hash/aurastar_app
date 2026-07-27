@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/features/explore/screens/creator_profile_screen.dart';
 import 'package:aura_app/features/search/search_screen.dart';
 
 // Regression coverage: SearchScreen used to hard-cap at whatever the
@@ -173,5 +174,64 @@ void main() {
     expect(find.text('Creator stale-result'), findsNothing,
         reason: "the older, slower query's response must not overwrite the "
             "newer query's results once it finally resolves");
+  });
+
+  testWidgets('tapping a Brand search result opens its creator profile',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/search')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenges': [],
+              'brands': [
+                {'_id': 'brand-1', 'displayName': 'Nova Brand', 'username': 'nova'},
+              ],
+              'creators': [],
+              'categories': [],
+            },
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/search/recent')) {
+        return http.Response(
+          jsonEncode({'status': 'success', 'data': {'items': []}}), 200);
+      }
+      if (path.endsWith('/creators/brand-1')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {'displayName': 'Nova Brand', 'avatar': ''},
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/videos') || path.endsWith('/followers')) {
+        return http.Response(
+          jsonEncode({'status': 'success', 'data': {}}), 200);
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(home: SearchScreen()));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'nova');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    expect(find.text('Nova Brand'), findsOneWidget);
+    await tester.tap(find.text('Nova Brand'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(CreatorProfileScreen), findsOneWidget,
+        reason: 'tapping a Brand/Creator search result used to do nothing '
+            'at all');
   });
 }

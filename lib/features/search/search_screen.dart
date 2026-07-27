@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/category_challenges_screen.dart';
+import '../explore/screens/creator_profile_screen.dart';
 import '../../../core/services/search_service.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -237,6 +238,13 @@ class _SearchScreenState extends State<SearchScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => CategoryChallengesScreen(category: item.title),
+        ),
+      );
+    } else if (item.type == 'Brand' || item.type == 'Creator') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CreatorProfileScreen(creatorId: item.id),
         ),
       );
     }
