@@ -1214,7 +1214,7 @@ class _RewardsSection extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         SizedBox(
-          height: 148,
+          height: 180,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.zero,

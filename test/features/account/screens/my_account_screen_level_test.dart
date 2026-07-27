@@ -63,11 +63,10 @@ void main() {
     });
     await tester.pump();
 
-    // Unrelated to this fix: _HorizontalTierCard's fixed card height
-    // overflows whenever an unlocked tier has a reward to show (true for
-    // every user, since Rookie is always unlocked and always has one) —
-    // drain it so it doesn't fail this test, which isn't about that bug.
-    tester.takeException();
+    expect(tester.takeException(), isNull,
+        reason: '_HorizontalTierCard used to overflow its fixed 148px height '
+            'whenever an unlocked tier has a reward to show (true for every '
+            'user, since Rookie is always unlocked and always has one)');
 
     expect(find.text('42'), findsOneWidget,
         reason: 'level must come from the profile API field (42), not '
