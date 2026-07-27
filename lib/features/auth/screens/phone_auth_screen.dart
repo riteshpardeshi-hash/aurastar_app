@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/utils/error_message.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -53,7 +54,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _snack(e.toString());
+      _snack(humanizeError(e));
     }
   }
 
@@ -91,7 +92,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      _snack(e.toString());
+      _snack(humanizeError(e));
     }
   }
 
