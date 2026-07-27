@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/follow_button.dart';
@@ -22,7 +22,31 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
   static const _allCategories = ['All', 'Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill'];
   int _activeCat = 0;
 
-  final String? _uid = FirebaseAuth.instance.currentUser?.uid;
+  String? _uid;
+  List<Map<String, dynamic>>? _challenges;
+
+  @override
+  void initState() {
+    super.initState();
+    ApiClient().userId.then((id) {
+      if (mounted) setState(() => _uid = id);
+    });
+    _loadChallenges();
+  }
+
+  Future<void> _loadChallenges() async {
+    setState(() => _challenges = null);
+    final category = _activeCat > 0 ? _allCategories[_activeCat] : null;
+    final raw = await ChallengesService()
+        .fetchChallenges(sourceType: 'Brand', category: category, limit: 40);
+    if (!mounted) return;
+    setState(() => _challenges = raw.map(normaliseChallenge).toList());
+  }
+
+  void _selectCategory(int i) {
+    setState(() => _activeCat = i);
+    _loadChallenges();
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -172,7 +196,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
         itemBuilder: (_, i) {
           final active = i == _activeCat;
           return GestureDetector(
-            onTap: () => setState(() => _activeCat = i),
+            onTap: () => _selectCategory(i),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               margin: const EdgeInsets.only(right: 8),
@@ -201,53 +225,37 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     );
   }
 
-  // ── Challenge list (still Firestore) ──────────────────────────────────────
-  // These are challenges made by non-system creatorId users, which in the new
-  // backend model are brand accounts (see Swagger `/brands/*`), not `/creators/*`
-  // — out of scope for the creators integration, left as-is until Brands is done.
+  // ── Challenge list ─────────────────────────────────────────────────────────
+  // Non-system creatorId challenges are brand accounts in the current backend
+  // model (see /brands/*), filtered here via GET /challenges?sourceType=Brand.
 
   Widget _buildChallengeList() {
-    Query query = FirebaseFirestore.instance
-        .collection('challenges')
-        .where('creatorId', isNotEqualTo: 'system')
-        .where('status', isEqualTo: 'approved')
-        .limit(40);
-
-    if (_activeCat > 0) {
-      query = FirebaseFirestore.instance
-          .collection('challenges')
-          .where('creatorId', isNotEqualTo: 'system')
-          .where('status', isEqualTo: 'approved')
-          .where('category', isEqualTo: _allCategories[_activeCat])
-          .limit(40);
+    final challenges = _challenges;
+    if (challenges == null) {
+      return const Center(child: CircularProgressIndicator(color: _accent));
     }
+    if (challenges.isEmpty) return _buildEmpty();
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: _accent));
-        }
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) return _buildEmpty();
-
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-          itemCount: docs.length,
-          itemBuilder: (_, i) => _buildChallengeCard(docs[i]),
-        );
-      },
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _loadChallenges,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+        itemCount: challenges.length,
+        itemBuilder: (_, i) => _buildChallengeCard(challenges[i]),
+      ),
     );
   }
 
   // ── Challenge card ────────────────────────────────────────────────────────
 
-  Widget _buildChallengeCard(QueryDocumentSnapshot doc) {
-    final data         = doc.data() as Map<String, dynamic>;
+  Widget _buildChallengeCard(Map<String, dynamic> data) {
+    final id           = data['id']            as String;
     final title        = data['title']         as String? ?? '';
     final videoUrl     = data['videoUrl']       as String? ?? '';
     final instructions = data['instructions']  as String? ?? '';
-    final auraPoints   = (data['auraPoints']   as num?)?.toInt() ?? 0;
+    final auraPoints   = (data['starsCount']   as num?)?.toInt() ?? 0;
     final category     = data['category']      as String? ?? '';
     final creatorId    = data['creatorId']      as String? ?? '';
 
@@ -263,7 +271,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
         children: [
           // Thumbnail
           GestureDetector(
-            onTap: () => _openDetail(doc.id, title, instructions, videoUrl),
+            onTap: () => _openDetail(id, title, instructions, videoUrl),
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: SizedBox(
@@ -367,7 +375,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                 Column(
                   children: [
                     GestureDetector(
-                      onTap: () => _openDetail(doc.id, title, instructions, videoUrl),
+                      onTap: () => _openDetail(id, title, instructions, videoUrl),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
@@ -442,12 +450,12 @@ class _CreatorNameChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(creatorId).get(),
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: CreatorsService().fetchCreator(creatorId),
       builder: (context, snap) {
-        final data     = snap.data?.data() as Map<String, dynamic>? ?? {};
-        final pageName = data['pageName'] as String? ?? data['name'] as String? ?? 'Creator';
-        final imgUrl   = data['profileImageUrl'] as String? ?? '';
+        final data     = snap.data != null ? normaliseCreator(snap.data!) : <String, dynamic>{};
+        final pageName = data['displayName'] as String? ?? 'Creator';
+        final imgUrl   = data['avatar'] as String? ?? '';
 
         return GestureDetector(
           onTap: () => Navigator.push(context, MaterialPageRoute(

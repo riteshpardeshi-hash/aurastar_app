@@ -6,6 +6,7 @@ class ChallengesService {
   Future<List<Map<String, dynamic>>> fetchChallenges({
     String? category,
     String? difficulty,
+    String? sourceType,
     int page = 1,
     int limit = 20,
   }) async {
@@ -14,6 +15,7 @@ class ChallengesService {
       'limit': '$limit',
       if (category != null) 'category': category,
       if (difficulty != null) 'difficulty': difficulty,
+      if (sourceType != null) 'sourceType': sourceType,
     };
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
     final res = await _client.get('/challenges?$query');
