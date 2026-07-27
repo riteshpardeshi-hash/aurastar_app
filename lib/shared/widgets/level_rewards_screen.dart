@@ -26,11 +26,9 @@ class LevelRewardsScreen extends StatelessWidget {
         future: AuthApiService().getProfile(),
         builder: (context, snap) {
           final profile = snap.data;
-          final points = (profile?['auraPoints'] as num?)?.toInt() ??
-              (profile?['totalRewards'] as num?)?.toInt() ??
-              0;
-          final currentLevel = (points ~/ 1300) + 1;
-          final currentTier = auraTierForLevel(currentLevel);
+          // Server-computed and authoritative — do not recompute locally.
+          final currentLevel = (profile?['level'] as num?)?.toInt() ?? 1;
+          final currentTier = auraTierForName(profile?['tier'] as String?);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),

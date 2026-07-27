@@ -310,7 +310,6 @@ class MyAccountScreen extends StatefulWidget {
 }
 
 class _MyAccountScreenState extends State<MyAccountScreen> {
-  static const int _xpPerLevel = 1300;
   static const _accent = Color(0xFF7B2CBF);
   static const _bg = Color(0xFF080810);
   static const _card = Color(0xFF0E0C1E);
@@ -381,10 +380,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
   }
 
-  int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
-  int _xpInLevel(int pts) => pts % _xpPerLevel;
-  double _progress(int pts) => (pts % _xpPerLevel) / _xpPerLevel;
-
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
@@ -392,8 +387,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
+    final submissionId = s['_id'] as String? ?? s['id'] as String? ?? '';
     return {
-      'submissionId': s['_id'] as String? ?? s['id'] as String? ?? '',
+      // The Submission and Video are distinct backend documents — DELETE
+      // /videos/{id} needs the Video's own id. Fall back to the submission
+      // id if the API ever omits videoId (delete would then 404 loudly
+      // rather than silently corrupt the wrong document).
+      'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'status': submissionStatusFromApi(s),
       'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
@@ -540,11 +540,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   // ── Aura points card ─────────────────────────────────────────────────────────
-  Widget _buildAuraPointsCard(int points) {
-    final level = _level(points);
-    final progress = _progress(points);
-    final xpToNext = _xpPerLevel - _xpInLevel(points);
-    final tier = auraTierForLevel(level);
+  Widget _buildAuraPointsCard(int points, int level, String? tierName) {
+    final tier = auraTierForName(tierName);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -654,44 +651,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  '$xpToNext XP to Next Level',
-                  style: const TextStyle(
-                      color: Colors.white60, fontSize: 11),
-                ),
-                const SizedBox(height: 6),
-                LayoutBuilder(
-                  builder: (context, constraints) => Stack(
-                    children: [
-                      Container(
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.white12,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: SizedBox(
-                          height: 5,
-                          width: constraints.maxWidth * progress,
-                          child: Image.asset('assets/images/bar.png',
-                              fit: BoxFit.fill),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    '${(progress * 100).round()}%',
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 10),
-                  ),
                 ),
               ],
             ),
@@ -1016,27 +975,30 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               final aiScore = data['aiScore'];
               final aiReason = data['aiReason'] as String;
               final reviewedByAI = data['reviewedByAI'] as bool;
-              final submissionId = data['submissionId'] as String;
+              final videoId = data['videoId'] as String;
 
               final statusColor = _statusColor(status);
               final statusLabel = _statusLabel(status);
 
               return GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UserVideoDetailScreen(
-                      videoNumber: i + 1,
-                      auraPoints: auraPoints,
-                      videoUrl: videoUrl,
-                      status: status,
-                      aiScore: aiScore,
-                      aiReason: aiReason,
-                      reviewedByAI: reviewedByAI,
-                      submissionId: submissionId,
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserVideoDetailScreen(
+                        videoNumber: i + 1,
+                        auraPoints: auraPoints,
+                        videoUrl: videoUrl,
+                        status: status,
+                        aiScore: aiScore,
+                        aiReason: aiReason,
+                        reviewedByAI: reviewedByAI,
+                        videoId: videoId,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                  if (result == 'deleted') _loadAll();
+                },
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: Stack(
@@ -1161,6 +1123,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final totalRewards = (_profile['auraPoints'] as num?)?.toInt() ??
         (_profile['totalRewards'] as num?)?.toInt() ??
         0;
+    // Server-computed and authoritative — do not recompute locally.
+    final level = (_profile['level'] as num?)?.toInt() ?? 1;
+    final tierName = _profile['tier'] as String?;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1198,9 +1163,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           children: [
             _buildProfileCard(context),
             const SizedBox(height: 16),
-            _buildAuraPointsCard(totalRewards),
+            _buildAuraPointsCard(totalRewards, level, tierName),
             _buildStreakCard(),
-            _RewardsSection(level: _level(totalRewards)),
+            _RewardsSection(level: level),
             const SizedBox(height: 8),
             _buildReferralCard(context),
             _AchievementCardsSection(

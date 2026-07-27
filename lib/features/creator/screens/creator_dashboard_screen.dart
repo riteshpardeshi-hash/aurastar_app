@@ -20,10 +20,6 @@ class CreatorDashboardScreen extends StatefulWidget {
 }
 
 class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
-  static const int _xpPerLevel = 1300;
-  int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
-  int _xpInCurrentLevel(int pts) => pts % _xpPerLevel;
-
   bool _loading = true;
   Map<String, dynamic>? _page;
   Map<String, dynamic> _summary = {};
@@ -31,6 +27,8 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
   List<Map<String, dynamic>> _pendingActions = [];
   int _followingCount = 0;
   int _auraBalance = 0;
+  int _level = 1;
+  String? _tierName;
   List<Map<String, dynamic>> _videos = [];
 
   @override
@@ -46,11 +44,12 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
       CreatorPageService().fetchDashboardSummary(),
       CreatorDashboardService().fetchOverview(),
       CreatorAccountService().fetchFollowingCount(),
-      AuthApiService().fetchAuraBalance(),
+      AuthApiService().getProfile(),
       AuthApiService().fetchMyVideos(limit: 20),
     ]);
     if (!mounted) return;
     final overview = results[2] as Map<String, dynamic>;
+    final profile = results[4] as Map<String, dynamic>?;
     setState(() {
       _page = results[0] as Map<String, dynamic>?;
       _summary = results[1] as Map<String, dynamic>;
@@ -58,7 +57,10 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
       _pendingActions =
           (overview['pendingActions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _followingCount = results[3] as int;
-      _auraBalance = results[4] as int;
+      _auraBalance = (profile?['auraPoints'] as num?)?.toInt() ?? 0;
+      // Server-computed and authoritative — do not recompute locally.
+      _level = (profile?['level'] as num?)?.toInt() ?? 1;
+      _tierName = profile?['tier'] as String?;
       _videos = (results[5] as List)
           .cast<Map<String, dynamic>>()
           .map(_normaliseVideo)
@@ -114,11 +116,10 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     final profileComplete = _summary['profileComplete'] as bool? ?? true;
     final creatorPageLive = _summary['creatorPageLive'] as bool? ?? true;
 
-    final level = _level(_auraBalance);
-    final xpInLevel = _xpInCurrentLevel(_auraBalance);
-    final tier = auraTierForLevel(level);
-    final nextTier = nextAuraTier(level);
-    final progressFraction = (xpInLevel / _xpPerLevel).clamp(0.0, 1.0);
+    final tier = auraTierForName(_tierName);
+    // Ordinal "what's next" — not derived from a guessed level threshold.
+    final tierIdx = auraTiers.indexOf(tier);
+    final nextTier = tierIdx + 1 < auraTiers.length ? auraTiers[tierIdx + 1] : null;
 
     final totalSubs = _videos.length;
     final approvedSubs = _videos.where((v) => v['status'] == 'approved').length;
@@ -156,8 +157,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
         if (_pendingActions.isNotEmpty)
           SliverToBoxAdapter(child: _buildPendingActions(context)),
         SliverToBoxAdapter(
-            child: _buildAuraProgress(
-                level, tier, nextTier, xpInLevel, progressFraction, _auraBalance)),
+            child: _buildAuraProgress(_level, tier, nextTier, _auraBalance)),
         SliverToBoxAdapter(
             child: _buildStats(_auraBalance, totalSubs, approvedSubs, approvalRate)),
         if (_cards.isNotEmpty) SliverToBoxAdapter(child: _buildCards()),
@@ -337,8 +337,6 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     int level,
     AuraTier tier,
     AuraTier? nextTier,
-    int xpInLevel,
-    double progressFraction,
     int totalRewards,
   ) {
     return Container(
@@ -384,29 +382,14 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                       fontFamily: 'SpaceGrotesk')),
             ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: progressFraction,
-              minHeight: 8,
-              backgroundColor: Colors.white.withValues(alpha: 0.08),
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Color(0xFF7B2CBF)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('$xpInLevel / $_xpPerLevel XP',
+          if (nextTier != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text('Next: ${nextTier.name}',
                   style: const TextStyle(color: Colors.white38, fontSize: 11)),
-              if (nextTier != null)
-                Text('Next: ${nextTier.name}',
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11)),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );

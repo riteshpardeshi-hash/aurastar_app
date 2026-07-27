@@ -148,35 +148,6 @@ const List<AuraTier> auraTiers = [
       ),
     ],
   ),
-  AuraTier(
-    minLevel: 50,
-    name: 'Divine',
-    unlock: 'Limited collabs/freebies',
-    color: Color(0xFFFFD700),
-    rewards: [
-      LevelReward(
-        brand: 'Aura x Collab',
-        title: 'Limited Edition Kit',
-        code: 'DIVINE50',
-        description: 'Exclusive creator merch drop — limited stock',
-        icon: Icons.auto_awesome_rounded,
-      ),
-      LevelReward(
-        brand: 'Brand Ambassador',
-        title: 'Trial Programme',
-        code: 'DIVINEAMB',
-        description: 'Apply for a paid brand ambassador trial',
-        icon: Icons.workspace_premium_rounded,
-      ),
-      LevelReward(
-        brand: 'Amazon',
-        title: '₹500 Gift Card',
-        code: 'DIVINEGIFT',
-        description: 'Redeemable on any Amazon purchase',
-        icon: Icons.redeem_rounded,
-      ),
-    ],
-  ),
 ];
 
 AuraTier auraTierForLevel(int level) {
@@ -192,4 +163,15 @@ AuraTier? nextAuraTier(int level) {
     if (t.minLevel > level) return t;
   }
   return null;
+}
+
+// Maps the backend's authoritative `tier` string (GET /profile's `tier`
+// field: rookie/rising/viral/elite/sigma) to the matching AuraTier, instead
+// of recomputing a tier from a locally-guessed level formula. Falls back to
+// Rookie for an unrecognized or missing value.
+AuraTier auraTierForName(String? tierName) {
+  return auraTiers.firstWhere(
+    (t) => t.name.toLowerCase() == (tierName ?? '').toLowerCase(),
+    orElse: () => auraTiers.first,
+  );
 }

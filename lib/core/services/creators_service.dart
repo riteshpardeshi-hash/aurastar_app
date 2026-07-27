@@ -118,6 +118,7 @@ Map<String, dynamic> normaliseCreator(Map<String, dynamic> c) {
     'bio': c['bio'] as String? ?? '',
     'avatar': c['avatar'] as String? ?? c['profileImage'] as String? ?? '',
     'auraPoints': (c['auraPoints'] as num?)?.toInt() ?? 0,
+    'tier': c['tier'] as String?,
     'isFollowing': c['isFollowing'] as bool? ?? false,
     'isVerified': c['isVerified'] as bool? ?? false,
   };

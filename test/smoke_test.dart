@@ -28,12 +28,8 @@ void main() {
       expect(auraTierForLevel(30).name, 'Sigma');
     });
 
-    test('level 50 returns Divine', () {
-      expect(auraTierForLevel(50).name, 'Divine');
-    });
-
-    test('level 100 stays at top tier Divine', () {
-      expect(auraTierForLevel(100).name, 'Divine');
+    test('level 100 stays at top tier Sigma', () {
+      expect(auraTierForLevel(100).name, 'Sigma');
     });
   });
 
@@ -50,13 +46,8 @@ void main() {
       expect(next?.minLevel, 10);
     });
 
-    test('level 49 next tier is Divine at level 50', () {
-      final next = nextAuraTier(49);
-      expect(next?.name, 'Divine');
-    });
-
-    test('level 50 has no next tier', () {
-      expect(nextAuraTier(50), isNull);
+    test('level 30 has no next tier', () {
+      expect(nextAuraTier(30), isNull);
     });
 
     test('level 100 has no next tier', () {

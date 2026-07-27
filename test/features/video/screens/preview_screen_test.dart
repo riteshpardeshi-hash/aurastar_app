@@ -129,6 +129,104 @@ void main() {
     expect(s3PutCalls, 1);
     expect(createSubmissionCalls, 1);
   });
+
+  // Regression coverage: the backend rejects create-submission with
+  // "Face verification failed: the person in the video does not match your
+  // profile." when the recorded clip doesn't match the user's profile
+  // photo. Before this fix, that fell through to the generic failure branch
+  // and showed "Retry Upload", which just re-runs presign/S3/create-submission
+  // on the exact same video file — a request that is guaranteed to fail
+  // identically every time, unlike a real network blip. The CTA must
+  // instead read "Retake" and pop back to the camera without attempting
+  // another upload.
+  testWidgets(
+      'a face-verification rejection shows Retake instead of a futile Retry Upload',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.method == 'PUT' &&
+          request.url.host == 'mock-upload.example') {
+        s3PutCalls++;
+        return http.Response('', 200);
+      }
+      if (request.url.path.endsWith('/submissions/presign')) {
+        presignCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'uploadUrl': 'https://mock-upload.example/put',
+              'videoId': 'video-$presignCalls',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'POST' &&
+          request.url.path.endsWith('/submissions')) {
+        createSubmissionCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'fail',
+            'message': 'Face verification failed: the person in the video '
+                'does not match your profile.',
+          }),
+          400,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PreviewScreen(
+                    videoPath: videoFile.path,
+                    challengeTitle: 'Test Challenge',
+                    challengeId: 'challenge-1',
+                  ),
+                ),
+              ),
+              child: const Text('Open Preview'),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Open Preview'));
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Submit for Aura Score'));
+      await Future<void>.delayed(const Duration(seconds: 2));
+    });
+    await tester.pump();
+
+    expect(createSubmissionCalls, 1);
+    expect(find.text('Retry Upload'), findsNothing,
+        reason: 'a face mismatch can never be fixed by resubmitting the '
+            'same clip, so the generic retry CTA must not show');
+    // The always-present left button already reads "Retake"; the CTA we
+    // fixed must now read the same, giving two matches.
+    expect(find.text('Retake'), findsNWidgets(2));
+
+    await tester.tap(find.text('Retake').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open Preview'), findsOneWidget,
+        reason: 'tapping Retake should pop back to the camera, not fire '
+            'another doomed upload attempt');
+    expect(presignCalls, 1);
+    expect(s3PutCalls, 1);
+    expect(createSubmissionCalls, 1);
+  });
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {

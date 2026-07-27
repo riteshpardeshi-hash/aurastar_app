@@ -147,30 +147,6 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                   child: _buildScoreCard(score, netAwarded, isBest, status),
                 ),
               const SizedBox(height: 28),
-              if (!isBest && status == 'approved')
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.archive_outlined, color: Colors.orange, size: 18),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Not your best — this has been archived automatically and will be deleted in 7 days.',
-                            style: TextStyle(color: Colors.orange, fontSize: 12, height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               if (status != 'rejected') ...[
                 const Text(
                   'Share your result',

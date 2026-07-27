@@ -263,6 +263,15 @@ class _PreviewScreenState extends State<PreviewScreen> {
     return text.contains('no scoring rubric');
   }
 
+  // The backend rejects the submission with this message when the face in
+  // the video doesn't match the user's profile photo — retrying uploads the
+  // same clip and fails identically, so send the user back to record a new
+  // take instead of a futile "Retry Upload".
+  bool get _isFaceMismatch {
+    final text = (_lastError ?? '').toLowerCase();
+    return text.contains('face verification');
+  }
+
   // ── Build ───────────────────────────────────────────────────────────────────
 
   void _giveUpOnScoring() {
@@ -603,7 +612,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         // instead of re-running the same failing upload.
                         : _isMissingRubric
                             ? () => Navigator.pop(context)
-                            : _upload,
+                            // Same reasoning as missing rubric: the same
+                            // video will never pass face verification, so
+                            // pop back to the camera for a new take.
+                            : _isFaceMismatch
+                                ? () => Navigator.pop(context)
+                                : _upload,
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
@@ -626,7 +640,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
                                 ? 'Complete Your Profile'
                                 : _isMissingRubric
                                     ? 'Choose Another Challenge'
-                                    : 'Retry Upload',
+                                    : _isFaceMismatch
+                                        ? 'Retake'
+                                        : 'Retry Upload',
                             style: TextStyle(
                                 color: _isMissingRubric
                                     ? Colors.black87

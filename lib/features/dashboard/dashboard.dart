@@ -33,7 +33,7 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  int? _lastKnownLevel;
+  String? _lastKnownTier;
   bool _atRiskAlertShown = false;
 
   // Shared across the Hero/Brand Videos/Trending/Banners sections so they
@@ -59,9 +59,6 @@ class _DashboardState extends State<Dashboard> {
 
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
-  static const int _xpPerLevel = 1300;
-
-  int _level(int pts) => (pts ~/ _xpPerLevel) + 1;
 
   @override
   void initState() {
@@ -113,6 +110,10 @@ class _DashboardState extends State<Dashboard> {
     final points = (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
+    // Server-computed and authoritative — do not recompute level/tier from
+    // `points` locally (see aura_tier.dart's auraTierForName).
+    final level = (profile['level'] as num?)?.toInt() ?? 1;
+    final tierName = profile['tier'] as String?;
     final streakDay = (streak?['currentStreak'] as num?)?.toInt() ?? 0;
 
     final now = DateTime.now();
@@ -126,6 +127,8 @@ class _DashboardState extends State<Dashboard> {
 
     return {
       'points': points,
+      'level': level,
+      'tierName': tierName,
       'displayName': displayName,
       'photoUrl': photoUrl,
       'hasCreatorPage': hasCreatorPage,
@@ -143,6 +146,7 @@ class _DashboardState extends State<Dashboard> {
         if (!uidSnap.hasData || userId == null || userId.isEmpty) {
           return _buildScaffold(context,
               points: 0,
+              tierName: null,
               isAdmin: false,
               isBrand: false,
               isCreator: false,
@@ -220,18 +224,22 @@ class _DashboardState extends State<Dashboard> {
         final photoUrl = data['photoUrl'] as String;
         final streakDay = data['streakDay'] as int;
         final lastStreakDate = data['lastStreakDate'] as String;
-        final level = _level(points);
+        final level = data['level'] as int;
+        final tierName = data['tierName'] as String?;
+        final newTier = auraTierForName(tierName);
 
-        if (_lastKnownLevel != null && level > _lastKnownLevel!) {
-          final oldTier = auraTierForLevel(_lastKnownLevel!);
-          final newTier = auraTierForLevel(level);
-          if (newTier.minLevel > oldTier.minLevel) {
+        // Compare the server's own tier string across fetches (not a
+        // locally-guessed level threshold) — a real tier upgrade is exactly
+        // when this string moves later in the tiers list.
+        if (_lastKnownTier != null && _lastKnownTier != tierName) {
+          final oldTier = auraTierForName(_lastKnownTier);
+          if (auraTiers.indexOf(newTier) > auraTiers.indexOf(oldTier)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _showLevelUpModal(context, level, newTier);
             });
           }
         }
-        _lastKnownLevel = level;
+        _lastKnownTier = tierName;
 
         // At-risk streak alert: show once per session after 7 pm
         if (!_atRiskAlertShown && streakDay > 0 && DateTime.now().hour >= 19) {
@@ -278,6 +286,7 @@ class _DashboardState extends State<Dashboard> {
         return _buildScaffold(
           context,
           points: points,
+          tierName: tierName,
           isAdmin: isAdmin,
           isBrand: isBrand,
           isCreator: isCreator,
@@ -294,6 +303,7 @@ class _DashboardState extends State<Dashboard> {
   Widget _buildScaffold(
     BuildContext context, {
     required int points,
+    required String? tierName,
     required bool isAdmin,
     required bool isBrand,
     required bool isCreator,
@@ -303,7 +313,7 @@ class _DashboardState extends State<Dashboard> {
     required int streakDay,
     required String lastStreakDate,
   }) {
-    final tier = auraTierForLevel(_level(points));
+    final tier = auraTierForName(tierName);
 
     return Scaffold(
       backgroundColor: _bg,

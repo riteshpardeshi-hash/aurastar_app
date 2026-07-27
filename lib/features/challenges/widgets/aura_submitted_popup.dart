@@ -708,7 +708,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             child: Text(
               _isBestForChallenge
                   ? '✓  Your new best for this challenge'
-                  : 'Not your best — archived (deletes in 7 days)',
+                  : 'Not your best — no Auras earned',
               style: TextStyle(
                 color: _isBestForChallenge ? Colors.greenAccent : Colors.orange,
                 fontSize: 11,

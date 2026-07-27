@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../core/services/api_client.dart';
+import '../../../core/services/videos_service.dart';
 import '../../video/widgets/video_player_widget.dart';
 
 class UserVideoDetailScreen extends StatefulWidget {
@@ -12,14 +11,14 @@ class UserVideoDetailScreen extends StatefulWidget {
   final dynamic aiScore;
   final String aiReason;
   final bool reviewedByAI;
-  final String submissionId;
+  final String videoId;
 
   const UserVideoDetailScreen({
     super.key,
     required this.videoNumber,
     required this.auraPoints,
     required this.videoUrl,
-    required this.submissionId,
+    required this.videoId,
     this.status = 'pending',
     this.aiScore,
     this.aiReason = '',
@@ -31,76 +30,41 @@ class UserVideoDetailScreen extends StatefulWidget {
 }
 
 class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
-  String _uid = '';
-
   bool _starred = false;
   int _starsCount = 0;
   bool _starLoading = false;
-  String _ownerId = '';
 
-  int _netAurasAwarded = 0;
-  bool _isCountedForDailyAuras = false;
-  String _challengeId = '';
   bool _deleting = false;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    _loadLikeState();
   }
 
-  Future<void> _init() async {
-    final uid = await ApiClient().userId;
+  Future<void> _loadLikeState() async {
+    final state = await VideosService().fetchLikeState(widget.videoId);
     if (!mounted) return;
-    setState(() => _uid = uid ?? '');
-    _loadStars();
-  }
-
-  Future<void> _loadStars() async {
-    if (widget.submissionId.isEmpty) return;
-    final doc = await FirebaseFirestore.instance
-        .collection('submissions')
-        .doc(widget.submissionId)
-        .get();
-    if (!doc.exists || !mounted) return;
-    final data = doc.data()!;
-    final starredBy = List<String>.from(data['starredBy'] ?? []);
-    final aura = (data['auraPoints'] as num?)?.toInt() ?? 0;
-    final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? aura;
     setState(() {
-      _starred = starredBy.contains(_uid);
-      _starsCount = (data['starsCount'] as num?)?.toInt() ?? starredBy.length;
-      _ownerId = data['userId'] as String? ?? '';
-      _netAurasAwarded = netAwarded;
-      _isCountedForDailyAuras = data['isCountedForDailyAuras'] as bool? ?? false;
-      _challengeId = data['challengeId'] as String? ?? '';
+      _starred = state['liked'] as bool;
+      _starsCount = state['likesCount'] as int;
     });
   }
 
   Future<void> _toggleStar() async {
-    if (widget.submissionId.isEmpty || _starLoading || _uid.isEmpty) return;
+    if (_starLoading) return;
     setState(() => _starLoading = true);
 
-    final delta = _starred ? -1 : 1;
-    final db = FirebaseFirestore.instance;
-    final batch = db.batch();
-    batch.update(db.collection('submissions').doc(widget.submissionId), {
-      'starredBy': _starred
-          ? FieldValue.arrayRemove([_uid])
-          : FieldValue.arrayUnion([_uid]),
-      'starsCount': FieldValue.increment(delta),
-    });
-    if (_ownerId.isNotEmpty && _ownerId != _uid) {
-      batch.update(db.collection('users').doc(_ownerId),
-          {'starsReceived': FieldValue.increment(delta)});
-    }
-
+    final wasStarred = _starred;
     try {
-      await batch.commit();
+      // POST /videos/{id}/like toggles server-side and its response shape
+      // is undocumented, so the local flip below is optimistic rather than
+      // derived from the response.
+      await VideosService().toggleLike(widget.videoId);
       if (mounted) {
         setState(() {
-          _starred = !_starred;
-          _starsCount += delta;
+          _starred = !wasStarred;
+          _starsCount += wasStarred ? -1 : 1;
           _starLoading = false;
         });
       }
@@ -119,16 +83,15 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   }
 
   Future<void> _delete() async {
-    final deduct = _isCountedForDailyAuras && _netAurasAwarded > 0 ? _netAurasAwarded : 0;
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Video'),
-        content: Text(
-          deduct > 0
-              ? 'This will permanently remove your video and deduct $deduct Aura Points from your balance.'
-              : 'This will permanently remove your video. Your Aura Points are kept.',
+        // Any Aura-point reversal for a deleted video is computed and
+        // applied server-side — the client doesn't assert a specific
+        // amount here since it can't verify what the backend will do.
+        content: const Text(
+          'This will permanently remove your video. This action cannot be undone.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -142,37 +105,8 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _deleting = true);
-    final db = FirebaseFirestore.instance;
     try {
-      await db.runTransaction((txn) async {
-        final subRef = db.collection('submissions').doc(widget.submissionId);
-        txn.update(subRef, {
-          'isDeleted': true,
-          'isPublic': false,
-          'isArchived': false,
-          'isCountedForDailyAuras': false,
-          'deletedAt': Timestamp.now(),
-        });
-        if (deduct > 0 && _uid.isNotEmpty) {
-          txn.update(db.collection('users').doc(_uid), {
-            'totalRewards': FieldValue.increment(-deduct),
-          });
-          txn.set(db.collection('auraTransactions').doc(), {
-            'userId': _uid,
-            'amount': -deduct,
-            'type': 'video_deleted',
-            'sourceId': widget.submissionId,
-            'description': 'Video deleted — $deduct Auras reversed',
-            'createdAt': Timestamp.now(),
-          });
-          if (_challengeId.isNotEmpty) {
-            final progressRef = db
-                .collection('userChallengeProgress')
-                .doc('${_uid}_$_challengeId');
-            txn.delete(progressRef);
-          }
-        }
-      });
+      await VideosService().deleteVideo(widget.videoId);
       if (mounted) Navigator.pop(context, 'deleted');
     } catch (_) {
       if (!mounted) return;

@@ -74,10 +74,10 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     final username = creator['username'] as String;
     final bio = creator['bio'] as String;
     final avatar = creator['avatar'] as String;
-    final auraPoints = creator['auraPoints'] as int;
     final isFollowing = creator['isFollowing'] as bool;
     final isVerified = creator['isVerified'] as bool;
-    final tier = auraTierForLevel(auraPoints ~/ 1300 + 1);
+    // Server-computed and authoritative — do not recompute locally.
+    final tier = auraTierForName(creator['tier'] as String?);
 
     return CustomScrollView(
       slivers: [

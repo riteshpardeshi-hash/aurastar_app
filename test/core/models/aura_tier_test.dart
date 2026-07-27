@@ -20,9 +20,6 @@ void main() {
       test('level 30 → Sigma', () {
         expect(auraTierForLevel(30).name, 'Sigma');
       });
-      test('level 50 → Divine', () {
-        expect(auraTierForLevel(50).name, 'Divine');
-      });
     });
 
     group('between thresholds — stays at lower tier', () {
@@ -53,20 +50,17 @@ void main() {
       test('level 40 stays Sigma', () {
         expect(auraTierForLevel(40).name, 'Sigma');
       });
-      test('level 49 stays Sigma (one below Divine)', () {
-        expect(auraTierForLevel(49).name, 'Sigma');
-      });
     });
 
     group('above max tier', () {
-      test('level 51 stays Divine', () {
-        expect(auraTierForLevel(51).name, 'Divine');
+      test('level 51 stays Sigma', () {
+        expect(auraTierForLevel(51).name, 'Sigma');
       });
-      test('level 100 stays Divine', () {
-        expect(auraTierForLevel(100).name, 'Divine');
+      test('level 100 stays Sigma', () {
+        expect(auraTierForLevel(100).name, 'Sigma');
       });
-      test('level 999 stays Divine', () {
-        expect(auraTierForLevel(999).name, 'Divine');
+      test('level 999 stays Sigma', () {
+        expect(auraTierForLevel(999).name, 'Sigma');
       });
     });
 
@@ -87,13 +81,13 @@ void main() {
       test('color is grey', () => expect(tier.color, const Color(0xFF9E9E9E)));
     });
 
-    group('return fields — Divine at level 50', () {
+    group('return fields — Sigma at level 30', () {
       late AuraTier tier;
-      setUp(() => tier = auraTierForLevel(50));
+      setUp(() => tier = auraTierForLevel(30));
 
-      test('minLevel is 50', () => expect(tier.minLevel, 50));
-      test('unlock is Limited collabs/freebies', () => expect(tier.unlock, 'Limited collabs/freebies'));
-      test('color is gold', () => expect(tier.color, const Color(0xFFFFD700)));
+      test('minLevel is 30', () => expect(tier.minLevel, 30));
+      test('unlock is Invite-only drops', () => expect(tier.unlock, 'Invite-only drops'));
+      test('color is pink', () => expect(tier.color, const Color(0xFFE91E63)));
     });
   });
 
@@ -118,9 +112,26 @@ void main() {
     test('level 19 → Elite (one below threshold)', () => expect(nextAuraTier(19)?.name, 'Elite'));
     test('level 20 → Sigma', () => expect(nextAuraTier(20)?.name, 'Sigma'));
     test('level 29 → Sigma (one below threshold)', () => expect(nextAuraTier(29)?.name, 'Sigma'));
-    test('level 30 → Divine', () => expect(nextAuraTier(30)?.name, 'Divine'));
-    test('level 49 → Divine (one below threshold)', () => expect(nextAuraTier(49)?.name, 'Divine'));
-    test('level 50 → null (already at top tier)', () => expect(nextAuraTier(50), isNull));
+    test('level 30 → null (already at top tier)', () => expect(nextAuraTier(30), isNull));
     test('level 100 → null (above top tier)', () => expect(nextAuraTier(100), isNull));
+  });
+
+  group('auraTierForName', () {
+    test('maps each backend tier string to the matching AuraTier', () {
+      expect(auraTierForName('rookie').name, 'Rookie');
+      expect(auraTierForName('rising').name, 'Rising');
+      expect(auraTierForName('viral').name, 'Viral');
+      expect(auraTierForName('elite').name, 'Elite');
+      expect(auraTierForName('sigma').name, 'Sigma');
+    });
+
+    test('is case-insensitive', () {
+      expect(auraTierForName('SIGMA').name, 'Sigma');
+    });
+
+    test('falls back to Rookie for null or unrecognized input', () {
+      expect(auraTierForName(null).name, 'Rookie');
+      expect(auraTierForName('legendary').name, 'Rookie');
+    });
   });
 }

@@ -35,8 +35,13 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
   }
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
+    final submissionId = s['_id'] as String? ?? s['id'] as String? ?? '';
     return {
-      'submissionId': s['_id'] as String? ?? s['id'] as String? ?? '',
+      // The Submission and Video are distinct backend documents — DELETE
+      // /videos/{id} needs the Video's own id. Fall back to the submission
+      // id if the API ever omits videoId (delete would then 404 loudly
+      // rather than silently corrupt the wrong document).
+      'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'status': submissionStatusFromApi(s),
       'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
@@ -133,27 +138,30 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
         final aiScore = data['aiScore'];
         final aiReason = data['aiReason'] as String;
         final reviewedByAI = data['reviewedByAI'] as bool;
-        final submissionId = data['submissionId'] as String;
+        final videoId = data['videoId'] as String;
 
         final statusColor = _statusColor(status);
         final statusLabel = _statusLabel(status);
 
         return GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => UserVideoDetailScreen(
-                videoNumber: i + 1,
-                auraPoints: auraPoints,
-                videoUrl: videoUrl,
-                status: status,
-                aiScore: aiScore,
-                aiReason: aiReason,
-                reviewedByAI: reviewedByAI,
-                submissionId: submissionId,
+          onTap: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserVideoDetailScreen(
+                  videoNumber: i + 1,
+                  auraPoints: auraPoints,
+                  videoUrl: videoUrl,
+                  status: status,
+                  aiScore: aiScore,
+                  aiReason: aiReason,
+                  reviewedByAI: reviewedByAI,
+                  videoId: videoId,
+                ),
               ),
-            ),
-          ),
+            );
+            if (result == 'deleted') _load();
+          },
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Stack(
