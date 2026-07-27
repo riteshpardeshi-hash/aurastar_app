@@ -8,6 +8,7 @@ import '../../core/services/creator_page_service.dart';
 import '../../core/services/home_service.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
+import '../../core/utils/streak_date.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
 import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/avatar_widget.dart';
@@ -115,15 +116,7 @@ class _DashboardState extends State<Dashboard> {
     final level = (profile['level'] as num?)?.toInt() ?? 1;
     final tierName = profile['tier'] as String?;
     final streakDay = (streak?['currentStreak'] as num?)?.toInt() ?? 0;
-
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    // GET /profile/streak doesn't expose a "last streak day" date field yet,
-    // so default an active streak to "qualified today" — this suppresses the
-    // broken/at-risk banner states rather than risk false nags off a guessed
-    // field name.
-    final lastStreakDate = streakDay > 0 ? todayStr : '';
+    final lastStreakDate = deriveLastStreakDate(streak);
 
     return {
       'points': points,
@@ -275,7 +268,10 @@ class _DashboardState extends State<Dashboard> {
                     action: SnackBarAction(
                       label: 'Play',
                       textColor: Colors.amber,
-                      onPressed: () {},
+                      onPressed: () => Navigator.push(context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AllGeneralChallengesScreen())),
                     ),
                   ),
                 );
