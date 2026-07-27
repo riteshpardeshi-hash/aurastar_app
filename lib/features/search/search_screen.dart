@@ -19,6 +19,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final _controller = TextEditingController();
   final _focus = FocusNode();
   final _service = SearchService();
+  final _scrollController = ScrollController();
 
   String _query = '';
   String _filter = 'All';
@@ -26,6 +27,12 @@ class _SearchScreenState extends State<SearchScreen> {
   List<_SearchItem> _results = [];
   bool _searching = false;
   Timer? _debounce;
+
+  // Pagination — the backend only paginates single-type searches (`type=all`
+  // always returns a fixed 10-item preview per collection with no next page).
+  int _page = 1;
+  bool _hasMore = false;
+  bool _loadingMore = false;
 
   static const _filters = ['All', 'Challenges', 'Brands', 'Creators'];
 
@@ -40,6 +47,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
     _loadRecent();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
@@ -48,7 +56,16 @@ class _SearchScreenState extends State<SearchScreen> {
     _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_filter == 'All' || !_hasMore || _loadingMore || _searching) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
   }
 
   Future<void> _loadRecent() async {
@@ -65,21 +82,54 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _search(String q) async {
     if (q.trim().isEmpty) {
-      setState(() { _results = []; _searching = false; });
+      setState(() { _results = []; _searching = false; _hasMore = false; });
       return;
     }
-    setState(() => _searching = true);
+    setState(() {
+      _searching = true;
+      _page = 1;
+      _hasMore = false;
+    });
     try {
       final type = _filterTypeMap[_filter] ?? 'all';
-      final data = await _service.search(q, type: type);
+      final data = await _service.search(q, type: type, page: 1);
       if (!mounted) return;
       setState(() {
         _results = _parseResults(data, type);
+        _hasMore = _moreAvailable(data, type);
         _searching = false;
       });
     } catch (_) {
       if (mounted) setState(() { _results = []; _searching = false; });
     }
+  }
+
+  Future<void> _loadMore() async {
+    setState(() => _loadingMore = true);
+    try {
+      final type = _filterTypeMap[_filter] ?? 'all';
+      final nextPage = _page + 1;
+      final data = await _service.search(_query, type: type, page: nextPage);
+      if (!mounted) return;
+      setState(() {
+        _results = [..._results, ..._parseResults(data, type)];
+        _page = nextPage;
+        _hasMore = _moreAvailable(data, type);
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  /// `type=all` never paginates (fixed 10-item preview per collection); a
+  /// specific type does, via `data['pagination']`.
+  bool _moreAvailable(Map<String, dynamic> data, String type) {
+    if (type == 'all') return false;
+    final pagination = data['pagination'] as Map<String, dynamic>?;
+    final page = (pagination?['page'] as num?)?.toInt() ?? 1;
+    final pages = (pagination?['pages'] as num?)?.toInt() ?? 1;
+    return page < pages;
   }
 
   List<_SearchItem> _parseResults(Map<String, dynamic> data, String type) {
@@ -385,9 +435,23 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
     return ListView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      itemCount: _results.length,
+      itemCount: _results.length + (_loadingMore ? 1 : 0),
       itemBuilder: (context, i) {
+        if (i >= _results.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    color: _accent, strokeWidth: 2.2),
+              ),
+            ),
+          );
+        }
         final item = _results[i];
         return _SearchRow(item: item, onTap: () => _onItemTap(item));
       },
