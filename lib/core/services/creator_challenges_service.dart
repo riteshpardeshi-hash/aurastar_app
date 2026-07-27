@@ -595,8 +595,14 @@ int pickInt(Map<String, dynamic> map, List<String> candidates, {int fallback = 0
   return fallback;
 }
 
+// Skips a present-but-empty string and keeps checking later candidates,
+// rather than treating '' as a satisfying match via pickField — e.g. a
+// notification with body: '' and a populated title must resolve to the
+// title, not an empty message.
 String pickString(Map<String, dynamic> map, List<String> candidates, {String fallback = ''}) {
-  final v = pickField(map, candidates);
-  if (v is String) return v;
+  for (final key in candidates) {
+    final v = map[key];
+    if (v is String && v.isNotEmpty) return v;
+  }
   return fallback;
 }
