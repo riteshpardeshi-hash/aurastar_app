@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/utils/apple_sign_in_error.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
@@ -116,8 +117,13 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
       if (!mounted) return;
       _navigateAfterAuth(result.isNewUser, result.user);
     } catch (e) {
+      // The user dismissing the Apple sheet throws canceled here instead of
+      // returning null the way GoogleSignIn().signIn() does — treat it the
+      // same way Google's cancel path does: reset silently, no error shown.
       if (mounted) setState(() => _loading = null);
-      _showError('Apple sign-in failed. Please try again.');
+      if (!isAppleSignInCancelled(e)) {
+        _showError('Apple sign-in failed. Please try again.');
+      }
     }
   }
 
