@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/creators_service.dart';
 import 'creator_profile_screen.dart';
 
 class ExploreCreatorsScreen extends StatefulWidget {
@@ -10,7 +11,46 @@ class ExploreCreatorsScreen extends StatefulWidget {
 }
 
 class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
-  String searchQuery = "";
+  final _service = CreatorsService();
+  Timer? _debounce;
+  String _query = '';
+  List<Map<String, dynamic>>? _creators;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _error = false);
+    try {
+      final raw = await _service.fetchCreators(search: _query, limit: 50);
+      if (!mounted) return;
+      setState(() => _creators = raw.map(normaliseCreator).toList());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _creators = [];
+        _error = true;
+      });
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      _query = value.trim();
+      _load();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,97 +66,44 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              onChanged: (value) {
-                setState(() {
-                  searchQuery = value.toLowerCase();
-                });
-              },
+              onChanged: _onSearchChanged,
             ),
           ),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('challenges')
-                  .where('creatorId', isNotEqualTo: 'system')
-                  .limit(100)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(child: Text('Failed to load brands.'));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final docs = snapshot.data!.docs;
-                final creatorIds = <String>{};
-                for (final doc in docs) {
-                  final data = doc.data() as Map<String, dynamic>? ?? {};
-                  final id = data['creatorId'] as String? ?? '';
-                  if (id.isNotEmpty) creatorIds.add(id);
-                }
-
-                final idList = creatorIds.toList();
-                return ListView.builder(
-                  itemCount: idList.length,
-                  itemBuilder: (context, index) {
-                    return _CreatorTile(
-                      creatorId: idList[index],
-                      searchQuery: searchQuery,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
     );
   }
-}
 
-class _CreatorTile extends StatefulWidget {
-  final String creatorId;
-  final String searchQuery;
-  const _CreatorTile({required this.creatorId, required this.searchQuery});
-
-  @override
-  State<_CreatorTile> createState() => _CreatorTileState();
-}
-
-class _CreatorTileState extends State<_CreatorTile> {
-  late final Future<DocumentSnapshot> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.creatorId)
-        .get();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: _future,
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox();
-        final data = snap.data!.data() as Map<String, dynamic>? ?? {};
-        final name = data['name'] as String? ?? 'Creator';
-        if (!name.toLowerCase().contains(widget.searchQuery)) {
-          return const SizedBox();
-        }
+  Widget _buildBody() {
+    if (_creators == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error) {
+      return const Center(child: Text('Failed to load creators.'));
+    }
+    if (_creators!.isEmpty) {
+      return const Center(child: Text('No creators found.'));
+    }
+    return ListView.builder(
+      itemCount: _creators!.length,
+      itemBuilder: (context, index) {
+        final creator = _creators![index];
+        final avatar = creator['avatar'] as String? ?? '';
         return ListTile(
-          leading: const CircleAvatar(
+          leading: CircleAvatar(
             backgroundColor: Colors.orange,
-            child: Icon(Icons.person, color: Colors.white),
+            backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+            child: avatar.isEmpty
+                ? const Icon(Icons.person, color: Colors.white)
+                : null,
           ),
-          title: Text(name),
+          title: Text(creator['displayName'] as String? ?? 'Creator'),
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CreatorProfileScreen(creatorId: widget.creatorId),
+              builder: (_) =>
+                  CreatorProfileScreen(creatorId: creator['id'] as String),
             ),
           ),
         );
