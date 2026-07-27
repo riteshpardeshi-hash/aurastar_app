@@ -5,7 +5,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../core/services/auth_api_service.dart';
-import 'login_screen.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
@@ -173,21 +172,8 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                   ),
                   const SizedBox(height: 28),
 
-                  // ── Email ───────────────────────────────────────────────────
-                  _PrimaryButton(
-                    label: 'Continue with Email',
-                    onTap: _loading != null
-                        ? null
-                        : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const LoginScreen()),
-                            ),
-                  ),
-                  const SizedBox(height: 14),
-
                   // ── Phone ───────────────────────────────────────────────────
-                  _OutlineButton(
+                  _PrimaryButton(
                     label: 'Continue with Phone',
                     onTap: _loading != null
                         ? null
@@ -300,36 +286,6 @@ class _PrimaryButton extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OutlineButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onTap;
-
-  const _OutlineButton({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.deepPurple,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-        ),
-        onPressed: onTap,
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
       ),
     );

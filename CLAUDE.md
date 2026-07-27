@@ -47,7 +47,7 @@ Feature-first layout (this was previously one ~4100-line `main.dart`; it has bee
 
 ### Auth & navigation flow
 
-`SplashScreen` runs an animated intro, then `pushReplacement` to either `Dashboard` (if `FirebaseAuth.currentUser != null`) or `AuthChoiceScreen`. Profile setup happens via `ProfileSetupScreen` for logged-in users without a Firestore profile. Phone auth uses Firebase OTP; email auth handles both sign-in and sign-up from `LoginScreen` (toggled by `isLogin`).
+`SplashScreen` runs an animated intro, then `pushReplacement` to `Dashboard`/`ProfileSetupScreen` (if `AuthApiService().isLoggedIn()`, backed by the REST access token) or `PhoneAuthScreen`. Phone auth is REST-based (`POST /auth/otp/request` + `/auth/otp/verify`), not Firebase. `AuthChoiceScreen` (Phone / Google / Apple / Facebook) exists but isn't currently reached from Splash — Google and Apple sign-in there go through `AuthApiService.signInWithGoogle`/`signInWithApple`. There is no email/password login — the backend has no such endpoint for players (only phone OTP, Google, Apple, Facebook; email/password exists solely for the separate admin system).
 
 All navigation is imperative `Navigator.push` / `pushReplacement` / `pushAndRemoveUntil` with `MaterialPageRoute` — no named routing or go_router. `Dashboard` is the hub and has a custom bottom nav (Home / Challenges / Leaderboard / Profile + center FAB to the community feed).
 
