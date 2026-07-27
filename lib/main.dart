@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
 import 'core/services/api_client.dart';
 import 'core/services/challenges_service.dart';
+import 'core/services/splash_gate.dart';
 import 'firebase_options.dart';
 import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
@@ -88,6 +89,14 @@ class _MyAppState extends State<MyApp> {
       final raw = await ChallengesService().fetchChallenge(challengeId);
       if (raw == null) return;
       final data = normaliseChallenge(raw);
+      // Wait for Splash's own post-boot navigation to land first (see
+      // SplashGate) — otherwise its pushReplacement, which always replaces
+      // whatever is currently on top of the navigator stack, would silently
+      // discard this push if it happened to fire after us. The timeout is
+      // just a safety net (e.g. a force-update dialog blocking Splash
+      // forever) so a deep link can never hang indefinitely.
+      await SplashGate.done.timeout(const Duration(seconds: 20), onTimeout: () {});
+      if (!mounted) return;
       _navigatorKey.currentState?.push(MaterialPageRoute(
         builder: (_) => ChallengeDetail(
           challengeId: challengeId,

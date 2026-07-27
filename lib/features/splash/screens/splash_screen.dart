@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/services/splash_gate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../auth/screens/phone_auth_screen.dart';
 import '../../auth/screens/profile_setup_screen.dart';
@@ -166,6 +167,7 @@ class _SplashScreenState extends State<SplashScreen>
       transitionsBuilder: (_, anim, __, child) =>
           FadeTransition(opacity: anim, child: child),
     ));
+    SplashGate.complete();
   }
 
   // ── Version check ───────────────────────────────────────────────────────────
