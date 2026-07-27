@@ -8,6 +8,7 @@ import 'core/globals.dart';
 import 'core/services/api_client.dart';
 import 'core/services/challenges_service.dart';
 import 'core/services/splash_gate.dart';
+import 'core/utils/deep_link_validation.dart';
 import 'firebase_options.dart';
 import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
@@ -80,14 +81,19 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _handleLink(Uri uri) async {
+    if (deepLinkValidationError(uri) != null) {
+      _showLinkError();
+      return;
+    }
     final segments = uri.pathSegments;
-    if (segments.length < 2) return;
 
     if (segments[0] == 'challenge') {
       final challengeId = segments[1];
-      if (challengeId.isEmpty) return;
       final raw = await ChallengesService().fetchChallenge(challengeId);
-      if (raw == null) return;
+      if (raw == null) {
+        _showLinkError();
+        return;
+      }
       final data = normaliseChallenge(raw);
       // Wait for Splash's own post-boot navigation to land first (see
       // SplashGate) — otherwise its pushReplacement, which always replaces
@@ -107,13 +113,18 @@ class _MyAppState extends State<MyApp> {
       ));
     } else if (segments[0] == 'ref') {
       final code = segments[1].trim().toUpperCase();
-      if (code.isEmpty) return;
       // Only save for new (not yet logged-in) users — existing users are ignored
       if (!await ApiClient().isLoggedIn()) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('pending_referral_code', code);
       }
     }
+  }
+
+  void _showLinkError() {
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text("That link couldn't be opened.")),
+    );
   }
 
   @override
