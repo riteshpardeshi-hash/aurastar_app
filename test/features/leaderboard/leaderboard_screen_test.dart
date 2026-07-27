@@ -106,4 +106,55 @@ void main() {
             'honest rank-based label, not a blank or fabricated one');
     expect(find.text('No scores yet'), findsNothing);
   });
+
+  testWidgets(
+      'pulling to refresh on the Global tab re-fetches page 1 and replaces '
+      'the list', (tester) async {
+    var globalCallCount = 0;
+
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/leaderboard')) {
+        globalCallCount++;
+        final name = globalCallCount == 1 ? 'Original Player' : 'Refreshed Player';
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'responses': [
+                {'_id': 'p1', 'displayName': name, 'auraPoints': 100},
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/leaderboard/friends')) {
+        return http.Response(
+          jsonEncode({'status': 'success', 'data': {'responses': []}}), 200);
+      }
+      if (path.endsWith('/challenges')) {
+        return http.Response(
+          jsonEncode({'status': 'success', 'data': {'challenges': []}}), 200);
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(home: LeaderboardScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Original Player'), findsOneWidget);
+
+    // Pull down to refresh.
+    await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(globalCallCount, greaterThanOrEqualTo(2),
+        reason: 'pull-to-refresh must re-fetch page 1');
+    expect(find.text('Refreshed Player'), findsOneWidget,
+        reason: 'the refreshed data must replace the old list');
+    expect(find.text('Original Player'), findsNothing);
+  });
 }

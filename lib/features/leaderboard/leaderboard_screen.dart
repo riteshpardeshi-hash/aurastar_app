@@ -41,7 +41,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         elevation: 0,
         title: const Text(
           'Leaderboard',
-          style: TextStyle(fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay'),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontFamily: 'ClashDisplay',
+          ),
         ),
         bottom: TabBar(
           controller: _tabs,
@@ -50,9 +53,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
           labelStyle: const TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 13, fontFamily: 'SpaceGrotesk'),
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            fontFamily: 'SpaceGrotesk',
+          ),
           unselectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.w500, fontSize: 13, fontFamily: 'SpaceGrotesk'),
+            fontWeight: FontWeight.w500,
+            fontSize: 13,
+            fontFamily: 'SpaceGrotesk',
+          ),
           tabs: const [
             Tab(text: 'Global'),
             Tab(text: 'Friends'),
@@ -64,15 +73,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         controller: _tabs,
         children: [
           _ApiBoard(
-            fetchPage: (page, limit) =>
-                LeaderboardService().fetchGlobal(page: page, limit: limit),
+            fetchPage:
+                (page, limit) =>
+                    LeaderboardService().fetchGlobal(page: page, limit: limit),
             scoreSuffix: 'Auras',
             emptyTitle: 'No players yet',
             emptySubtitle: 'Complete challenges to appear here',
           ),
           _ApiBoard(
-            fetchPage: (page, limit) =>
-                LeaderboardService().fetchFriends(page: page, limit: limit),
+            fetchPage:
+                (page, limit) =>
+                    LeaderboardService().fetchFriends(page: page, limit: limit),
             scoreSuffix: 'Auras',
             emptyTitle: 'No friends yet',
             emptySubtitle: 'Add friends to see how you stack up',
@@ -88,7 +99,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
 class _ApiBoard extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> Function(int page, int limit)
-      fetchPage;
+  fetchPage;
   final String scoreSuffix;
   final String emptyTitle;
   final String emptySubtitle;
@@ -158,6 +169,19 @@ class _ApiBoardState extends State<_ApiBoard>
     });
   }
 
+  Future<void> _refresh() async {
+    final raw = await widget.fetchPage(1, _pageSize);
+    if (!mounted) return;
+    setState(() {
+      _entries
+        ..clear()
+        ..addAll(raw.map(normaliseLeaderboardEntry));
+      _hasMore = raw.length == _pageSize;
+      _page = 2;
+      _initialLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -165,16 +189,32 @@ class _ApiBoardState extends State<_ApiBoard>
       return const Center(child: CircularProgressIndicator(color: _accent));
     }
     if (_entries.isEmpty) {
-      return _emptyState(widget.emptyTitle, widget.emptySubtitle);
+      return RefreshIndicator(
+        color: _accent,
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: _emptyState(widget.emptyTitle, widget.emptySubtitle),
+            ),
+          ],
+        ),
+      );
     }
     final userInList = _myId != null && _entries.any((e) => e['id'] == _myId);
-    return _EntryList(
-      entries: _entries,
-      currentId: _myId,
-      scoreSuffix: widget.scoreSuffix,
-      showCurrentUserFooter: !userInList && _myId != null,
-      scrollController: _scrollCtrl,
-      loadingMore: _loading,
+    return RefreshIndicator(
+      color: _accent,
+      onRefresh: _refresh,
+      child: _EntryList(
+        entries: _entries,
+        currentId: _myId,
+        scoreSuffix: widget.scoreSuffix,
+        showCurrentUserFooter: !userInList && _myId != null,
+        scrollController: _scrollCtrl,
+        loadingMore: _loading,
+      ),
     );
   }
 }
@@ -274,21 +314,21 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     margin: const EdgeInsets.only(right: 8),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: sel ? _accent : const Color(0xFF111111),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: sel ? _accent : Colors.white12),
+                      border: Border.all(color: sel ? _accent : Colors.white12),
                     ),
                     child: Text(
                       title,
                       style: TextStyle(
                         color: sel ? Colors.white : Colors.white54,
                         fontSize: 12,
-                        fontWeight:
-                            sel ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                         fontFamily: 'SpaceGrotesk',
                       ),
                     ),
@@ -303,16 +343,31 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
         if (_challengeId == null)
           Expanded(
             child: _emptyState(
-                'Select a challenge', 'Tap a chip above to see the board'),
+              'Select a challenge',
+              'Tap a chip above to see the board',
+            ),
           )
         else if (_loadingBoard)
           const Expanded(
-              child: Center(child: CircularProgressIndicator(color: _accent)))
+            child: Center(child: CircularProgressIndicator(color: _accent)),
+          )
         else if (_entries.isEmpty)
           Expanded(
-            child: _emptyState(
-              'No scores yet',
-              'Be the first to attempt this challenge!',
+            child: RefreshIndicator(
+              color: _accent,
+              onRefresh: _loadBoard,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.5,
+                    child: _emptyState(
+                      'No scores yet',
+                      'Be the first to attempt this challenge!',
+                    ),
+                  ),
+                ],
+              ),
             ),
           )
         else
@@ -320,46 +375,55 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
             child: Column(
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    itemCount: _entries.length,
-                    itemBuilder: (_, i) {
-                      final e = _entries[i];
-                      final rawUsername = e['username'] as String;
-                      final rawName = e['name'] as String;
-                      final username = rawUsername.isNotEmpty
-                          ? rawUsername
-                          : rawName.isNotEmpty
-                              ? rawName
-                              : 'Player ${i + 1}';
-                      return _SubmissionRow(
-                        rank: i + 1,
-                        username: username,
-                        score: e['score'] as int,
-                        stars: e['stars'] as int,
-                        isCurrentUser: e['id'] == _myId,
-                        onTap: e['id'] == _myId
-                            ? null
-                            : () => _showPrivateProfile(context),
-                      );
-                    },
+                  child: RefreshIndicator(
+                    color: _accent,
+                    onRefresh: _loadBoard,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      itemCount: _entries.length,
+                      itemBuilder: (_, i) {
+                        final e = _entries[i];
+                        final rawUsername = e['username'] as String;
+                        final rawName = e['name'] as String;
+                        final username =
+                            rawUsername.isNotEmpty
+                                ? rawUsername
+                                : rawName.isNotEmpty
+                                ? rawName
+                                : 'Player ${i + 1}';
+                        return _SubmissionRow(
+                          rank: i + 1,
+                          username: username,
+                          score: e['score'] as int,
+                          stars: e['stars'] as int,
+                          isCurrentUser: e['id'] == _myId,
+                          onTap:
+                              e['id'] == _myId
+                                  ? null
+                                  : () => _showPrivateProfile(context),
+                        );
+                      },
+                    ),
                   ),
                 ),
                 // Try challenge CTA
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                   child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChallengeDetail(
-                          title: _challengeTitle,
-                          instructions: _challengeInstructions,
-                          videoUrl: _challengeVideoUrl,
-                          challengeId: _challengeId!,
+                    onTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) => ChallengeDetail(
+                                  title: _challengeTitle,
+                                  instructions: _challengeInstructions,
+                                  videoUrl: _challengeVideoUrl,
+                                  challengeId: _challengeId!,
+                                ),
+                          ),
                         ),
-                      ),
-                    ),
                     child: Container(
                       width: double.infinity,
                       height: 50,
@@ -417,6 +481,7 @@ class _EntryList extends StatelessWidget {
 
     return ListView.builder(
       controller: scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: total,
       itemBuilder: (_, i) {
@@ -430,9 +495,10 @@ class _EntryList extends StatelessWidget {
             score: e['score'] as int,
             scoreSuffix: scoreSuffix,
             isCurrentUser: e['id'] == currentId,
-            onTap: e['id'] == currentId
-                ? null
-                : () => _showPrivateProfile(context),
+            onTap:
+                e['id'] == currentId
+                    ? null
+                    : () => _showPrivateProfile(context),
           );
         }
 
@@ -448,7 +514,9 @@ class _EntryList extends StatelessWidget {
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      color: Color(0xFF7B2CBF), strokeWidth: 2),
+                    color: Color(0xFF7B2CBF),
+                    strokeWidth: 2,
+                  ),
                 ),
               ),
             );
@@ -462,18 +530,23 @@ class _EntryList extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
+                Expanded(
+                  child: Divider(color: Colors.white.withValues(alpha: 0.08)),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
                     'Your position',
                     style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        fontSize: 11,
-                        fontFamily: 'SpaceGrotesk'),
+                      color: Colors.white.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
                   ),
                 ),
-                Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.08))),
+                Expanded(
+                  child: Divider(color: Colors.white.withValues(alpha: 0.08)),
+                ),
               ],
             ),
           );
@@ -485,13 +558,18 @@ class _EntryList extends StatelessWidget {
           builder: (_, snap) {
             if (!snap.hasData) return const SizedBox.shrink();
             final data = snap.data!;
-            final name = (data['displayName'] as String?)?.trim().isNotEmpty == true
-                ? data['displayName'] as String
-                : data['name'] as String? ?? 'You';
+            final name =
+                (data['displayName'] as String?)?.trim().isNotEmpty == true
+                    ? data['displayName'] as String
+                    : data['name'] as String? ?? 'You';
             final username =
-                data['username'] as String? ?? data['profileName'] as String? ?? '';
+                data['username'] as String? ??
+                data['profileName'] as String? ??
+                '';
             final score =
-                ((data['auraPoints'] ?? data['totalRewards']) as num?)?.toInt() ?? 0;
+                ((data['auraPoints'] ?? data['totalRewards']) as num?)
+                    ?.toInt() ??
+                0;
             return _PlayerRow(
               rank: entries.length + 1,
               name: name,
@@ -536,26 +614,29 @@ class _PlayerRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final medalColor = rank == 1
-        ? const Color(0xFFFFD700)
-        : rank == 2
+    final medalColor =
+        rank == 1
+            ? const Color(0xFFFFD700)
+            : rank == 2
             ? const Color(0xFFB8B8C8)
             : rank == 3
-                ? const Color(0xFFCD7F32)
-                : null;
+            ? const Color(0xFFCD7F32)
+            : null;
 
     final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: isCurrentUser
-            ? _accent.withValues(alpha: 0.13)
-            : const Color(0xFF0E0E1A),
+        color:
+            isCurrentUser
+                ? _accent.withValues(alpha: 0.13)
+                : const Color(0xFF0E0E1A),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isCurrentUser
-              ? _accent.withValues(alpha: 0.50)
-              : Colors.white.withValues(alpha: 0.07),
+          color:
+              isCurrentUser
+                  ? _accent.withValues(alpha: 0.50)
+                  : Colors.white.withValues(alpha: 0.07),
           width: isCurrentUser ? 1.5 : 1,
         ),
       ),
@@ -564,17 +645,22 @@ class _PlayerRow extends StatelessWidget {
           // Rank badge
           SizedBox(
             width: 38,
-            child: rank <= 3
-                ? Icon(Icons.emoji_events_rounded, color: medalColor, size: 24)
-                : Text(
-                    rankLabel ?? '$rank',
-                    style: TextStyle(
-                      color: isCurrentUser ? Colors.white : Colors.white38,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      fontFamily: 'SpaceGrotesk',
+            child:
+                rank <= 3
+                    ? Icon(
+                      Icons.emoji_events_rounded,
+                      color: medalColor,
+                      size: 24,
+                    )
+                    : Text(
+                      rankLabel ?? '$rank',
+                      style: TextStyle(
+                        color: isCurrentUser ? Colors.white : Colors.white38,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontFamily: 'SpaceGrotesk',
+                      ),
                     ),
-                  ),
           ),
           // Avatar
           CircleAvatar(
@@ -583,7 +669,10 @@ class _PlayerRow extends StatelessWidget {
             child: Text(
               name.isNotEmpty ? name[0].toUpperCase() : 'U',
               style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -607,9 +696,10 @@ class _PlayerRow extends StatelessWidget {
                   Text(
                     '@$username',
                     style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                        fontFamily: 'SpaceGrotesk'),
+                      color: Colors.white38,
+                      fontSize: 11,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
                   ),
               ],
             ),
@@ -621,7 +711,8 @@ class _PlayerRow extends StatelessWidget {
               Text(
                 _fmt(score),
                 style: TextStyle(
-                  color: medalColor ??
+                  color:
+                      medalColor ??
                       (isCurrentUser ? const Color(0xFFD4A8FF) : Colors.white),
                   fontWeight: FontWeight.w900,
                   fontSize: 17,
@@ -631,17 +722,17 @@ class _PlayerRow extends StatelessWidget {
               Text(
                 scoreSuffix,
                 style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 10,
-                    fontFamily: 'SpaceGrotesk'),
+                  color: Colors.white38,
+                  fontSize: 10,
+                  fontFamily: 'SpaceGrotesk',
+                ),
               ),
             ],
           ),
           if (isCurrentUser) ...[
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(8),
@@ -695,26 +786,29 @@ class _SubmissionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final medalColor = rank == 1
-        ? const Color(0xFFFFD700)
-        : rank == 2
+    final medalColor =
+        rank == 1
+            ? const Color(0xFFFFD700)
+            : rank == 2
             ? const Color(0xFFB8B8C8)
             : rank == 3
-                ? const Color(0xFFCD7F32)
-                : null;
+            ? const Color(0xFFCD7F32)
+            : null;
 
     final card = Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: isCurrentUser
-            ? _accent.withValues(alpha: 0.13)
-            : const Color(0xFF0E0E1A),
+        color:
+            isCurrentUser
+                ? _accent.withValues(alpha: 0.13)
+                : const Color(0xFF0E0E1A),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isCurrentUser
-              ? _accent.withValues(alpha: 0.50)
-              : Colors.white.withValues(alpha: 0.07),
+          color:
+              isCurrentUser
+                  ? _accent.withValues(alpha: 0.50)
+                  : Colors.white.withValues(alpha: 0.07),
           width: isCurrentUser ? 1.5 : 1,
         ),
       ),
@@ -723,17 +817,22 @@ class _SubmissionRow extends StatelessWidget {
           // Rank badge
           SizedBox(
             width: 38,
-            child: rank <= 3
-                ? Icon(Icons.emoji_events_rounded, color: medalColor, size: 24)
-                : Text(
-                    '$rank',
-                    style: TextStyle(
-                      color: isCurrentUser ? Colors.white : Colors.white38,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      fontFamily: 'SpaceGrotesk',
+            child:
+                rank <= 3
+                    ? Icon(
+                      Icons.emoji_events_rounded,
+                      color: medalColor,
+                      size: 24,
+                    )
+                    : Text(
+                      '$rank',
+                      style: TextStyle(
+                        color: isCurrentUser ? Colors.white : Colors.white38,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontFamily: 'SpaceGrotesk',
+                      ),
                     ),
-                  ),
           ),
           // Avatar
           CircleAvatar(
@@ -742,7 +841,10 @@ class _SubmissionRow extends StatelessWidget {
             child: Text(
               username.isNotEmpty ? username[0].toUpperCase() : 'U',
               style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -768,9 +870,10 @@ class _SubmissionRow extends StatelessWidget {
               Text(
                 _fmt(stars),
                 style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 12,
-                    fontFamily: 'SpaceGrotesk'),
+                  color: Colors.white38,
+                  fontSize: 12,
+                  fontFamily: 'SpaceGrotesk',
+                ),
               ),
             ],
           ),
@@ -779,7 +882,8 @@ class _SubmissionRow extends StatelessWidget {
           Text(
             '$score',
             style: TextStyle(
-              color: medalColor ??
+              color:
+                  medalColor ??
                   (isCurrentUser ? const Color(0xFFD4A8FF) : Colors.white),
               fontWeight: FontWeight.w900,
               fontSize: 20,
@@ -789,8 +893,7 @@ class _SubmissionRow extends StatelessWidget {
           if (isCurrentUser) ...[
             const SizedBox(width: 8),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(8),
@@ -850,31 +953,34 @@ void _showPrivateProfile(BuildContext context) {
 // ── Shared empty state ─────────────────────────────────────────────────────────
 
 Widget _emptyState(String title, String subtitle) => Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.emoji_events_outlined,
-              color: Colors.white24, size: 52),
-          const SizedBox(height: 14),
-          Text(title,
-              style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 16,
-                  fontFamily: 'SpaceGrotesk')),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white24,
-                    fontSize: 12,
-                    fontFamily: 'SpaceGrotesk'),
-              ),
-            ),
-          ],
-        ],
+  child: Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const Icon(Icons.emoji_events_outlined, color: Colors.white24, size: 52),
+      const SizedBox(height: 14),
+      Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white38,
+          fontSize: 16,
+          fontFamily: 'SpaceGrotesk',
+        ),
       ),
-    );
+      if (subtitle.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white24,
+              fontSize: 12,
+              fontFamily: 'SpaceGrotesk',
+            ),
+          ),
+        ),
+      ],
+    ],
+  ),
+);
