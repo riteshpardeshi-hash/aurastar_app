@@ -12,10 +12,24 @@ class FollowButton extends StatefulWidget {
   /// until toggled.
   final bool? initialIsFollowing;
 
+  /// Light/translucent pill (white bg, purple text) for placement on a
+  /// solid-color card, e.g. the creator profile header. Default is the
+  /// filled-purple pill used on video overlays.
+  final bool light;
+
+  /// Override the follow/unfollow calls — defaults to `CreatorsService`.
+  /// Pass these to reuse this widget against a different `/{tag}/{id}/follow`
+  /// pair (e.g. `BrandsService`) without duplicating the button.
+  final Future<bool> Function(String id)? followFn;
+  final Future<bool> Function(String id)? unfollowFn;
+
   const FollowButton({
     super.key,
     required this.targetUserId,
     this.initialIsFollowing,
+    this.light = false,
+    this.followFn,
+    this.unfollowFn,
   });
 
   @override
@@ -49,9 +63,11 @@ class _FollowButtonState extends State<FollowButton> {
     if (_actioning || _loading || _myId == null) return;
     setState(() => _actioning = true);
     final wasFollowing = _following;
+    final follow = widget.followFn ?? _service.followCreator;
+    final unfollow = widget.unfollowFn ?? _service.unfollowCreator;
     final ok = wasFollowing
-        ? await _service.unfollowCreator(widget.targetUserId)
-        : await _service.followCreator(widget.targetUserId);
+        ? await unfollow(widget.targetUserId)
+        : await follow(widget.targetUserId);
     if (mounted) {
       setState(() {
         if (ok) _following = !wasFollowing;
@@ -78,36 +94,57 @@ class _FollowButtonState extends State<FollowButton> {
       );
     }
 
+    final fillColor = widget.light ? Colors.white : _accent;
+    final fillTextColor = widget.light ? _accent : Colors.white;
+
     return GestureDetector(
       onTap: _toggle,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 28, vertical: 9),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         decoration: BoxDecoration(
-          color: _following ? Colors.transparent : _accent,
-          borderRadius: BorderRadius.circular(20),
+          color: _following ? Colors.transparent : fillColor,
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: _following
                 ? Colors.white38
-                : _accent,
+                : fillColor,
           ),
         ),
-        child: _actioning
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
-              )
-            : Text(
-                _following ? 'Following' : 'Follow',
-                style: TextStyle(
-                  color: _following ? Colors.white54 : Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
+        child: Center(
+          widthFactor: 1,
+          child: _actioning
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: fillTextColor),
+                )
+              : _following
+                  ? const Text(
+                      'Following',
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    )
+                  : widget.light
+                      ? Image.asset(
+                          'assets/images/creator public profile/Asset 16.png',
+                          height: 16,
+                          fit: BoxFit.contain,
+                        )
+                      : Text(
+                          'Follow',
+                          style: TextStyle(
+                            color: fillTextColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+        ),
       ),
     );
   }

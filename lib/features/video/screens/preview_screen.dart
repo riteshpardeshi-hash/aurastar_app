@@ -10,6 +10,7 @@ import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/widgets/aura_sense_loading_view.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
 import '../../account/screens/settings_screen.dart';
+import '../../account/screens/edit_profile_screen.dart';
 import '../../dashboard/dashboard.dart';
 
 class PreviewScreen extends StatefulWidget {
@@ -558,11 +559,38 @@ class _PreviewScreenState extends State<PreviewScreen> {
                   ? 'This challenge hasn\'t been set up for scoring yet. Your video wasn\'t the problem — please try a different challenge instead.'
                   : _isNetworkError
                       ? 'Your video is saved. We\'ll retry automatically when you\'re back online.'
-                      : (_lastError ??
-                          'Something went wrong. Please try again.'),
+                      // The raw backend message just states the mismatch,
+                      // not what to do about it. Since retrying the same
+                      // clip fails identically (see _isFaceMismatch), tell
+                      // the user the two things that actually change the
+                      // outcome: reframe the shot, or fix a stale avatar.
+                      : _isFaceMismatch
+                          ? 'Make sure you\'re clearly visible, well-lit, and the only '
+                              'person in frame. If your profile photo is old or doesn\'t '
+                              'look like you anymore, update it below.'
+                          : (_lastError ??
+                              'Something went wrong. Please try again.'),
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.55), fontSize: 12),
             ),
+            if (_isFaceMismatch) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                ),
+                child: const Text(
+                  'Update profile photo',
+                  style: TextStyle(
+                    color: _purple,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
             if (_isNetworkError && _lastError != null) ...[
               const SizedBox(height: 6),
               Text(

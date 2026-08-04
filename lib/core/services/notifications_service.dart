@@ -71,6 +71,59 @@ class NotificationsService {
       throw Exception(res['message'] as String? ?? 'Failed to delete notification');
     }
   }
+
+  // ── Nudge engine (ADR 042) ────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> registerDevice({
+    required String platform,
+    required String token,
+  }) async {
+    final res = await _client.post('/notifications/devices', {
+      'platform': platform,
+      'token': token,
+    }, auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to register device');
+    }
+    final data = res['data'] as Map<String, dynamic>;
+    return data['device'] as Map<String, dynamic>;
+  }
+
+  Future<void> deregisterDevice(String id) async {
+    final res = await _client.delete('/notifications/devices/$id', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to deregister device');
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchPreferences() async {
+    try {
+      final res = await _client.get('/notifications/preferences', auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return data['preferences'] as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Partial update — only the top-level keys passed are touched server-side.
+  Future<Map<String, dynamic>> updatePreferences({
+    bool? pushEnabled,
+    Map<String, bool>? categories,
+    Map<String, dynamic>? quietHours,
+  }) async {
+    final res = await _client.patch('/notifications/preferences', {
+      if (pushEnabled != null) 'pushEnabled': pushEnabled,
+      if (categories != null) 'categories': categories,
+      if (quietHours != null) 'quietHours': quietHours,
+    });
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to update preferences');
+    }
+    final data = res['data'] as Map<String, dynamic>;
+    return data['preferences'] as Map<String, dynamic>;
+  }
 }
 
 // `GET /notifications` resolves to the generic SuccessEnvelope with no

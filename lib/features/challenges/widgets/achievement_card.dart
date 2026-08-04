@@ -54,6 +54,7 @@ class AchievementCardView extends StatelessWidget {
                             fontSize: 19,
                             fontWeight: FontWeight.w800,
                             height: 1.2,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                         Image.asset('assets/images/flex/Asset 115.png', height: 20, alignment: Alignment.centerLeft),
@@ -65,7 +66,7 @@ class AchievementCardView extends StatelessWidget {
                           children: [
                             Text(
                               '+$auraPoints',
-                              style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1),
+                              style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1, decoration: TextDecoration.none),
                             ),
                             const SizedBox(width: 6),
                             Image.asset('assets/images/flex/Asset 118.png', height: 22),
@@ -76,7 +77,7 @@ class AchievementCardView extends StatelessWidget {
                         const SizedBox(height: 2),
                         const Text(
                           'Beat This?',
-                          style: TextStyle(color: Color(0xFFA700FF), fontSize: 17, fontWeight: FontWeight.w800),
+                          style: TextStyle(color: Color(0xFFA700FF), fontSize: 17, fontWeight: FontWeight.w800, decoration: TextDecoration.none),
                         ),
                         const SizedBox(height: 10),
                         AspectRatio(
@@ -89,7 +90,7 @@ class AchievementCardView extends StatelessWidget {
                   const Spacer(flex: 3),
                   Text(
                     '@$username',
-                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600),
+                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
                   ),
                 ],
               ),

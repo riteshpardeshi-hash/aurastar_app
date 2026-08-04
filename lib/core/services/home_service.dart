@@ -53,6 +53,16 @@ class HomeService {
       return [];
     }
   }
+
+  // Lives under the plain `/banners` tag (not `/home/*`) even though the
+  // banner itself was fetched via fetchBanners() above — public, no auth,
+  // not user-attributed, so failures are silently swallowed same as the
+  // rest of this fire-and-forget-style service.
+  Future<void> registerBannerClick(String id) async {
+    try {
+      await _client.post('/banners/$id/click', {});
+    } catch (_) {}
+  }
 }
 
 // Normalises a ChallengeSummary (from home endpoints) into the UI shape.

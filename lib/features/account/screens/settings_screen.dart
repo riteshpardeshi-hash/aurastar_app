@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/services/auth_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
+import 'notification_preferences_screen.dart';
 import '../../splash/screens/splash_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
@@ -62,6 +63,16 @@ class SettingsScreen extends StatelessWidget {
               context,
               const InterestsScreen(isEditMode: true),
               'Interests saved.',
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.notifications_outlined,
+            label: 'Notification Preferences',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const NotificationPreferencesScreen()),
             ),
           ),
           const SizedBox(height: 24),

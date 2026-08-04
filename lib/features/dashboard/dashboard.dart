@@ -6,6 +6,7 @@ import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/creator_page_service.dart';
 import '../../core/services/home_service.dart';
+import '../../core/services/push_notification_service.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
@@ -18,6 +19,7 @@ import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/trending_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
+import '../../shared/widgets/notification_bell_button.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../account/screens/my_account_screen.dart';
 import '../creator/screens/create_creator_profile_screen.dart';
@@ -71,6 +73,11 @@ class _DashboardState extends State<Dashboard> {
       final uid = _profileUserId;
       if (uid != null) _loadProfile(uid);
     });
+    // Fire-and-forget: requests OS push permission and registers/refreshes
+    // the device token with the backend. Dashboard is only ever reached
+    // once authenticated, so this doubles as "run once per session start"
+    // for both a cold-start already-logged-in user and a fresh login.
+    PushNotificationService().initialize();
   }
 
   @override
@@ -426,7 +433,9 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
 
-          const SizedBox(width: 10),
+          const NotificationBellButton(),
+
+          const SizedBox(width: 2),
 
           // ── Avatar ────────────────────────────────────
           GestureDetector(
@@ -947,16 +956,6 @@ class _DashboardState extends State<Dashboard> {
                                                   fontWeight: FontWeight.w900,
                                                   letterSpacing: 0.3,
                                                   fontFamily: 'ClashDisplay',
-                                                )),
-                                            const SizedBox(height: 3),
-                                            Text(description,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.white60,
-                                                  fontSize: 9,
-                                                  height: 1.35,
-                                                  fontFamily: 'SpaceGrotesk',
                                                 )),
                                             const SizedBox(height: 6),
                                             Row(children: [
@@ -1654,7 +1653,6 @@ class _DashboardState extends State<Dashboard> {
                       _navItem(
                         icon: Icons.emoji_events_rounded,
                         label: 'Challenges',
-                        active: true,
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(

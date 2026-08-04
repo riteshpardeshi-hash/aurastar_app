@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'push_notification_service.dart';
 
 typedef AuthResult = ({
   String accessToken,
@@ -105,6 +106,10 @@ class AuthApiService {
   }
 
   Future<void> logout() async {
+    // Must run before clearSession() — deregistering needs the still-valid
+    // access token, and the DeviceToken row would otherwise keep receiving
+    // pushes for an account this device is no longer signed into.
+    await PushNotificationService().deregisterCurrentDevice();
     final rt = await _client.refreshToken;
     if (rt != null) {
       try {
@@ -118,6 +123,7 @@ class AuthApiService {
   /// the local session. Access tokens on other devices stay valid until they
   /// naturally expire (max 15 minutes).
   Future<void> logoutAll() async {
+    await PushNotificationService().deregisterCurrentDevice();
     try {
       await _client.post('/auth/logout-all', {}, auth: true);
     } catch (_) {}
@@ -176,7 +182,13 @@ class AuthApiService {
           auth: true);
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
-        return (data['videos'] as List? ?? []).cast<Map<String, dynamic>>();
+        // Same paginated-list envelope as /profile/aura/history — the array
+        // is wrapped under `responses`, not `videos` (verified live via
+        // GET /profile/videos on 2026-07-31).
+        return (data['responses'] as List? ??
+                data['videos'] as List? ??
+                [])
+            .cast<Map<String, dynamic>>();
       }
     } catch (_) {}
     return [];
@@ -201,21 +213,7 @@ class AuthApiService {
     return [];
   }
 
-  Future<List<Map<String, dynamic>>> fetchAchievements() async {
-    try {
-      final res = await _client.get('/profile/achievements', auth: true);
-      if (res['status'] == 'success') {
-        final data = res['data'] as Map<String, dynamic>;
-        return (data['achievements'] as List? ??
-                data['cards'] as List? ??
-                [])
-            .cast<Map<String, dynamic>>();
-      }
-    } catch (_) {}
-    return [];
-  }
-
-  Future<List<Map<String, dynamic>>> fetchAuraHistory({
+Future<List<Map<String, dynamic>>> fetchAuraHistory({
     int page = 1,
     int limit = 10,
   }) async {
@@ -225,7 +223,11 @@ class AuthApiService {
           auth: true);
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
-        return (data['transactions'] as List? ??
+        // Live response wraps the list as `responses` (verified via
+        // GET /profile/aura/history on 2026-07-31); `transactions`/`history`
+        // kept as fallbacks in case the backend's field name changes again.
+        return (data['responses'] as List? ??
+                data['transactions'] as List? ??
                 data['history'] as List? ??
                 [])
             .cast<Map<String, dynamic>>();
@@ -236,7 +238,7 @@ class AuthApiService {
 
   Future<Map<String, dynamic>?> fetchReferralStats() async {
     try {
-      final res = await _client.get('/profile/referral', auth: true);
+      final res = await _client.get('/referrals', auth: true);
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
         return data['referral'] as Map<String, dynamic>?;
@@ -245,37 +247,20 @@ class AuthApiService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> fetchRewards({
-    String? status,
-    int page = 1,
-    int limit = 20,
-  }) async {
+  // GET /referrals/stats has no per-item schema in Swagger beyond "total
+  // referrals made, aura earned from referrals, and recent activity" — field
+  // names are guessed defensively, same pattern as elsewhere in this file.
+  // Distinct from fetchReferralStats() (GET /referrals), which only returns
+  // the code + a bare count.
+  Future<Map<String, dynamic>?> fetchReferralStatsDetail() async {
     try {
-      final q = [
-        'page=$page',
-        'limit=$limit',
-        if (status != null) 'status=$status',
-      ].join('&');
-      final res = await _client.get('/profile/rewards?$q', auth: true);
+      final res = await _client.get('/referrals/stats', auth: true);
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
-        return (data['rewards'] as List? ??
-                data['docs'] as List? ??
-                data['items'] as List? ??
-                [])
-            .cast<Map<String, dynamic>>();
+        return (data['stats'] as Map<String, dynamic>?) ?? data;
       }
     } catch (_) {}
-    return [];
-  }
-
-  Future<Map<String, dynamic>?> claimReward(String id) async {
-    final res = await _client.post('/profile/rewards/$id/claim', {}, auth: true);
-    if (res['status'] != 'success') {
-      throw res['message'] as String? ?? 'Failed to claim reward';
-    }
-    final data = res['data'] as Map<String, dynamic>;
-    return data['reward'] as Map<String, dynamic>?;
+    return null;
   }
 
   Future<int> fetchAuraBalance() async {
@@ -318,6 +303,59 @@ class AuthApiService {
       }
     } catch (_) {}
     return [];
+  }
+
+  Future<bool> applyReferralCode(String code) async {
+    try {
+      final res = await _client.post(
+        '/referrals/apply',
+        {'referralCode': code},
+        auth: true,
+      );
+      return res['status'] == 'success';
+    } catch (_) {}
+    return false;
+  }
+
+  // GET /profile/rewards — fully documented `UserReward` schema, no field
+  // guessing needed. Distinct from the aura/tier progression system in
+  // core/models/aura_tier.dart: these are individually-awarded rewards
+  // (streak completion, leaderboard win, brand challenge, admin grant,
+  // participant target), not level-based.
+  Future<List<Map<String, dynamic>>> fetchRewards({
+    String? status,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final q = [
+        'page=$page',
+        'limit=$limit',
+        if (status != null) 'status=$status',
+      ].join('&');
+      final res = await _client.get('/profile/rewards?$q', auth: true);
+      if (res['status'] != 'success') return [];
+      final data = res['data'];
+      final list = data is Map
+          ? (data['responses'] as List? ?? data['rewards'] as List? ?? [])
+          : (data is List ? data : []);
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Only meaningful for `rewardType: 'coupon_code'` rewards — marks it
+  /// claimed and returns the updated reward (with `couponCode` revealed).
+  Future<Map<String, dynamic>?> claimReward(String id) async {
+    try {
+      final res = await _client.post('/profile/rewards/$id/claim', {}, auth: true);
+      if (res['status'] == 'success') {
+        final data = res['data'] as Map<String, dynamic>;
+        return data['reward'] as Map<String, dynamic>?;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<bool> isLoggedIn() => _client.isLoggedIn();

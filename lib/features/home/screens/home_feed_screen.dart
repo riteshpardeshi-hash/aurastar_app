@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/challenges/screens/challenge_detail.dart';
 import '../../../features/challenges/screens/all_categories_screen.dart' show categoryIconAsset;
 import '../../../features/challenges/screens/all_general_challenges_screen.dart';
 import '../../../features/challenges/screens/category_challenges_screen.dart';
 import '../../../features/challenges/screens/trending_screen.dart';
+import '../../../features/explore/screens/brand_profile_screen.dart';
+import '../../../features/explore/screens/creator_profile_screen.dart';
 import '../../../features/explore/screens/explore_creators_screen.dart';
-import '../../../features/notifications/notifications_screen.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/home_service.dart';
-import '../../../core/services/notifications_service.dart';
 import '../../../core/utils/cdn_url.dart';
+import '../../../shared/widgets/notification_bell_button.dart';
 
 class HomeFeedScreen extends StatelessWidget {
   const HomeFeedScreen({super.key});
@@ -49,7 +51,7 @@ class HomeFeedScreen extends StatelessWidget {
       title: Image.asset('assets/images/Aura arena.png', height: 20,
           alignment: Alignment.centerLeft),
       actions: const [
-        _NotificationBellButton(),
+        NotificationBellButton(),
         SizedBox(width: 4),
       ],
     );
@@ -257,74 +259,6 @@ Widget _challengeCard(
   );
 }
 
-// ── Notification Bell ──────────────────────────────────────────────────────────
-
-class _NotificationBellButton extends StatefulWidget {
-  const _NotificationBellButton();
-
-  @override
-  State<_NotificationBellButton> createState() => _NotificationBellButtonState();
-}
-
-class _NotificationBellButtonState extends State<_NotificationBellButton> {
-  final _service = NotificationsService();
-  int _unread = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _service.fetchUnreadCount().then((count) {
-      if (mounted) setState(() => _unread = count);
-    });
-  }
-
-  Future<void> _open() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-    );
-    if (!mounted) return;
-    final count = await _service.fetchUnreadCount();
-    if (mounted) setState(() => _unread = count);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.notifications_outlined, color: Colors.white70),
-          if (_unread > 0)
-            Positioned(
-              right: -2,
-              top: -2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                constraints: const BoxConstraints(minWidth: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7B2CBF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF080810), width: 1.5),
-                ),
-                child: Text(
-                  _unread > 99 ? '99+' : '$_unread',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-      onPressed: _open,
-    );
-  }
-}
-
 // ── Featured Hero Card ─────────────────────────────────────────────────────────
 
 class _FeaturedHeroCard extends StatefulWidget {
@@ -496,26 +430,55 @@ class _BannersCarouselState extends State<_BannersCarousel> {
   }
 
   Widget _bannerCard(BuildContext context, Map<String, dynamic> banner) {
+    final id = banner['_id'] as String? ?? '';
     final imageUrl = banner['imageUrl'] as String? ?? '';
     final title = banner['title'] as String?;
     final subtitle = banner['subtitle'] as String?;
     final linkType = banner['linkType'] as String? ?? 'none';
     final linkId = banner['linkId'] as String?;
+    final linkUrl = banner['linkUrl'] as String?;
+
+    void onTap() {
+      if (id.isNotEmpty) HomeService().registerBannerClick(id);
+      switch (linkType) {
+        case 'challenge':
+          if (linkId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChallengeDetail(
+                  title: title ?? '',
+                  instructions: subtitle ?? '',
+                  videoUrl: '',
+                  challengeId: linkId,
+                ),
+              ),
+            );
+          }
+        case 'brand':
+          if (linkId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => BrandProfileScreen(brandId: linkId)),
+            );
+          }
+        case 'creator':
+          if (linkId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => CreatorProfileScreen(creatorId: linkId)),
+            );
+          }
+        case 'external':
+          if (linkUrl != null) {
+            final uri = Uri.tryParse(linkUrl);
+            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+      }
+    }
 
     return GestureDetector(
-      onTap: linkType == 'challenge' && linkId != null
-          ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ChallengeDetail(
-                    title: title ?? '',
-                    instructions: subtitle ?? '',
-                    videoUrl: '',
-                    challengeId: linkId,
-                  ),
-                ),
-              )
-          : null,
+      onTap: onTap,
       child: Container(
         width: 280,
         margin: const EdgeInsets.only(right: 10),

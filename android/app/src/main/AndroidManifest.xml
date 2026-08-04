@@ -3,6 +3,9 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ requires this to be declared before the runtime prompt
+         (FirebaseMessaging.instance.requestPermission()) can show at all. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Aura Arena"
         android:name="${applicationName}"

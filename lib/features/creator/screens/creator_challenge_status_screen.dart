@@ -5,6 +5,7 @@ import '../../../core/services/creator_gates_service.dart';
 import 'creator_challenge_analytics_screen.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_participants_screen.dart';
+import 'creator_challenge_preview_screen.dart';
 import 'creator_gate_history_screen.dart';
 import 'creator_gate_rules_screen.dart';
 
@@ -78,6 +79,15 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
+  }
+
+  void _openPreview() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreatorChallengePreviewScreen(challengeId: widget.challengeId),
+      ),
+    );
   }
 
   Future<void> _editDraft() async {
@@ -507,6 +517,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       case 'DRAFT':
         return [
           button('Submit for Review', _submitForReview),
+          button('Preview', _openPreview, outline: true),
           button('Edit Draft', _editDraft, outline: true),
         ];
       case 'PENDING_REVIEW':
@@ -519,6 +530,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       case 'CHANGES_REQUESTED':
         return [
           button('Resubmit for Review', _resubmit),
+          button('Preview', _openPreview, outline: true),
           button('Edit Draft', _editDraft, outline: true),
         ];
       case 'APPROVED':

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/category_challenges_screen.dart';
+import '../explore/screens/brand_profile_screen.dart';
 import '../explore/screens/creator_profile_screen.dart';
 import '../../../core/services/search_service.dart';
 
@@ -241,7 +242,14 @@ class _SearchScreenState extends State<SearchScreen> {
               categoryId: item.id, categoryName: item.title),
         ),
       );
-    } else if (item.type == 'Brand' || item.type == 'Creator') {
+    } else if (item.type == 'Brand') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => BrandProfileScreen(brandId: item.id),
+        ),
+      );
+    } else if (item.type == 'Creator') {
       Navigator.push(
         context,
         MaterialPageRoute(

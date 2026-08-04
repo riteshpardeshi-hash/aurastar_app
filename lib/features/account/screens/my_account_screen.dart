@@ -310,10 +310,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   String? _uid;
   Map<String, dynamic> _profile = {};
   List<Map<String, dynamic>> _videos = [];
-  List<Map<String, dynamic>> _achievements = [];
   List<Map<String, dynamic>> _savedChallenges = [];
   Map<String, dynamic>? _referral;
+  Map<String, dynamic>? _referralStatsDetail;
   Map<String, dynamic>? _streak;
+  List<Map<String, dynamic>> _rewards = [];
 
   @override
   void initState() {
@@ -337,23 +338,25 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       final results = await Future.wait<dynamic>([
         AuthApiService().getProfile(),
         AuthApiService().fetchMyVideos(limit: 10),
-        AuthApiService().fetchAchievements(),
         AuthApiService().fetchSavedChallenges(limit: 4),
         AuthApiService().fetchReferralStats(),
         AuthApiService().fetchStreak(),
+        AuthApiService().fetchReferralStatsDetail(),
+        AuthApiService().fetchRewards(),
       ]);
       if (!mounted) return;
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
         _videos = (results[1] as List).cast<Map<String, dynamic>>();
-        _achievements = (results[2] as List).cast<Map<String, dynamic>>();
-        _savedChallenges = (results[3] as List)
+        _savedChallenges = (results[2] as List)
             .cast<Map<String, dynamic>>()
             .map(normaliseChallenge)
             .toList();
-        _referral = results[4] as Map<String, dynamic>?;
-        _streak = results[5] as Map<String, dynamic>?;
+        _referral = results[3] as Map<String, dynamic>?;
+        _streak = results[4] as Map<String, dynamic>?;
+        _referralStatsDetail = results[5] as Map<String, dynamic>?;
+        _rewards = (results[6] as List).cast<Map<String, dynamic>>();
         _loading = false;
       });
     } catch (e) {
@@ -371,6 +374,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
   }
 
+  Future<void> _reloadRewards() async {
+    final rewards = await AuthApiService().fetchRewards();
+    if (mounted) setState(() => _rewards = rewards);
+  }
+
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
@@ -379,6 +387,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
     final submissionId = s['_id'] as String? ?? s['id'] as String? ?? '';
+    // `challenge` may come back as a populated sub-document (like `creatorId`
+    // does on /challenges — see normaliseChallenge in challenges_service.dart)
+    // or as a flat id/title pair; guessed defensively, same pattern as
+    // elsewhere in this file, since /profile/videos has no per-item schema
+    // in Swagger beyond SuccessEnvelope.
+    final challenge = s['challengeId'];
+    final challengeMap = challenge is Map<String, dynamic> ? challenge : null;
     return {
       // The Submission and Video are distinct backend documents — DELETE
       // /videos/{id} needs the Video's own id. Fall back to the submission
@@ -391,6 +406,12 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       'aiScore': s['aiScore'],
       'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',
       'reviewedByAI': s['reviewedByAI'] as bool? ?? true,
+      'challengeId': challengeMap?['_id'] as String? ??
+          (challenge is String ? challenge : null) ??
+          '',
+      'challengeTitle': challengeMap?['title'] as String? ??
+          s['challengeTitle'] as String? ??
+          '',
     };
   }
 
@@ -725,7 +746,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   // ── Referral card ─────────────────────────────────────────────────────────────
   Widget _buildReferralCard(BuildContext context) {
-    final referralCode = _referral?['referralCode'] as String? ?? '';
+    // GET /referrals's live response names this field `code`, not the
+    // `referralCode` the OpenAPI spec documents (confirmed against the
+    // running backend) — read both so a future spec-alignment fix on either
+    // side doesn't silently re-break this.
+    final referralCode = _referral?['code'] as String? ??
+        _referral?['referralCode'] as String? ??
+        '';
     if (referralCode.isEmpty) return const SizedBox.shrink();
 
     final link = 'https://aura-app-efae1.web.app/ref/$referralCode';
@@ -814,6 +841,24 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ),
             ],
           ),
+          if (_referralStatsDetail != null) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _referralStatChip(
+                  Icons.people_alt_rounded,
+                  '${((_referralStatsDetail!['totalReferrals'] ?? _referralStatsDetail!['total']) as num?)?.toInt() ?? 0}',
+                  'Referred',
+                ),
+                const SizedBox(width: 10),
+                _referralStatChip(
+                  Icons.diamond_rounded,
+                  '${((_referralStatsDetail!['auraEarned'] ?? _referralStatsDetail!['totalAuraEarned'] ?? _referralStatsDetail!['earnedAura']) as num?)?.toInt() ?? 0}',
+                  'Auras Earned',
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           GestureDetector(
             onTap: () => Share.share(
@@ -885,6 +930,39 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _referralStatChip(IconData icon, String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFFD4A8FF), size: 15),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(value,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800)),
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white38, fontSize: 10)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1147,43 +1225,56 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildProfileCard(context),
-            const SizedBox(height: 16),
-            _buildAuraPointsCard(totalRewards, level, tierName),
-            _buildStreakCard(),
-            _RewardsSection(level: level),
-            const SizedBox(height: 8),
-            _buildReferralCard(context),
-            _AchievementCardsSection(
-              cards: _achievements,
-              username: _profile['profileName'] as String? ??
-                  _profile['username'] as String? ?? '',
-            ),
-            _buildMyVideosSection(context),
-            _SavedChallengesGrid(challenges: _savedChallenges),
-            const SizedBox(height: 12),
-            const _OffersRow(),
-            const SizedBox(height: 24),
-          ],
+      body: RefreshIndicator(
+        color: _accent,
+        onRefresh: _loadAll,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildProfileCard(context),
+              const SizedBox(height: 16),
+              _buildAuraPointsCard(totalRewards, level, tierName),
+              _buildStreakCard(),
+              _RewardsSection(rewards: _rewards, onClaimed: _reloadRewards),
+              const SizedBox(height: 8),
+              _buildReferralCard(context),
+              _AchievementCardsSection(
+                // One flex card per approved challenge completion, not the
+                // account-wide unlock badges from /profile/achievements
+                // (that endpoint's shape — type/title/auraEarned — doesn't
+                // even carry a challenge to share).
+                cards: _videos
+                    .map(_normaliseSubmission)
+                    .where((v) => v['status'] == 'approved')
+                    .toList(),
+                username: _profile['profileName'] as String? ??
+                    _profile['username'] as String? ?? '',
+              ),
+              _buildMyVideosSection(context),
+              _SavedChallengesGrid(challenges: _savedChallenges),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ── Rewards Section (horizontal tier cards) ────────────────────────────────────
+// ── Rewards Section (real awarded rewards, GET /profile/rewards) ───────────────
 
 class _RewardsSection extends StatelessWidget {
-  final int level;
-  const _RewardsSection({required this.level});
+  final List<Map<String, dynamic>> rewards;
+  final Future<void> Function() onClaimed;
+  const _RewardsSection({required this.rewards, required this.onClaimed});
 
   @override
   Widget build(BuildContext context) {
+    if (rewards.isEmpty) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1198,96 +1289,147 @@ class _RewardsSection extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         const Text(
-          'Earn more Aura to unlock higher tier rewards',
+          'Rewards earned from streaks, leaderboards, and challenges',
           style: TextStyle(color: Colors.white38, fontSize: 12),
         ),
         const SizedBox(height: 14),
-        SizedBox(
-          height: 180,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            itemCount: auraTiers.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) {
-              final tier = auraTiers[i];
-              final isUnlocked = level >= tier.minLevel;
-              return _HorizontalTierCard(tier: tier, isUnlocked: isUnlocked);
-            },
-          ),
-        ),
-        const SizedBox(height: 24),
+        for (final reward in rewards)
+          _RewardCard(reward: reward, onClaimed: onClaimed),
+        const SizedBox(height: 8),
       ],
     );
   }
 }
 
-class _HorizontalTierCard extends StatelessWidget {
-  final AuraTier tier;
-  final bool isUnlocked;
-  const _HorizontalTierCard({required this.tier, required this.isUnlocked});
+class _RewardCard extends StatefulWidget {
+  final Map<String, dynamic> reward;
+  final Future<void> Function() onClaimed;
+  const _RewardCard({required this.reward, required this.onClaimed});
+
+  @override
+  State<_RewardCard> createState() => _RewardCardState();
+}
+
+class _RewardCardState extends State<_RewardCard> {
+  static const _accent = Color(0xFF7B2CBF);
+  bool _claiming = false;
+
+  static const _reasonLabels = {
+    'streak_completion': 'Streak Bonus',
+    'leaderboard_top': 'Leaderboard Reward',
+    'admin_manual': 'Bonus Reward',
+    'brand_challenge': 'Brand Challenge Reward',
+    'challenge_participant_target': 'Challenge Milestone Reward',
+  };
+
+  Future<void> _claim(String id) async {
+    setState(() => _claiming = true);
+    await AuthApiService().claimReward(id);
+    await widget.onClaimed();
+    if (mounted) setState(() => _claiming = false);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final id = widget.reward['_id'] as String? ?? '';
+    final rewardType = widget.reward['rewardType'] as String? ?? '';
+    final reason = widget.reward['reason'] as String?;
+    final status = widget.reward['status'] as String? ?? 'active';
+    final auraAmount = (widget.reward['auraAmount'] as num?)?.toInt();
+    final couponCode = widget.reward['couponCode'] as String?;
+    final couponValue = widget.reward['couponValue'] as String?;
+
+    final label = _reasonLabels[reason] ?? 'Reward';
+    final isCoupon = rewardType == 'coupon_code';
+    final icon = isCoupon ? Icons.card_giftcard_rounded : Icons.diamond_rounded;
+
+    final subtitle = isCoupon
+        ? (couponValue ?? 'Coupon reward')
+        : (auraAmount != null ? '+$auraAmount Aura' : 'Aura reward');
+
     return Container(
-      width: 115,
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: isUnlocked
-            ? tier.color.withValues(alpha: 0.14)
-            : const Color(0xFF12102A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isUnlocked
-              ? tier.color.withValues(alpha: 0.55)
-              : Colors.white.withValues(alpha: 0.09),
-          width: isUnlocked ? 1.5 : 1,
-        ),
+        color: const Color(0xFF0E0C1E),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Icon(
-            isUnlocked ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
-            color: isUnlocked ? tier.color : Colors.white24,
-            size: 20,
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: _accent, size: 20),
           ),
-          const SizedBox(height: 8),
-          Text(
-            tier.name.toUpperCase(),
-            style: TextStyle(
-              color: isUnlocked ? tier.color : Colors.white38,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              ],
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            isUnlocked ? 'Unlocked' : 'Lv ${tier.minLevel}',
-            style: TextStyle(
-              color: isUnlocked ? Colors.white38 : Colors.white24,
-              fontSize: 10,
-            ),
-          ),
-          if (isUnlocked && tier.rewards.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              '${tier.rewards.length} reward${tier.rewards.length != 1 ? 's' : ''}',
-              style: TextStyle(
-                color: tier.color.withValues(alpha: 0.85),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+          const SizedBox(width: 8),
+          if (isCoupon && status == 'claimed' && couponCode != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _accent.withValues(alpha: 0.4)),
+              ),
+              child: Text(couponCode,
+                  style: const TextStyle(
+                      color: _accent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5)),
+            )
+          else if (isCoupon && status == 'active')
+            SizedBox(
+              height: 32,
+              child: ElevatedButton(
+                onPressed: (_claiming || id.isEmpty) ? null : () => _claim(id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                child: _claiming
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text('Claim', style: TextStyle(fontSize: 12)),
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                status == 'expired' ? 'Expired' : 'Claimed',
+                style: const TextStyle(color: Colors.white38, fontSize: 10),
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              '${tier.rewards.first.brand} — ${tier.rewards.first.title}',
-              style: const TextStyle(color: Colors.white38, fontSize: 9),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
         ],
       ),
     );
@@ -1387,422 +1529,6 @@ class _SavedChallengesGrid extends StatelessWidget {
         ),
         const SizedBox(height: 24),
       ],
-    );
-  }
-}
-
-// ── Offers row (API-backed) ───────────────────────────────────────────────────
-
-class _OffersRow extends StatefulWidget {
-  const _OffersRow();
-
-  @override
-  State<_OffersRow> createState() => _OffersRowState();
-}
-
-class _OffersRowState extends State<_OffersRow> {
-  bool _hasOffers = false;
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final rewards = await AuthApiService().fetchRewards();
-      if (!mounted) return;
-      setState(() {
-        _hasOffers = rewards.isNotEmpty;
-        _loaded = true;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loaded = true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasOffers = _loaded && _hasOffers;
-
-    return GestureDetector(
-      onTap: () => _showOffersSheet(context),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: hasOffers
-              ? const Color(0xFFF59E0B).withValues(alpha: 0.07)
-              : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: hasOffers
-                ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
-                : Colors.white.withValues(alpha: 0.08),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: hasOffers
-                    ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
-                    : Colors.white.withValues(alpha: 0.06),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                hasOffers
-                    ? Icons.local_offer_rounded
-                    : Icons.local_offer_outlined,
-                color: hasOffers ? const Color(0xFFF59E0B) : Colors.white38,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('My Offers',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(
-                    hasOffers
-                        ? 'Tap to view your rewards & codes'
-                        : 'Complete challenges to unlock brand offers',
-                    style:
-                        const TextStyle(color: Colors.white38, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded,
-                color: Colors.white24, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showOffersSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF100A20),
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => const _OffersSheet(),
-    ).then((_) => _load());
-  }
-}
-
-class _OffersSheet extends StatefulWidget {
-  const _OffersSheet();
-
-  @override
-  State<_OffersSheet> createState() => _OffersSheetState();
-}
-
-class _OffersSheetState extends State<_OffersSheet> {
-  List<Map<String, dynamic>> _active = [];
-  List<Map<String, dynamic>> _claimed = [];
-  bool _loading = true;
-  final Set<String> _claiming = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final results = await Future.wait([
-      AuthApiService().fetchRewards(status: 'active'),
-      AuthApiService().fetchRewards(status: 'claimed'),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _active = (results[0] as List).cast<Map<String, dynamic>>();
-      _claimed = (results[1] as List).cast<Map<String, dynamic>>();
-      _loading = false;
-    });
-  }
-
-  Future<void> _claim(String id) async {
-    setState(() => _claiming.add(id));
-    try {
-      await AuthApiService().claimReward(id);
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: const Color(0xFF1A0A2E),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _claiming.remove(id));
-    }
-  }
-
-  String _formatReason(String? reason) {
-    switch (reason) {
-      case 'streak_completion':
-        return 'Streak Reward';
-      case 'leaderboard_top':
-        return 'Leaderboard Reward';
-      case 'admin_manual':
-        return 'Admin Gift';
-      case 'brand_challenge':
-        return 'Brand Challenge';
-      case 'challenge_participant_target':
-        return 'Challenge Target';
-      default:
-        return 'Reward';
-    }
-  }
-
-  String _formatDate(String? isoDate) {
-    if (isoDate == null) return '';
-    try {
-      final dt = DateTime.parse(isoDate).toLocal();
-      return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  Widget _buildRewardTile(Map<String, dynamic> r, {bool canClaim = false}) {
-    final id = r['_id'] as String? ?? '';
-    final couponCode = r['couponCode'] as String? ?? '';
-    final couponValue = r['couponValue'] as String? ?? '';
-    final reason = r['reason'] as String?;
-    final awardedAt = _formatDate(r['awardedAt'] as String?);
-    final claimedAt = _formatDate(r['claimedAt'] as String?);
-    final isClaiming = _claiming.contains(id);
-    const gold = Color(0xFFF59E0B);
-    const green = Color(0xFF22C55E);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D1A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: gold.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _formatReason(reason),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700),
-                    ),
-                    if (couponValue.isNotEmpty)
-                      Text(
-                        couponValue,
-                        style: TextStyle(
-                            color: gold.withValues(alpha: 0.80),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600),
-                      ),
-                  ],
-                ),
-              ),
-              if (canClaim)
-                GestureDetector(
-                  onTap: isClaiming ? null : () => _claim(id),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7B2CBF).withValues(alpha: 0.20),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: const Color(0xFF7B2CBF)
-                              .withValues(alpha: 0.60)),
-                    ),
-                    child: isClaiming
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                color: Color(0xFF7B2CBF), strokeWidth: 2),
-                          )
-                        : const Text('CLAIM',
-                            style: TextStyle(
-                                color: Color(0xFFD4A8FF),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5)),
-                  ),
-                ),
-            ],
-          ),
-          if (couponCode.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            GestureDetector(
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: couponCode));
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('Code "$couponCode" copied!'),
-                  backgroundColor: const Color(0xFF1A0A2E),
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                ));
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: green.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: green.withValues(alpha: 0.35)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.confirmation_number_rounded,
-                        color: green, size: 14),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(couponCode,
-                          style: const TextStyle(
-                              color: green,
-                              fontSize: 13,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.2)),
-                    ),
-                    const Icon(Icons.copy_rounded,
-                        color: Colors.white24, size: 13),
-                  ],
-                ),
-              ),
-            ),
-          ],
-          if (claimedAt.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('Claimed $claimedAt',
-                  style:
-                      const TextStyle(color: Colors.white24, fontSize: 10)),
-            )
-          else if (awardedAt.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('Awarded $awardedAt',
-                  style:
-                      const TextStyle(color: Colors.white24, fontSize: 10)),
-            ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.55,
-      maxChildSize: 0.90,
-      builder: (_, ctrl) => Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2)),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text('My Rewards & Offers',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800)),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF7B2CBF)))
-                : (_active.isEmpty && _claimed.isEmpty)
-                    ? const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.local_offer_outlined,
-                                color: Colors.white24, size: 44),
-                            SizedBox(height: 10),
-                            Text('No rewards yet',
-                                style: TextStyle(
-                                    color: Colors.white38, fontSize: 14)),
-                            SizedBox(height: 4),
-                            Text('Complete challenges to earn rewards',
-                                style: TextStyle(
-                                    color: Colors.white24, fontSize: 12)),
-                          ],
-                        ),
-                      )
-                    : ListView(
-                        controller: ctrl,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                        children: [
-                          if (_active.isNotEmpty) ...[
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 10),
-                              child: Text('Available to Claim',
-                                  style: TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5)),
-                            ),
-                            ..._active.map(
-                                (r) => _buildRewardTile(r, canClaim: true)),
-                            const SizedBox(height: 8),
-                          ],
-                          if (_claimed.isNotEmpty) ...[
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 10),
-                              child: Text('Claimed',
-                                  style: TextStyle(
-                                      color: Colors.white54,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5)),
-                            ),
-                            ..._claimed.map((r) => _buildRewardTile(r)),
-                          ],
-                        ],
-                      ),
-          ),
-        ],
-      ),
     );
   }
 }

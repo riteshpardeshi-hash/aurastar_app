@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
-import 'package:aura_app/features/explore/screens/creator_profile_screen.dart';
+import 'package:aura_app/features/explore/screens/brand_profile_screen.dart';
 import 'package:aura_app/features/search/search_screen.dart';
 
 // Regression coverage: SearchScreen used to hard-cap at whatever the
@@ -176,7 +176,7 @@ void main() {
             "newer query's results once it finally resolves");
   });
 
-  testWidgets('tapping a Brand search result opens its creator profile',
+  testWidgets('tapping a Brand search result opens its brand profile',
       (tester) async {
     ApiClient.httpClient = MockClient((request) async {
       final path = request.url.path;
@@ -200,16 +200,16 @@ void main() {
         return http.Response(
           jsonEncode({'status': 'success', 'data': {'items': []}}), 200);
       }
-      if (path.endsWith('/creators/brand-1')) {
+      if (path.endsWith('/brands/brand-1')) {
         return http.Response(
           jsonEncode({
             'status': 'success',
-            'data': {'displayName': 'Nova Brand', 'avatar': ''},
+            'data': {'_id': 'brand-1', 'displayName': 'Nova Brand', 'avatar': ''},
           }),
           200,
         );
       }
-      if (path.endsWith('/videos') || path.endsWith('/followers')) {
+      if (path.endsWith('/challenges') || path.endsWith('/followers')) {
         return http.Response(
           jsonEncode({'status': 'success', 'data': {}}), 200);
       }
@@ -230,8 +230,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(CreatorProfileScreen), findsOneWidget,
-        reason: 'tapping a Brand/Creator search result used to do nothing '
-            'at all');
+    expect(find.byType(BrandProfileScreen), findsOneWidget,
+        reason: 'a Brand search result must open BrandProfileScreen (backed '
+            'by GET /brands/{id}), not CreatorProfileScreen (GET '
+            '/creators/{id} is the wrong collection for a Brand entity)');
   });
 }

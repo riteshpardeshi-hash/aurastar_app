@@ -88,7 +88,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
               children: [
                 _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
                 const Spacer(),
-                _circleIconButton(Icons.ios_share_rounded, () => _share(displayName)),
+                _circleIconButton(Icons.menu_rounded, () => _share(displayName)),
               ],
             ),
           ),
@@ -171,10 +171,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2D1B4E), Color(0xFF7B2CBF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        image: const DecorationImage(
+          image: AssetImage('assets/images/creator public profile/Asset 6.png'),
+          fit: BoxFit.cover,
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
@@ -200,7 +199,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _statColumn('${_videos.length}', 'Challenges'),
+                    _statDivider(),
                     _statColumn(_formatCount(_followerCount), 'Followers'),
+                    _statDivider(),
+                    // No public "following count" endpoint exists yet for
+                    // another creator's profile (only the self-scoped
+                    // /creator/following) — placeholder until the backend
+                    // adds one.
+                    _statColumn('0', 'Following'),
                   ],
                 ),
               ),
@@ -229,7 +235,11 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                         ),
                         if (isVerified) ...[
                           const SizedBox(width: 6),
-                          const Icon(Icons.verified_rounded, color: Color(0xFF7B9CFF), size: 18),
+                          Image.asset(
+                            'assets/images/creator public profile/Asset 13.png',
+                            width: 16,
+                            height: 16,
+                          ),
                         ],
                       ],
                     ),
@@ -253,8 +263,24 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          FollowButton(targetUserId: widget.creatorId, initialIsFollowing: isFollowing),
+          FollowButton(
+            targetUserId: widget.creatorId,
+            initialIsFollowing: isFollowing,
+            light: true,
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _statDivider() {
+    return Opacity(
+      opacity: 0.35,
+      child: Image.asset(
+        'assets/images/creator public profile/Asset 10.png',
+        width: 1,
+        height: 28,
+        fit: BoxFit.fill,
       ),
     );
   }

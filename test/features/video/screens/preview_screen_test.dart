@@ -227,6 +227,83 @@ void main() {
     expect(s3PutCalls, 1);
     expect(createSubmissionCalls, 1);
   });
+
+  // Regression coverage: the face-mismatch failure only used to surface the
+  // raw backend message ("...does not match your profile.") with no
+  // indication of what to actually change. Since it's server-side Gemini
+  // face matching against the user's stored avatar, the two things that
+  // actually affect the outcome are re-framing the shot and fixing a stale
+  // avatar — this test locks in that the client now says so, and that the
+  // "Update profile photo" link actually gets the user to where they can
+  // fix it.
+  testWidgets(
+      'a face-verification rejection shows an actionable tip and a working '
+      'link to update the profile photo', (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.method == 'PUT' &&
+          request.url.host == 'mock-upload.example') {
+        s3PutCalls++;
+        return http.Response('', 200);
+      }
+      if (request.url.path.endsWith('/submissions/presign')) {
+        presignCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'uploadUrl': 'https://mock-upload.example/put',
+              'videoId': 'video-$presignCalls',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'POST' &&
+          request.url.path.endsWith('/submissions')) {
+        createSubmissionCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'fail',
+            'message': 'Face verification failed: the person in the video '
+                'does not match your profile.',
+          }),
+          400,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PreviewScreen(
+        videoPath: videoFile.path,
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Submit for Aura Score'));
+      await Future<void>.delayed(const Duration(seconds: 2));
+    });
+    await tester.pump();
+
+    expect(
+      find.textContaining('the only'),
+      findsOneWidget,
+      reason: 'the raw backend message alone gives the user nothing to act '
+          'on; the client should explain what to fix',
+    );
+    expect(find.text('Update profile photo'), findsOneWidget);
+
+    await tester.tap(find.text('Update profile photo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Profile'), findsOneWidget,
+        reason: 'tapping the link should take the user to where they can '
+            'actually replace an outdated avatar');
+  });
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {

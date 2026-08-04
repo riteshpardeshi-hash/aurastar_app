@@ -162,7 +162,7 @@ class _CameraScreenState extends State<CameraScreen>
     _ghostCtrl!.setLooping(true);
     // Muted: this is a visual overlay guide only — its audio must not bleed
     // into the mic recording of the user's own take.
-    _ghostCtrl!.setVolume(0.0);
+    await _ghostCtrl!.setVolume(0.0);
     setState(() => _ghostReady = true);
   }
 
@@ -177,7 +177,16 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startRecording() async {
     await _cam!.startVideoRecording();
-    if (_ghostReady) _ghostCtrl?.play();
+    // Re-assert mute right before playback starts: startVideoRecording()
+    // just activated the device's audio-recording session (enableAudio:
+    // true), which is a system-level audio route change. On both ExoPlayer
+    // and AVPlayer that kind of route change can silently reset a player's
+    // volume, so the mute applied once back in _initGhost isn't guaranteed
+    // to still hold by the time play() actually runs.
+    if (_ghostReady) {
+      await _ghostCtrl?.setVolume(0.0);
+      _ghostCtrl?.play();
+    }
     _elapsed = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
@@ -530,6 +539,7 @@ class _CameraScreenState extends State<CameraScreen>
 
                     // Record button
                     GestureDetector(
+                      key: const Key('recordButton'),
                       onTap: _toggleRecord,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),

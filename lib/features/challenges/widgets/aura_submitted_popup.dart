@@ -39,7 +39,7 @@ const List<String> _kAuraSenseTrivia = [
 class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     with TickerProviderStateMixin {
   String? _resultStatus;
-  int _netAurasAwarded = 0;
+  int _auraPoints = 0;
   int _aiScore = 0;
   bool _isBestForChallenge = false;
   String _aiReason = '';
@@ -145,7 +145,6 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     if (!mounted || _resultStatus != null) return;
     final status = submissionStatusFromApi(data);
     final pts = (data['auraPoints'] as num?)?.toInt() ?? 0;
-    final netAwarded = (data['netAurasAwarded'] as num?)?.toInt() ?? pts;
     final score = (data['aiScore'] as num?)?.toInt() ?? 0;
     final isBest = data['isBestForChallenge'] as bool? ?? false;
     final reason = data['aiReason'] as String? ?? '';
@@ -153,7 +152,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
     _timeoutTimer?.cancel();
     setState(() {
       _resultStatus = status;
-      _netAurasAwarded = netAwarded;
+      _auraPoints = pts;
       _aiScore = score;
       _isBestForChallenge = isBest;
       _aiReason = reason;
@@ -200,7 +199,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
 
       final challengeLink = '$kChallengeBaseUrl/${widget.challengeId}';
       final message =
-          'I just completed "${widget.challengeTitle}" on Aura and earned $_netAurasAwarded Aura Points! 🏆\n\n'
+          'I just completed "${widget.challengeTitle}" on Aura and earned $_auraPoints Aura Points! 🏆\n\n'
           'Think you can beat me? Now it\'s your turn! 💪\n\n'
           '👉 Join the challenge:\n$challengeLink';
 
@@ -503,11 +502,14 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         AnimatedBuilder(
           animation: _countCtrl,
           builder: (_, __) {
-            final n = (_netAurasAwarded * Curves.easeOutCubic.transform(_countCtrl.value)).round();
+            final n = (_auraPoints * Curves.easeOutCubic.transform(_countCtrl.value)).round();
             return Row(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                // Mirrors the icon's width (8 gap + 32 image) on the left so the
+                // number itself sits on the true center, not the whole row.
+                const SizedBox(width: 40),
                 ShaderMask(
                   shaderCallback: (bounds) => const LinearGradient(
                     colors: [Colors.white, Color(0xFFC9A6FF)],
@@ -527,7 +529,13 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Image.asset('assets/images/aura earned/Asset 143.png', width: 32, height: 32),
+                // ClashDisplay digits/'+' have no descenders, so their glyph
+                // shape sits above the text line-box's vertical center — nudge
+                // the star up to align with the numerals instead of the box.
+                Transform.translate(
+                  offset: const Offset(0, -6),
+                  child: Image.asset('assets/images/aura earned/Asset 143.png', width: 32, height: 32),
+                ),
               ],
             );
           },
@@ -679,7 +687,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             child: AchievementCardView(
               challengeTitle: widget.challengeTitle,
               challengeId: widget.challengeId,
-              auraPoints: _netAurasAwarded,
+              auraPoints: _auraPoints,
               username: _username,
             ),
           ),

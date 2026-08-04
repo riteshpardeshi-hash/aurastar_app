@@ -165,6 +165,19 @@ class CreatorChallengesService {
     }
   }
 
+  /// Renders the challenge exactly as players will see it after publish —
+  /// `videoUrl`/`thumbnailUrl` are short-lived presigned GET URLs generated
+  /// server-side, unlike `fetchDraft()`'s raw stored keys.
+  Future<Map<String, dynamic>?> fetchPreview(String id) async {
+    try {
+      final res = await _client.get('/creator/challenges/$id/preview', auth: true);
+      if (res['status'] != 'success') return null;
+      return res['data'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> fetchFeedback(String id) async {
     try {
       final res = await _client.get('/creator/challenges/$id/feedback', auth: true);

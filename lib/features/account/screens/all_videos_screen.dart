@@ -93,35 +93,46 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
-          : _videos.isEmpty
-              ? _buildEmpty()
-              : _buildGrid(),
+          : RefreshIndicator(
+              color: _accent,
+              onRefresh: _load,
+              child: _videos.isEmpty ? _buildEmpty(context) : _buildGrid(),
+            ),
     );
   }
 
-  Widget _buildEmpty() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.video_library_outlined,
-                color: Colors.white.withValues(alpha: 0.15), size: 64),
-            const SizedBox(height: 20),
-            const Text('No videos yet',
-                style: TextStyle(
-                    color: Colors.white54,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600)),
-          ],
+  Widget _buildEmpty(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.video_library_outlined,
+                      color: Colors.white.withValues(alpha: 0.15), size: 64),
+                  const SizedBox(height: 20),
+                  const Text('No videos yet',
+                      style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _buildGrid() {
     return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,

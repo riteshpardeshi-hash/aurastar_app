@@ -130,6 +130,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   Future<void> _save() async {
+    if (_pickedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a profile photo.')),
+      );
+      return;
+    }
     if (_nameCtrl.text.trim().isEmpty || _usernameCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in your name and username.')),

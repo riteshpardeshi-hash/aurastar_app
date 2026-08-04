@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
+import 'screens/friends_management_screen.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
+import '../../core/services/friends_service.dart';
 import '../../core/services/leaderboard_service.dart';
 
 class LeaderboardScreen extends StatefulWidget {
@@ -46,6 +48,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             fontFamily: 'ClashDisplay',
           ),
         ),
+        actions: const [_FriendsIconButton()],
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: _accent,
@@ -87,6 +90,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             scoreSuffix: 'Auras',
             emptyTitle: 'No friends yet',
             emptySubtitle: 'Add friends to see how you stack up',
+            emptyAction: Builder(
+              builder: (context) => TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FriendsManagementScreen()),
+                ),
+                icon: const Icon(Icons.person_add_alt_1, color: _accent, size: 18),
+                label: const Text(
+                  'Add friends',
+                  style: TextStyle(color: _accent, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
           ),
           const _ChallengeBoard(),
         ],
@@ -103,12 +119,14 @@ class _ApiBoard extends StatefulWidget {
   final String scoreSuffix;
   final String emptyTitle;
   final String emptySubtitle;
+  final Widget? emptyAction;
 
   const _ApiBoard({
     required this.fetchPage,
     required this.scoreSuffix,
     required this.emptyTitle,
     required this.emptySubtitle,
+    this.emptyAction,
   });
 
   @override
@@ -197,7 +215,11 @@ class _ApiBoardState extends State<_ApiBoard>
           children: [
             SizedBox(
               height: MediaQuery.of(context).size.height * 0.6,
-              child: _emptyState(widget.emptyTitle, widget.emptySubtitle),
+              child: _emptyState(
+                widget.emptyTitle,
+                widget.emptySubtitle,
+                action: widget.emptyAction,
+              ),
             ),
           ],
         ),
@@ -950,9 +972,78 @@ void _showPrivateProfile(BuildContext context) {
     );
 }
 
+// ── Friends icon button (app bar) ────────────────────────────────────────────────
+
+class _FriendsIconButton extends StatefulWidget {
+  const _FriendsIconButton();
+
+  @override
+  State<_FriendsIconButton> createState() => _FriendsIconButtonState();
+}
+
+class _FriendsIconButtonState extends State<_FriendsIconButton> {
+  final _service = FriendsService();
+  int _pending = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshCount();
+  }
+
+  Future<void> _refreshCount() async {
+    final requests = await _service.fetchPendingRequests();
+    if (mounted) setState(() => _pending = requests.length);
+  }
+
+  Future<void> _open() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FriendsManagementScreen()),
+    );
+    if (mounted) _refreshCount();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.people_alt_outlined, color: Colors.white70),
+          if (_pending > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                constraints: const BoxConstraints(minWidth: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7B2CBF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF080810), width: 1.5),
+                ),
+                child: Text(
+                  _pending > 99 ? '99+' : '$_pending',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      onPressed: _open,
+    );
+  }
+}
+
 // ── Shared empty state ─────────────────────────────────────────────────────────
 
-Widget _emptyState(String title, String subtitle) => Center(
+Widget _emptyState(String title, String subtitle, {Widget? action}) => Center(
   child: Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
@@ -980,6 +1071,10 @@ Widget _emptyState(String title, String subtitle) => Center(
             ),
           ),
         ),
+      ],
+      if (action != null) ...[
+        const SizedBox(height: 16),
+        action,
       ],
     ],
   ),

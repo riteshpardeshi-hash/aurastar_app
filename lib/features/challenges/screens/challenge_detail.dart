@@ -76,7 +76,19 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         _auraPoints = c['starsCount'] as int;
         _isPaused = false;
         _thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
-        if (_videoUrl.isEmpty) _videoUrl = c['videoUrl'] as String? ?? '';
+        // Per openapi.yaml, Challenge.videoUrl is resolved fresh on every
+        // read — a presigned (expiring) RAW URL while the reference video
+        // is still processing, a stable public HLS URL once done. Callers
+        // that already had a videoUrl (nearly every list screen) pass in
+        // whatever they fetched whenever *their* list loaded, which can be a
+        // since-expired presigned URL by the time the user gets here. Always
+        // prefer this fetch's fresh value over that stale one — the old
+        // `if (_videoUrl.isEmpty)` guard only existed for entry points like
+        // search results that pass '', but it also meant a stale presigned
+        // URL from anywhere else was kept forever, silently breaking
+        // CameraScreen's ghost overlay for any challenge still processing.
+        final freshVideoUrl = c['videoUrl'] as String? ?? '';
+        if (freshVideoUrl.isNotEmpty) _videoUrl = freshVideoUrl;
         if (_instructions.isEmpty) {
           _instructions = c['instructions'] as String? ?? '';
         }
@@ -739,14 +751,14 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // ── Video section ──────────────────────────────────────────────────────────
   Widget _buildVideoSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+      padding: const EdgeInsets.fromLTRB(60, 0, 60, 28),
       child: GestureDetector(
         onTap: _initAndPlayVideo,
         onLongPress: _videoInitialized ? _enterFullscreen : null,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AspectRatio(
-            aspectRatio: 16 / 9,
+            aspectRatio: 4 / 5,
             child: Stack(
               fit: StackFit.expand,
               children: [

@@ -198,8 +198,13 @@ class _WalletScreenState extends State<WalletScreen> {
     Color iconColor;
     switch (type) {
       case 'challenge_score':
+      case 'challenge_submission':
         icon = Icons.star_rounded;
         iconColor = _accent;
+        break;
+      case 'achievement':
+        icon = Icons.emoji_events_rounded;
+        iconColor = const Color(0xFFFFD700);
         break;
       case 'daily_score_replacement':
         icon = Icons.swap_vert_rounded;

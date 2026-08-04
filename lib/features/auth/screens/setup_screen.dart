@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/services/auth_api_service.dart';
 import '../../dashboard/dashboard.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -30,6 +31,11 @@ class _SetupScreenState extends State<SetupScreen> {
     try {
       final uid = await ApiClient().userId;
       final prefs = await SharedPreferences.getInstance();
+      final referralCode = prefs.getString('pending_referral_code');
+      if (referralCode != null && referralCode.isNotEmpty) {
+        // Best-effort: an invalid/already-used/expired code shouldn't block onboarding.
+        await AuthApiService().applyReferralCode(referralCode);
+      }
       await prefs.remove('pending_referral_code');
       // Mark setup complete for this specific user so splash never re-runs onboarding.
       if (uid != null && uid.isNotEmpty) {

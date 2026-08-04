@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/globals.dart';
@@ -12,7 +13,18 @@ import 'core/utils/deep_link_validation.dart';
 import 'firebase_options.dart';
 import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
+import 'features/notifications/notifications_screen.dart';
 import 'features/splash/screens/splash_screen.dart';
+
+// Must be a top-level (or static) function — the FCM plugin runs it in a
+// separate background isolate that hasn't executed main(), so Firebase
+// needs its own init call here. No work is done beyond that: the OS tray
+// notification for a background/terminated push is rendered natively by
+// the FCM plugin without any app code involved.
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +33,7 @@ void main() async {
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   try {
     cameras = await availableCameras();
   } catch (_) {
@@ -42,6 +55,7 @@ class _MyAppState extends State<MyApp> {
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _sessionExpiredSub;
+  StreamSubscription<RemoteMessage>? _notificationTapSub;
   // Guards against a burst of near-simultaneous 401s (e.g. Dashboard's
   // Future.wait of several authed calls) each firing onSessionExpired and
   // triggering a duplicate navigation reset.
@@ -51,8 +65,27 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _initDeepLinks();
+    _initPushTapHandling();
     _sessionExpiredSub =
         ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
+  }
+
+  // Push payloads don't carry a documented per-type deep-link target today
+  // (NudgeTemplate.deepLinkScreen is admin-editable copy, not a contract the
+  // client can safely branch on), so tapping any push just surfaces the
+  // in-app notification list rather than guessing a destination.
+  Future<void> _initPushTapHandling() async {
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openNotifications());
+    }
+    _notificationTapSub =
+        FirebaseMessaging.onMessageOpenedApp.listen((_) => _openNotifications());
+  }
+
+  void _openNotifications() {
+    _navigatorKey.currentState
+        ?.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
   }
 
   void _handleSessionExpired() {
@@ -131,6 +164,7 @@ class _MyAppState extends State<MyApp> {
   void dispose() {
     _linkSub?.cancel();
     _sessionExpiredSub?.cancel();
+    _notificationTapSub?.cancel();
     super.dispose();
   }
 
