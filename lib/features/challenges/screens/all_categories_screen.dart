@@ -1,28 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/challenges_service.dart';
 import 'category_challenges_screen.dart';
 
-// Fallback styling for a category that doesn't have a custom icon asset
-// below (e.g. a new one an admin adds before an icon is designed for it).
-const _fallbackMeta = (icon: Icons.category_rounded, color: Color(0xFF7B2CBF));
-
-// Maps the backend's actual category names to their designed icon in
-// assets/images/category icons/. Categories not listed here (e.g. a new one
-// an admin adds before an icon is designed for it) fall back to
-// _fallbackMeta's generic icon instead of breaking. Public — also used by
-// AllGeneralChallengesScreen's category tiles for the same icon set.
-const categoryIconAsset = <String, String>{
-  'Beatboxing': 'assets/images/category icons/beatbox.svg',
-  'Calisthenics': 'assets/images/category icons/Calesthenic.svg',
-  'Cosplay Showdown': 'assets/images/category icons/Cosplay.svg',
-  'Dance Battle': 'assets/images/category icons/dance.svg',
-  'Freestyle Football': 'assets/images/category icons/football.svg',
-  'Gaming Highlights': 'assets/images/category icons/gaming.svg',
-  'Music Covers': 'assets/images/category icons/music.svg',
-  'Parkour & Free Running': 'assets/images/category icons/parkour.svg',
-  'Skateboarding': 'assets/images/category icons/skate.svg',
-};
+const _categoryTileColor = Color(0xFF7B2CBF);
 
 class AllCategoriesScreen extends StatefulWidget {
   // {_id, name} pairs — GET /challenges' `category` filter is the category's
@@ -101,8 +81,6 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 itemBuilder: (context, i) {
                   final id = _categories[i]['_id'] as String? ?? '';
                   final name = _categories[i]['name'] as String? ?? '';
-                  final meta = _fallbackMeta;
-                  final iconAsset = categoryIconAsset[name];
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,
@@ -112,42 +90,26 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                       ),
                     ),
                     child: Container(
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: meta.color.withValues(alpha: 0.12),
+                        color: _categoryTileColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: meta.color.withValues(alpha: 0.25),
+                            color: _categoryTileColor.withValues(alpha: 0.25),
                             width: 1),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 8),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            iconAsset != null
-                                ? SvgPicture.asset(
-                                    iconAsset,
-                                    width: 36,
-                                    height: 36,
-                                    colorFilter: const ColorFilter.mode(
-                                        Colors.white, BlendMode.srcIn),
-                                  )
-                                : Icon(meta.icon,
-                                    color: Colors.white, size: 30),
-                            const SizedBox(height: 6),
-                            Text(name,
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    color: meta.color,
-                                    fontSize: 12,
-                                    height: 1.2,
-                                    fontWeight: FontWeight.w700)),
-                          ],
-                        ),
+                        child: Text(name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: _categoryTileColor,
+                                fontSize: 12,
+                                height: 1.2,
+                                fontWeight: FontWeight.w700)),
                       ),
                     ),
                   );

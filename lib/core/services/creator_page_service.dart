@@ -94,7 +94,15 @@ class CreatorPageService {
     try {
       final res = await _client.get('/creator/page', auth: true);
       if (res['status'] != 'success') return null;
-      return res['data'] as Map<String, dynamic>?;
+      final data = res['data'] as Map<String, dynamic>?;
+      if (data == null) return null;
+      // The live API wraps the profile as `data: {profile: ...}` (profile is
+      // null when the caller has no page yet) rather than returning it
+      // directly as `data`, despite the documented schema for this endpoint
+      // — unwrap it so callers get the flat CreatorProfile map either way.
+      return data.containsKey('profile')
+          ? data['profile'] as Map<String, dynamic>?
+          : data;
     } catch (_) {
       return null;
     }

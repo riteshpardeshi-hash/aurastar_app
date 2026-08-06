@@ -36,6 +36,11 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
 
   static Map<String, dynamic> _normaliseSubmission(Map<String, dynamic> s) {
     final submissionId = s['_id'] as String? ?? s['id'] as String? ?? '';
+    // /profile/videos returns the Video document itself — its top-level
+    // `status` (active/inactive) is the video's own lifecycle, unrelated to
+    // AI scoring, which is nested under `submission`. Fall back to `s`
+    // itself for a video with no submission yet (still pending).
+    final submission = s['submission'] as Map<String, dynamic>? ?? s;
     return {
       // The Submission and Video are distinct backend documents — DELETE
       // /videos/{id} needs the Video's own id. Fall back to the submission
@@ -43,11 +48,20 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       // rather than silently corrupt the wrong document).
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
-      'status': submissionStatusFromApi(s),
-      'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
-      'aiScore': s['aiScore'],
-      'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',
-      'reviewedByAI': s['reviewedByAI'] as bool? ?? true,
+      'status': submissionStatusFromApi(submission),
+      // See my_account_screen.dart's _normaliseSubmission: `/profile/videos`'s
+      // nested `submission` omits `auraPoints`; openapi.yaml defines it as
+      // "Raw aiScore stored on the submission record", so aiScore is the
+      // correct fallback.
+      'auraPoints': (submission['auraPoints'] as num?)?.toInt() ??
+          (submission['aiScore'] as num?)?.toInt() ??
+          0,
+      'aiScore': submission['aiScore'],
+      'aiReason': submission['feedback'] as String? ??
+          submission['improvementTip'] as String? ??
+          submission['aiReason'] as String? ??
+          '',
+      'reviewedByAI': submission['reviewedByAI'] as bool? ?? true,
     };
   }
 

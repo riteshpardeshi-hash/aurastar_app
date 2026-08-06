@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
@@ -30,6 +29,11 @@ class _AllGeneralChallengesScreenState
   // {_id, name} pairs — GET /challenges' `category` filter is the
   // category's ObjectId, not its display name.
   List<Map<String, dynamic>> _categories = const [];
+  // A random 6-category subset shown in this screen's grid — the full list
+  // is one tap away via "See All", so this just teases a sample. Picked
+  // once when categories load, not recomputed on every rebuild, so the
+  // tiles don't reshuffle when unrelated state (e.g. the filter) changes.
+  List<Map<String, dynamic>> _displayedCategories = const [];
   static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
 
   @override
@@ -42,7 +46,11 @@ class _AllGeneralChallengesScreenState
   Future<void> _loadCategories() async {
     final cats = await ChallengesService().fetchCategoriesWithIds();
     if (mounted && cats.isNotEmpty) {
-      setState(() => _categories = cats);
+      final shuffled = List<Map<String, dynamic>>.from(cats)..shuffle();
+      setState(() {
+        _categories = cats;
+        _displayedCategories = shuffled.take(6).toList();
+      });
     }
   }
 
@@ -189,7 +197,7 @@ class _AllGeneralChallengesScreenState
             crossAxisSpacing: 6,
             mainAxisSpacing: 6,
             childAspectRatio: 0.9,
-            children: _categories
+            children: _displayedCategories
                 .map((cat) => _CategoryTile(
                       categoryId: cat['_id'] as String? ?? '',
                       categoryName: cat['name'] as String? ?? '',
@@ -437,84 +445,47 @@ class _AllGeneralChallengesScreenState
 }
 
 // ── Category tile ──────────────────────────────────────────────────────────────
-class _CategoryTile extends StatefulWidget {
+// Same tinted-purple styling as AllCategoriesScreen's tiles — no
+// per-category video thumbnail, so all tiles render identically regardless
+// of whether that category has any challenges yet.
+class _CategoryTile extends StatelessWidget {
+  static const _tileColor = Color(0xFF7B2CBF);
+
   final String categoryId;
   final String categoryName;
   const _CategoryTile({required this.categoryId, required this.categoryName});
 
   @override
-  State<_CategoryTile> createState() => _CategoryTileState();
-}
-
-class _CategoryTileState extends State<_CategoryTile> {
-  String? _videoUrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final list = await ChallengesService()
-          .fetchChallenges(category: widget.categoryId, limit: 1);
-      if (mounted && list.isNotEmpty) {
-        setState(() => _videoUrl = list.first['videoUrl'] as String? ?? '');
-      }
-    } catch (_) {}
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final videoUrl = _videoUrl ?? '';
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => CategoryChallengesScreen(
-                categoryId: widget.categoryId,
-                categoryName: widget.categoryName)),
+                categoryId: categoryId, categoryName: categoryName)),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (videoUrl.isNotEmpty)
-              VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover)
-            else
-              const _DarkPlaceholder(),
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.4, 1.0],
-                      colors: [Colors.transparent, Colors.black87],
-                    ),
-                  ),
-                ),
-                Center(child: _CategoryIcon(categoryName: widget.categoryName)),
-                Positioned(
-                  bottom: 7,
-                  left: 0,
-                  right: 0,
-                  child: Text(
-                    widget.categoryName,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: 'SpaceGrotesk',
-                    ),
-                  ),
-                ),
-              ],
-            ),
+      child: Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        decoration: BoxDecoration(
+          color: _tileColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _tileColor.withValues(alpha: 0.25), width: 1),
+        ),
+        child: Text(
+          categoryName,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: _tileColor,
+            fontSize: 12,
+            height: 1.2,
+            fontWeight: FontWeight.w700,
           ),
-        );
+        ),
+      ),
+    );
   }
 }
 
@@ -652,36 +623,5 @@ class _ChallengeCard extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-// ── Dark placeholder for missing thumbnails ────────────────────────────────────
-// Plain — _CategoryIcon is layered on top of every tile regardless of
-// whether a thumbnail loaded, so this no longer needs its own icon.
-class _DarkPlaceholder extends StatelessWidget {
-  const _DarkPlaceholder();
-
-  @override
-  Widget build(BuildContext context) =>
-      Container(color: const Color(0xFF0F0F1A));
-}
-
-// ── Category icon overlay ───────────────────────────────────────────────────
-// Same icon set as AllCategoriesScreen (assets/images/category icons/*.svg).
-class _CategoryIcon extends StatelessWidget {
-  final String categoryName;
-  const _CategoryIcon({required this.categoryName});
-
-  @override
-  Widget build(BuildContext context) {
-    final iconAsset = categoryIconAsset[categoryName];
-    return iconAsset != null
-        ? SvgPicture.asset(
-            iconAsset,
-            width: 50,
-            height: 50,
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-          )
-        : const Icon(Icons.category_rounded, color: Colors.white70, size: 50);
   }
 }

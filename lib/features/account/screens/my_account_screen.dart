@@ -45,14 +45,17 @@ class _AchievementCardsSection extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         SizedBox(
-          height: 150,
+          // AchievementCardView is a fixed 268-wide card internally;
+          // _AchievementMiniCard scales it down to _miniCardWidth via
+          // FittedBox, so the row height follows the same aspect ratio
+          // (810/1231) at that smaller width instead of the native 268.
+          height: _AchievementMiniCard.width * 1231 / 810,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: cards.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (context, i) => _AchievementMiniCard(
               cardData: cards[i],
-              featured: i == 0,
               username: username,
             ),
           ),
@@ -63,21 +66,21 @@ class _AchievementCardsSection extends StatelessWidget {
   }
 }
 
-/// Compact tile shown in the profile's horizontal achievement-card row.
-/// Tapping it opens the full shareable "Flex Card" (AchievementCardView) in
-/// a preview dialog so the capture happens while it's genuinely on-screen.
+/// The actual shareable "Flex Card" (AchievementCardView), shown directly
+/// in the profile's horizontal achievement-card row. Tapping it opens the
+/// same card full-size in a preview dialog with the share action.
 class _AchievementMiniCard extends StatelessWidget {
   final Map<String, dynamic> cardData;
-  final bool featured;
   final String username;
 
   const _AchievementMiniCard({
     required this.cardData,
-    required this.featured,
     required this.username,
   });
 
-  static const _accent = Color(0xFF7B2CBF);
+  // AchievementCardView lays itself out at a fixed 268 width, so it's
+  // scaled down to this width via FittedBox rather than resized directly.
+  static const width = 150.0;
 
   @override
   Widget build(BuildContext context) {
@@ -92,71 +95,17 @@ class _AchievementMiniCard extends StatelessWidget {
         challengeId: challengeId,
         auraPoints: auraPoints,
       ),
-      child: Container(
-        width: 150,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: featured ? _accent.withValues(alpha: 0.16) : const Color(0xFF17162A),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: featured ? _accent.withValues(alpha: 0.65) : Colors.white.withValues(alpha: 0.08),
-            width: featured ? 1.5 : 1,
+      child: SizedBox(
+        width: width,
+        child: FittedBox(
+          fit: BoxFit.contain,
+          alignment: Alignment.topCenter,
+          child: AchievementCardView(
+            challengeTitle: challengeTitle,
+            challengeId: challengeId,
+            auraPoints: auraPoints,
+            username: username,
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'AURA',
-              style: TextStyle(
-                color: featured ? _accent : Colors.white38,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'CHALLENGE COMPLETED',
-              style: TextStyle(
-                color: featured ? Colors.white70 : Colors.white38,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.6,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              challengeTitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '+$auraPoints',
-              style: TextStyle(
-                color: featured ? Colors.white : Colors.white70,
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                height: 1,
-              ),
-            ),
-            Text(
-              'AURA POINTS',
-              style: TextStyle(
-                color: featured ? _accent : Colors.white38,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -394,6 +343,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     // in Swagger beyond SuccessEnvelope.
     final challenge = s['challengeId'];
     final challengeMap = challenge is Map<String, dynamic> ? challenge : null;
+    // /profile/videos returns the Video document itself — its top-level
+    // `status` (active/inactive) is the video's own lifecycle, unrelated to
+    // AI scoring. The scoring result is nested under `submission` (confirmed
+    // live 2026-08-05: video status "active" + processingStatus "completed"
+    // while submission.status was "scored"/verdict "INVALID"). Fall back to
+    // `s` itself for a video with no submission yet (still pending).
+    final submission = s['submission'] as Map<String, dynamic>? ?? s;
     return {
       // The Submission and Video are distinct backend documents — DELETE
       // /videos/{id} needs the Video's own id. Fall back to the submission
@@ -401,11 +357,20 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       // rather than silently corrupt the wrong document).
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
-      'status': submissionStatusFromApi(s),
-      'auraPoints': (s['auraPoints'] as num?)?.toInt() ?? 0,
-      'aiScore': s['aiScore'],
-      'aiReason': s['feedback'] as String? ?? s['aiReason'] as String? ?? '',
-      'reviewedByAI': s['reviewedByAI'] as bool? ?? true,
+      'status': submissionStatusFromApi(submission),
+      // `/profile/videos`'s nested `submission` object omits `auraPoints`
+      // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
+      // is defined as "Raw aiScore stored on the submission record", so
+      // aiScore is the correct fallback, not an approximation.
+      'auraPoints': (submission['auraPoints'] as num?)?.toInt() ??
+          (submission['aiScore'] as num?)?.toInt() ??
+          0,
+      'aiScore': submission['aiScore'],
+      'aiReason': submission['feedback'] as String? ??
+          submission['improvementTip'] as String? ??
+          submission['aiReason'] as String? ??
+          '',
+      'reviewedByAI': submission['reviewedByAI'] as bool? ?? true,
       'challengeId': challengeMap?['_id'] as String? ??
           (challenge is String ? challenge : null) ??
           '',
