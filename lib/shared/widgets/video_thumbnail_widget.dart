@@ -97,6 +97,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         imageFormat: ImageFormat.JPEG,
         maxWidth: 480,
         quality: 75,
+        timeMs: 500,
       ).timeout(const Duration(seconds: 12));
       debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
       if (data != null) videoThumbnailCache[widget.videoUrl] = data;

@@ -36,7 +36,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   VideoPlayerController? _videoController;
   bool _videoInitialized = false;
   bool _videoStarted = false; // true once user taps play
-  bool _isPlaying = false;
   bool _isFullscreen = false;
 
   // Challenge data
@@ -147,14 +146,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   Future<void> _initAndPlayVideo() async {
     if (_videoStarted) {
-      // Toggle play/pause
-      if (_videoController?.value.isPlaying == true) {
-        _videoController!.pause();
-        setState(() => _isPlaying = false);
-      } else {
-        _videoController!.play();
-        setState(() => _isPlaying = true);
-      }
+      // Already loaded from a previous play — reopen fullscreen instead of
+      // playing inline (the inline card has no aspect-correct player).
+      if (_videoInitialized) _enterFullscreen();
       return;
     }
 
@@ -166,20 +160,19 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     await _videoController!.initialize();
     if (!mounted) return;
     setState(() => _videoInitialized = true);
+    _enterFullscreen();
     _videoController!.play();
-    setState(() => _isPlaying = true);
   }
 
   void _enterFullscreen() {
     setState(() => _isFullscreen = true);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    // Videos are recorded vertically — lock portrait rather than landscape.
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
   void _exitFullscreen() {
+    _videoController?.pause();
     setState(() => _isFullscreen = false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -754,7 +747,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       padding: const EdgeInsets.fromLTRB(60, 0, 60, 28),
       child: GestureDetector(
         onTap: _initAndPlayVideo,
-        onLongPress: _videoInitialized ? _enterFullscreen : null,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AspectRatio(
@@ -762,56 +754,42 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Background / thumbnail
-                if (!_videoStarted || !_videoInitialized)
-                  VideoThumbnailWidget(
-                      videoUrl: _videoUrl,
-                      thumbnailUrl: _thumbnailUrl,
-                      fit: BoxFit.cover)
-                else
-                  VideoPlayer(_videoController!),
+                // Background / thumbnail — actual playback always happens in
+                // the fullscreen overlay, so this card only ever shows the
+                // thumbnail (never the raw VideoPlayer, which would stretch
+                // to fill this 4:5 box instead of preserving aspect ratio).
+                VideoThumbnailWidget(
+                    videoUrl: _videoUrl,
+                    thumbnailUrl: _thumbnailUrl,
+                    fit: BoxFit.cover),
 
-                // Loading spinner
+                // Dim overlay while loading
                 if (_videoStarted && !_videoInitialized)
-                  Container(
-                    color: Colors.black54,
-                    child: const Center(
-                      child: CircularProgressIndicator(color: _accent),
-                    ),
-                  ),
+                  Container(color: Colors.black54),
 
-                // Play/pause overlay
-                if (!_isPlaying)
-                  Center(
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: _accent.withValues(alpha: 0.90),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: _accent.withValues(alpha: 0.55),
-                            blurRadius: 20,
+                // Loading spinner (while the tapped video initializes) or
+                // play button (idle) — mutually exclusive so the spinner is
+                // never hidden underneath the play button.
+                Center(
+                  child: (_videoStarted && !_videoInitialized)
+                      ? const CircularProgressIndicator(color: _accent)
+                      : Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: _accent.withValues(alpha: 0.90),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: _accent.withValues(alpha: 0.55),
+                                blurRadius: 20,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white, size: 34),
-                    ),
-                  ),
-
-                // Fullscreen button
-                if (_videoInitialized)
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: GestureDetector(
-                      onTap: _enterFullscreen,
-                      child: const Icon(Icons.fullscreen_rounded,
-                          color: Colors.white60, size: 22),
-                    ),
-                  ),
+                          child: const Icon(Icons.play_arrow_rounded,
+                              color: Colors.white, size: 34),
+                        ),
+                ),
               ],
             ),
           ),

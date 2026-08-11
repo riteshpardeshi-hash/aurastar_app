@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/challenges/screens/challenge_detail.dart';
+import '../../../features/challenges/screens/all_categories_screen.dart' show categoryIconAsset;
 import '../../../features/challenges/screens/all_general_challenges_screen.dart';
 import '../../../features/challenges/screens/category_challenges_screen.dart';
 import '../../../features/challenges/screens/trending_screen.dart';
@@ -771,6 +773,7 @@ class _CategoriesSectionState extends State<_CategoriesSection> {
             itemBuilder: (context, i) {
               final id = categories[i]['_id'] as String? ?? '';
               final name = categories[i]['name'] as String? ?? '';
+              final iconAsset = categoryIconAsset[name];
               return GestureDetector(
                 onTap: () => Navigator.push(
                   context,
@@ -787,14 +790,30 @@ class _CategoriesSectionState extends State<_CategoriesSection> {
                     border: Border.all(
                         color: _accent.withValues(alpha: 0.25), width: 1),
                   ),
-                  child: Text(name,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: _accent,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700)),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      iconAsset != null
+                          ? SvgPicture.asset(
+                              iconAsset,
+                              width: 28,
+                              height: 28,
+                              colorFilter: const ColorFilter.mode(
+                                  _accent, BlendMode.srcIn),
+                            )
+                          : const Icon(Icons.category_rounded,
+                              color: _accent, size: 28),
+                      const SizedBox(height: 5),
+                      Text(name,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: _accent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                 ),
               );
             },

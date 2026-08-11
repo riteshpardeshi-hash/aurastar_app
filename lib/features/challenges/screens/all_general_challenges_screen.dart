@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
@@ -457,6 +458,7 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final iconAsset = categoryIconAsset[categoryName];
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -472,17 +474,34 @@ class _CategoryTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _tileColor.withValues(alpha: 0.25), width: 1),
         ),
-        child: Text(
-          categoryName,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: _tileColor,
-            fontSize: 12,
-            height: 1.2,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            iconAsset != null
+                ? SvgPicture.asset(
+                    iconAsset,
+                    width: 42,
+                    height: 42,
+                    colorFilter:
+                        const ColorFilter.mode(_tileColor, BlendMode.srcIn),
+                  )
+                : const Icon(Icons.category_rounded,
+                    color: _tileColor, size: 36),
+            const SizedBox(height: 6),
+            Text(
+              categoryName,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: _tileColor,
+                fontSize: 12,
+                height: 1.2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );

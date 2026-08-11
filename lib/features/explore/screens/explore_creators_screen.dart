@@ -55,14 +55,14 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Explore Brands")),
+      appBar: AppBar(title: const Text("Explore Creators")),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
               decoration: InputDecoration(
-                hintText: "Search brands...",
+                hintText: "Search creators...",
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),

@@ -18,6 +18,7 @@ import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/trending_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
+import '../explore/screens/brands_list_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
 import '../../shared/widgets/notification_bell_button.dart';
 import '../leaderboard/leaderboard_screen.dart';
@@ -1662,9 +1663,11 @@ class _DashboardState extends State<Dashboard> {
                       _navItem(
                         icon: Icons.storefront_rounded,
                         label: 'Brand',
-                        // Brands section isn't built yet; stay on Dashboard for now.
-                        onTap: () =>
-                            Navigator.popUntil(context, (route) => route.isFirst),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const BrandsListScreen()),
+                        ),
                       ),
                       const SizedBox(width: 58),
                       _navItem(

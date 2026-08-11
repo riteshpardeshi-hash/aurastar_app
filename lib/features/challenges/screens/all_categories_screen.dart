@@ -1,8 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/challenges_service.dart';
 import 'category_challenges_screen.dart';
 
 const _categoryTileColor = Color(0xFF7B2CBF);
+
+// Categories without a designed icon below (e.g. a new one an admin adds)
+// fall back to this icon.
+const _fallbackIcon = Icons.category_rounded;
+
+// Maps the backend's actual category names (GET /categories, checked live
+// 2026-08-10 — 15 categories) to their designed icon in
+// assets/images/new category icons/. Names not listed here fall back to
+// _fallbackIcon instead of breaking. Public — also used by
+// AllGeneralChallengesScreen and the home feed's Categories section for the
+// same icon set.
+const categoryIconAsset = <String, String>{
+  'Action': 'assets/images/new category icons/action.svg',
+  'Animal Dancing': 'assets/images/new category icons/animals.svg',
+  'Animals in action': 'assets/images/new category icons/animals.svg',
+  'Challenges': 'assets/images/new category icons/challenges.svg',
+  'Dance': 'assets/images/new category icons/dance.svg',
+  'Facial expressions': 'assets/images/new category icons/facial expression.svg',
+  'Fashion': 'assets/images/new category icons/fashion.svg',
+  'Fitness': 'assets/images/new category icons/fitness.svg',
+  'Food': 'assets/images/new category icons/food.svg',
+  'Juggling': 'assets/images/new category icons/juggling.svg',
+  'Singing': 'assets/images/new category icons/singing.svg',
+  'Sports': 'assets/images/new category icons/football.svg',
+  'Tricks': 'assets/images/new category icons/Tricks.svg',
+  'Yoga': 'assets/images/new category icons/yoga.svg',
+  'Zombies': 'assets/images/new category icons/zombie.svg',
+};
 
 class AllCategoriesScreen extends StatefulWidget {
   // {_id, name} pairs — GET /challenges' `category` filter is the category's
@@ -81,6 +110,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 itemBuilder: (context, i) {
                   final id = _categories[i]['_id'] as String? ?? '';
                   final name = _categories[i]['name'] as String? ?? '';
+                  final iconAsset = categoryIconAsset[name];
                   return GestureDetector(
                     onTap: () => Navigator.push(
                       context,
@@ -101,15 +131,32 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 8),
-                        child: Text(name,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: _categoryTileColor,
-                                fontSize: 12,
-                                height: 1.2,
-                                fontWeight: FontWeight.w700)),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            iconAsset != null
+                                ? SvgPicture.asset(
+                                    iconAsset,
+                                    width: 42,
+                                    height: 42,
+                                    colorFilter: const ColorFilter.mode(
+                                        _categoryTileColor, BlendMode.srcIn),
+                                  )
+                                : const Icon(_fallbackIcon,
+                                    color: _categoryTileColor, size: 36),
+                            const SizedBox(height: 6),
+                            Text(name,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: _categoryTileColor,
+                                    fontSize: 12,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
                       ),
                     ),
                   );
