@@ -5,6 +5,7 @@ import '../../../core/services/creator_account_service.dart';
 import '../../../core/services/creator_challenges_service.dart' show pickInt, pickString;
 import '../../../core/services/creator_dashboard_service.dart';
 import '../../../core/services/creator_page_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../challenges/screens/all_general_challenges_screen.dart';
 import 'creator_challenge_status_screen.dart';
 import 'creator_challenges_screen.dart';
@@ -238,7 +239,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                     if (username.isNotEmpty)
                       Text('@$username',
                           style: const TextStyle(
-                              color: Colors.white60, fontSize: 13)),
+                              color: AppColors.textMuted, fontSize: 13)),
                   ],
                 ),
               ),
@@ -269,7 +270,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(bio,
-                style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           ],
           const SizedBox(height: 14),
           Row(
@@ -305,7 +306,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(message,
-                style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4)),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
           ),
         ],
       ),
@@ -327,7 +328,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                   fontWeight: FontWeight.bold,
                   fontFamily: 'SpaceGrotesk')),
           Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
         ],
       ),
     );
@@ -387,7 +388,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: Text('Next: ${nextTier.name}',
-                  style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
             ),
           ],
         ],
@@ -541,7 +542,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(message,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4)),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
             ),
             if (challengeId != null)
               const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
@@ -576,7 +577,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
           const SizedBox(height: 2),
           Text(title,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
         ],
       ),
     );
@@ -691,10 +692,10 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                       color: Colors.white24, size: 36),
                   SizedBox(height: 10),
                   Text('No submissions yet',
-                      style: TextStyle(color: Colors.white54, fontSize: 14)),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
                   SizedBox(height: 4),
                   Text('Take a challenge to earn Aura points',
-                      style: TextStyle(color: Colors.white38, fontSize: 12)),
+                      style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),
@@ -785,7 +786,7 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                       const SizedBox(width: 8),
                       Text(timeStr,
                           style: const TextStyle(
-                              color: Colors.white38, fontSize: 10)),
+                              color: AppColors.textFaint, fontSize: 10)),
                     ],
                   ],
                 ),

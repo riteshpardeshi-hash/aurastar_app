@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -350,7 +351,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: 0.30), fontSize: 15),
+              color: AppColors.textFaint, fontSize: 15),
           prefixIcon: icon != null && maxLines == 1
               ? Icon(icon,
                   color: Colors.white.withValues(alpha: 0.35), size: 20)

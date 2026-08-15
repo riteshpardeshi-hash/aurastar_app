@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'setup_screen.dart';
 
 class TrustSetupScreen extends StatefulWidget {
@@ -91,19 +93,12 @@ class _TrustSetupScreenState extends State<TrustSetupScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Community Pledge',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              const Text('Community Pledge', style: AppTextStyles.compactTitle),
               const SizedBox(height: 4),
               Text(
                 'Please read and accept our community standards.',
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
+                    color: AppColors.textMuted, fontSize: 14),
               ),
               const SizedBox(height: 24),
 

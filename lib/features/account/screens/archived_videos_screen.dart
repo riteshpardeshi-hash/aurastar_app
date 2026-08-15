@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_colors.dart';
 
 // Archiving a submission was never wired to a real backend write — the old
 // Firestore query below (`submissions` collection) queried a collection
@@ -31,7 +32,7 @@ class ArchivedVideosScreen extends StatelessWidget {
             Icon(Icons.archive_outlined, color: Colors.white24, size: 52),
             SizedBox(height: 14),
             Text('No archived videos',
-                style: TextStyle(color: Colors.white38, fontSize: 15)),
+                style: TextStyle(color: AppColors.textFaint, fontSize: 15)),
             SizedBox(height: 6),
             Text('Videos you archive will appear here',
                 style: TextStyle(color: Colors.white24, fontSize: 12)),

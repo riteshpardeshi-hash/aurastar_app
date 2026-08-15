@@ -15,6 +15,8 @@ import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
 import 'features/notifications/notifications_screen.dart';
 import 'features/splash/screens/splash_screen.dart';
+import 'shared/theme/app_colors.dart';
+import 'shared/theme/app_text_styles.dart';
 
 // Must be a top-level (or static) function — the FCM plugin runs it in a
 // separate background isolate that hasn't executed main(), so Firebase
@@ -175,23 +177,34 @@ class _MyAppState extends State<MyApp> {
       scaffoldMessengerKey: _scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        fontFamily: 'ClashDisplay',
+        scaffoldBackgroundColor: AppColors.background,
+        fontFamily: 'SpaceGrotesk',
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          // One convention app-wide — screens used to leave this unset and
+          // silently inherit the platform default (centered on iOS, left on
+          // Android), so the same screen's title alignment differed by OS
+          // with nobody having chosen that on purpose.
+          centerTitle: false,
+          titleTextStyle: AppTextStyles.screenTitle,
+        ),
         textTheme: const TextTheme(
-          displayLarge: TextStyle(fontFamily: 'ClashDisplay'),
+          displayLarge: AppTextStyles.heroTitle,
           displayMedium: TextStyle(fontFamily: 'ClashDisplay'),
           displaySmall: TextStyle(fontFamily: 'ClashDisplay'),
-          headlineLarge: TextStyle(fontFamily: 'ClashDisplay'),
+          headlineLarge: AppTextStyles.compactTitle,
           headlineMedium: TextStyle(fontFamily: 'ClashDisplay'),
           headlineSmall: TextStyle(fontFamily: 'ClashDisplay'),
-          titleLarge: TextStyle(fontFamily: 'ClashDisplay'),
-          titleMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
+          titleLarge: AppTextStyles.screenTitle,
+          titleMedium: AppTextStyles.sectionHeader,
           titleSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
-          bodyLarge: TextStyle(fontFamily: 'SpaceGrotesk'),
-          bodyMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
-          bodySmall: TextStyle(fontFamily: 'SpaceGrotesk'),
+          bodyLarge: AppTextStyles.body,
+          bodyMedium: AppTextStyles.body,
+          bodySmall: AppTextStyles.caption,
           labelLarge: TextStyle(fontFamily: 'SpaceGrotesk'),
           labelMedium: TextStyle(fontFamily: 'SpaceGrotesk'),
-          labelSmall: TextStyle(fontFamily: 'SpaceGrotesk'),
+          labelSmall: AppTextStyles.eyebrow,
         ),
       ),
       home: const SplashScreen(),

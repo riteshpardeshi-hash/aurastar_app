@@ -6,6 +6,8 @@ import '../../../features/leaderboard/leaderboard_screen.dart';
 import '../../../features/account/screens/my_account_screen.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'challenge_detail.dart';
 import 'category_challenges_screen.dart';
 import 'all_categories_screen.dart';
@@ -148,7 +150,7 @@ class _AllGeneralChallengesScreenState
           Text(
             'Search',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.35),
+                color: AppColors.textFaint,
                 fontSize: 15,
                 fontFamily: 'SpaceGrotesk'),
           ),
@@ -167,12 +169,7 @@ class _AllGeneralChallengesScreenState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Categories',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay')),
+              const Text('Categories', style: AppTextStyles.sectionHeader),
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
@@ -241,7 +238,7 @@ class _AllGeneralChallengesScreenState
                   f,
                   style: TextStyle(
                     color:
-                        active ? Colors.white : Colors.white60,
+                        active ? Colors.white : AppColors.textMuted,
                     fontSize: 13,
                     fontWeight: active
                         ? FontWeight.w700
@@ -270,20 +267,34 @@ class _AllGeneralChallengesScreenState
         height: 120,
         child: Center(
           child: Text('No challenges yet',
-              style: TextStyle(color: Colors.white38)),
+              style: TextStyle(color: AppColors.textFaint)),
         ),
       );
     }
-    return Column(
-      children: list.map((c) => _ChallengeCard(
-        challengeId: c['id'] as String,
-        title: c['title'] as String,
-        videoUrl: c['videoUrl'] as String,
-        thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
-        auraPoints: c['starsCount'] as int,
-        views: c['submissionsCount'] as int,
-        instructions: c['instructions'] as String,
-      )).toList(),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: list.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 0.72,
+        ),
+        itemBuilder: (context, i) {
+          final c = list[i];
+          return _ChallengeCard(
+            challengeId: c['id'] as String,
+            title: c['title'] as String,
+            videoUrl: c['videoUrl'] as String,
+            thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
+            views: c['submissionsCount'] as int,
+            instructions: c['instructions'] as String,
+          );
+        },
+      ),
     );
   }
 
@@ -434,7 +445,7 @@ class _AllGeneralChallengesScreenState
             Text(label,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    color: active ? _accent : Colors.white38,
+                    color: active ? _accent : AppColors.textFaint,
                     fontSize: 9,
                     fontFamily: 'SpaceGrotesk',
                     height: 1.2)),
@@ -511,9 +522,7 @@ class _CategoryTile extends StatelessWidget {
 // ── Challenge card (tall, full-width) ─────────────────────────────────────────
 class _ChallengeCard extends StatelessWidget {
   final String challengeId, title, videoUrl, thumbnailUrl, instructions;
-  final int auraPoints, views;
-
-  static const _accent = Color(0xFF7B2CBF);
+  final int views;
 
   const _ChallengeCard({
     required this.challengeId,
@@ -521,7 +530,6 @@ class _ChallengeCard extends StatelessWidget {
     required this.videoUrl,
     required this.thumbnailUrl,
     required this.instructions,
-    required this.auraPoints,
     required this.views,
   });
 
@@ -545,100 +553,50 @@ class _ChallengeCard extends StatelessWidget {
           ),
         ),
       ),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
-            height: 280,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Thumbnail
-                if (thumbnailUrl.isNotEmpty)
-                  Image.network(thumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          VideoThumbnailWidget(
-                              videoUrl: videoUrl, fit: BoxFit.cover))
-                else
-                  VideoThumbnailWidget(
-                      videoUrl: videoUrl, fit: BoxFit.cover),
-                // Bottom gradient
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.35, 1.0],
-                      colors: [Colors.transparent, Colors.black],
-                    ),
-                  ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Thumbnail
+            if (thumbnailUrl.isNotEmpty)
+              Image.network(thumbnailUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover))
+            else
+              VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+            // Bottom gradient
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0.5, 1.0],
+                  colors: [Colors.transparent, Colors.black],
                 ),
-                // Bottom overlay
-                Positioned(
-                  bottom: 12,
-                  left: 14,
-                  right: 14,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.visibility_rounded,
-                          color: Colors.white60, size: 14),
-                      const SizedBox(width: 4),
-                      Text(_fmt(views),
-                          style: const TextStyle(
-                              color: Colors.white60,
-                              fontSize: 12,
-                              fontFamily: 'SpaceGrotesk')),
-                      const SizedBox(width: 10),
-                      const Icon(Icons.diamond_rounded,
-                          color: _accent, size: 14),
-                      const SizedBox(width: 4),
-                      Text('$auraPoints',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'SpaceGrotesk')),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _accent,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Take this Challenge',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            fontFamily: 'SpaceGrotesk',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            // Bottom overlay — views only
+            Positioned(
+              bottom: 10,
+              left: 10,
+              right: 10,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Icon(Icons.visibility_rounded,
+                      color: Colors.white60, size: 13),
+                  const SizedBox(width: 4),
+                  Text(_fmt(views),
+                      style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontFamily: 'SpaceGrotesk')),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

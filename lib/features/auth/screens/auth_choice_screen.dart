@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/apple_sign_in_error.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
@@ -203,7 +204,7 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
                         child: Text(
                           'or',
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.45),
+                              color: AppColors.textMuted,
                               fontSize: 13),
                         ),
                       ),

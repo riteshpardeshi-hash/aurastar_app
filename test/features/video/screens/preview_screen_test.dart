@@ -113,9 +113,9 @@ void main() {
     // await, so the second tap's _upload() call must see it and bail —
     // exactly the same guard that has to hold between the auto-retry timer
     // and a manual "Retry Upload" tap in `failed` state. Wrapped in
-    // runAsync() because UploadQueueService.hasInternet() does a real DNS
-    // lookup, which needs the real event loop (not the fake-clock zone
-    // `pump()` runs in) to ever resolve.
+    // runAsync() because UploadQueueService.hasInternet() does a real TCP
+    // connect attempt, which needs the real event loop (not the fake-clock
+    // zone `pump()` runs in) to ever resolve.
     await tester.runAsync(() async {
       await tester.tap(submitButton);
       await tester.tap(submitButton);
@@ -303,6 +303,102 @@ void main() {
     expect(find.text('Edit Profile'), findsOneWidget,
         reason: 'tapping the link should take the user to where they can '
             'actually replace an outdated avatar');
+  });
+
+  // Regression coverage: the backend rejects create-submission with
+  // "Challenge is not accepting submissions." when the challenge has been
+  // paused/closed. Before this fix that fell through to the generic failure
+  // branch and showed "Retry Upload", which just re-runs the exact same
+  // presign/S3/create-submission sequence against a challenge that is
+  // guaranteed to reject it again — an unrecoverable retry loop, which is
+  // what was reported as "can't upload videos to the submission properly".
+  // The CTA must instead read "Choose Another Challenge" and pop back
+  // without attempting another upload.
+  testWidgets(
+      'a closed-challenge rejection shows Choose Another Challenge instead '
+      'of a futile Retry Upload', (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.method == 'PUT' &&
+          request.url.host == 'mock-upload.example') {
+        s3PutCalls++;
+        return http.Response('', 200);
+      }
+      if (request.url.path.endsWith('/submissions/presign')) {
+        presignCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'uploadUrl': 'https://mock-upload.example/put',
+              'videoId': 'video-$presignCalls',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'POST' &&
+          request.url.path.endsWith('/submissions')) {
+        createSubmissionCalls++;
+        return http.Response(
+          jsonEncode({
+            'status': 'fail',
+            'message': 'Challenge is not accepting submissions.',
+          }),
+          400,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PreviewScreen(
+                    videoPath: videoFile.path,
+                    challengeTitle: 'Test Challenge',
+                    challengeId: 'challenge-1',
+                  ),
+                ),
+              ),
+              child: const Text('Open Preview'),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Open Preview'));
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Submit for Aura Score'));
+      await Future<void>.delayed(const Duration(seconds: 2));
+    });
+    await tester.pump();
+
+    expect(createSubmissionCalls, 1);
+    expect(find.text('Retry Upload'), findsNothing,
+        reason: 'a closed challenge can never accept a resubmit of the same '
+            'clip, so the generic retry CTA must not show');
+    expect(find.text('Submissions closed'), findsOneWidget);
+    expect(find.text('Choose Another Challenge'), findsOneWidget);
+
+    await tester.tap(find.text('Choose Another Challenge'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open Preview'), findsOneWidget,
+        reason: 'tapping the CTA should pop back instead of firing another '
+            'doomed upload attempt');
+    expect(presignCalls, 1);
+    expect(s3PutCalls, 1);
+    expect(createSubmissionCalls, 1);
   });
 }
 

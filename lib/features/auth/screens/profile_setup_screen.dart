@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'city_interests_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -321,21 +323,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     SizedBox(height: size.height * 0.032),
 
                     // ── Title ────────────────────────────────────────────────
-                    const Text(
-                      'Create your\nprofile',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
+                    const Text('Create your\nprofile',
+                        style: AppTextStyles.compactTitle),
                     const SizedBox(height: 6),
                     Text(
                       'Tell us a little about yourself',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: AppColors.textMuted,
                         fontSize: 14,
                       ),
                     ),
@@ -530,7 +524,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: TextStyle(
-              color: Colors.white.withValues(alpha: 0.30), fontSize: 15),
+              color: AppColors.textFaint, fontSize: 15),
           prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.35), size: 20),
           prefixText: prefix,
           prefixStyle: TextStyle(
@@ -575,7 +569,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 style: TextStyle(
                   color: value != null
                       ? Colors.white
-                      : Colors.white.withValues(alpha: 0.30),
+                      : AppColors.textFaint,
                   fontSize: 15,
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
 
@@ -42,9 +43,7 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
-        title: const Text('Saved Challenges',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-        centerTitle: false,
+        title: const Text('Saved Challenges'),
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -217,7 +216,7 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
             const SizedBox(height: 20),
             const Text('No saved challenges',
                 style: TextStyle(
-                    color: Colors.white54,
+                    color: AppColors.textMuted,
                     fontSize: 18,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 10),

@@ -5,6 +5,7 @@ import 'create_challenge.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 import '../admin/creator_admin_screen.dart';
 import '../admin/brand_participants_screen.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class BrandDashboardScreen extends StatelessWidget {
   const BrandDashboardScreen({super.key});
@@ -258,7 +259,7 @@ class BrandDashboardScreen extends StatelessWidget {
                             fontFamily: 'ClashDisplay')),
                     if (username.isNotEmpty)
                       Text('@$username',
-                          style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
                   ],
                 ),
               ),
@@ -284,7 +285,7 @@ class BrandDashboardScreen extends StatelessWidget {
           ),
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Text(bio, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            Text(bio, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           ],
         ],
       ),
@@ -333,7 +334,7 @@ class BrandDashboardScreen extends StatelessWidget {
                           Text(
                             'Challenge $nextChallengeNumber Locked',
                             style: const TextStyle(
-                                color: Colors.white38,
+                                color: AppColors.textFaint,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600),
                           ),
@@ -389,7 +390,7 @@ class BrandDashboardScreen extends StatelessWidget {
             Text(
               'Get $target unique participants on Challenge ${nextNumber - 1} to unlock your next slot.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 14),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
             ),
             const SizedBox(height: 24),
             // Progress bar
@@ -397,7 +398,7 @@ class BrandDashboardScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('$progress / $target participants',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                 Text(
                     '${((progress / target).clamp(0.0, 1.0) * 100).toInt()}%',
                     style: const TextStyle(
@@ -423,7 +424,7 @@ class BrandDashboardScreen extends StatelessWidget {
             const Text(
               'Share Challenge 1 to grow your audience and clear the gate faster.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
           ],
         ),
@@ -590,7 +591,7 @@ class BrandDashboardScreen extends StatelessWidget {
           const SizedBox(height: 2),
           const Text('This Week',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -638,7 +639,7 @@ class BrandDashboardScreen extends StatelessWidget {
               children: [
                 const Text('Top Challenge',
                     style: TextStyle(
-                        color: Colors.white54,
+                        color: AppColors.textMuted,
                         fontSize: 11,
                         fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
@@ -662,7 +663,7 @@ class BrandDashboardScreen extends StatelessWidget {
                       fontSize: 20,
                       fontWeight: FontWeight.bold)),
               const Text('submissions',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 10)),
             ],
           ),
         ],
@@ -693,7 +694,7 @@ class BrandDashboardScreen extends StatelessWidget {
           const SizedBox(height: 2),
           Text(title,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
             Text(subtitle,
@@ -738,7 +739,7 @@ class BrandDashboardScreen extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           fontSize: 14)),
                   const Text('Tap to review participants',
-                      style: TextStyle(color: Colors.white54, fontSize: 12)),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 ],
               ),
             ),
@@ -790,7 +791,7 @@ class BrandDashboardScreen extends StatelessWidget {
             Text(
               'Get $remaining more approved participant${remaining == 1 ? '' : 's'} '
               'on Challenge ${nextNumber - 1} to unlock your next challenge slot.',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             const SizedBox(height: 14),
             Row(
@@ -798,7 +799,7 @@ class BrandDashboardScreen extends StatelessWidget {
               children: [
                 Text('$progress / $target',
                     style: const TextStyle(
-                        color: Colors.white70,
+                        color: AppColors.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w600)),
                 Text('${(ratio * 100).toInt()}%',
@@ -892,10 +893,10 @@ class BrandDashboardScreen extends StatelessWidget {
                   Icon(Icons.flash_on, color: Colors.white24, size: 32),
                   SizedBox(height: 8),
                   Text('No approved challenges yet',
-                      style: TextStyle(color: Colors.white54)),
+                      style: TextStyle(color: AppColors.textMuted)),
                   SizedBox(height: 4),
                   Text('Create a challenge to get started',
-                      style: TextStyle(color: Colors.white38, fontSize: 12)),
+                      style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),
@@ -997,7 +998,7 @@ class BrandDashboardScreen extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text('$subCount',
                             style: const TextStyle(
-                                color: Colors.white70, fontSize: 12)),
+                                color: AppColors.textMuted, fontSize: 12)),
                         if (pendingCount > 0) ...[
                           const SizedBox(width: 6),
                           Container(
@@ -1139,7 +1140,7 @@ class BrandDashboardScreen extends StatelessWidget {
                                   fontSize: 13)),
                           Text('submitted to $challengeTitle',
                               style: const TextStyle(
-                                  color: Colors.white54, fontSize: 12),
+                                  color: AppColors.textMuted, fontSize: 12),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
                         ],
@@ -1148,7 +1149,7 @@ class BrandDashboardScreen extends StatelessWidget {
                     if (timeStr.isNotEmpty)
                       Text(timeStr,
                           style: const TextStyle(
-                              color: Colors.white38, fontSize: 11)),
+                              color: AppColors.textFaint, fontSize: 11)),
                   ],
                 ),
               );

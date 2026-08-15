@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/notifications_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key});
@@ -169,7 +170,7 @@ class _NotificationPreferencesScreenState
                         style: TextStyle(color: Colors.white, fontSize: 15)),
                     subtitle: const Text(
                       'Get notified about scores, streaks, offers and more',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                      style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                     ),
                     value: _pushEnabled,
                     onChanged: _saving ? null : _toggleMaster,
@@ -259,7 +260,7 @@ class _NotificationPreferencesScreenState
         child: Text(
           title.toUpperCase(),
           style: const TextStyle(
-            color: Colors.white38,
+            color: AppColors.textFaint,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
@@ -292,7 +293,7 @@ class _NotificationPreferencesScreenState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 
 class VideoPlayerWidget extends StatefulWidget {
@@ -55,7 +56,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             duration: const Duration(milliseconds: 300),
             child: Center(
               child: AspectRatio(
-                aspectRatio: _ctrl.value.aspectRatio,
+                aspectRatio: correctedVideoAspectRatio(_ctrl.value),
                 child: VideoPlayer(_ctrl),
               ),
             ),

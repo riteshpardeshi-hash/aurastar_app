@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_participant_detail_screen.dart';
 
 class CreatorChallengeParticipantsScreen extends StatefulWidget {
@@ -101,8 +102,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Participants',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Participants'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -135,7 +135,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
                       onSubmitted: (_) => _load(),
                       decoration: InputDecoration(
                         hintText: 'Search participants',
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: const TextStyle(color: AppColors.textFaint),
                         prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38),
                         filled: true,
                         fillColor: _card,
@@ -182,7 +182,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(_sortOptions[_sort] ?? 'Sort',
-                                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
                                   const SizedBox(width: 4),
                                   const Icon(Icons.arrow_drop_down_rounded, color: Colors.white54, size: 18),
                                 ],
@@ -197,7 +197,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
                       const Padding(
                         padding: EdgeInsets.only(top: 40),
                         child: Center(
-                            child: Text('No participants found', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                            child: Text('No participants found', style: TextStyle(color: AppColors.textFaint, fontSize: 13))),
                       )
                     else
                       ..._participants.map(_participantTile),
@@ -225,7 +225,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
         children: [
           Text(value, style: TextStyle(color: color, fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10.5)),
+          Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5)),
         ],
       ),
     );
@@ -243,7 +243,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
         ),
         child: Text(label,
             style: TextStyle(
-                color: selected ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                color: selected ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -313,7 +313,7 @@ class _CreatorChallengeParticipantsScreenState extends State<CreatorChallengePar
                               style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w700)),
                         ),
                       if (verdict.isNotEmpty) const SizedBox(width: 6),
-                      Text('$attemptsCount attempts', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      Text('$attemptsCount attempts', style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
                     ],
                   ),
                 ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_gates_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorGateHistoryScreen extends StatefulWidget {
   final String challengeId;
@@ -44,14 +45,13 @@ class _CreatorGateHistoryScreenState extends State<CreatorGateHistoryScreen> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Reward History',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Reward History'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
           : _history == null
               ? const Center(
-                  child: Text('Could not load reward history', style: TextStyle(color: Colors.white54)))
+                  child: Text('Could not load reward history', style: TextStyle(color: AppColors.textMuted)))
               : RefreshIndicator(
                   color: _accent,
                   onRefresh: _load,
@@ -71,7 +71,7 @@ class _CreatorGateHistoryScreenState extends State<CreatorGateHistoryScreen> {
                           padding: EdgeInsets.only(top: 40),
                           child: Center(
                             child: Text('No gates unlocked yet',
-                                style: TextStyle(color: Colors.white38, fontSize: 13)),
+                                style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
                           ),
                         )
                       else
@@ -94,7 +94,7 @@ class _CreatorGateHistoryScreenState extends State<CreatorGateHistoryScreen> {
         children: [
           Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
         ],
       ),
     );
@@ -139,7 +139,7 @@ class _CreatorGateHistoryScreenState extends State<CreatorGateHistoryScreen> {
                     if (participantsReached != null) '$participantsReached participants',
                     if (creditedAt != null) _formatDate(creditedAt),
                   ].join(' · '),
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  style: const TextStyle(color: AppColors.textFaint, fontSize: 12),
                 ),
               ],
             ),

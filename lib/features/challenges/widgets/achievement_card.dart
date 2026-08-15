@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_colors.dart';
 
 const String kChallengeBaseUrl = 'https://aura-app-efae1.web.app/challenge';
 
@@ -90,7 +91,7 @@ class AchievementCardView extends StatelessWidget {
                   const Spacer(flex: 3),
                   Text(
                     '@$username',
-                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w600, decoration: TextDecoration.none),
                   ),
                 ],
               ),

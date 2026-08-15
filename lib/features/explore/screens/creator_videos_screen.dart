@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -57,9 +58,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
-        title: const Text('Creator Videos',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-        centerTitle: false,
+        title: const Text('Creator Videos'),
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -176,7 +175,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
             if (followers > 0)
               Text(
                 _fmt(followers),
-                style: const TextStyle(color: Colors.white38, fontSize: 9),
+                style: const TextStyle(color: AppColors.textFaint, fontSize: 9),
               ),
           ],
         ),
@@ -212,7 +211,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                 child: Text(
                   _allCategories[i],
                   style: TextStyle(
-                    color: active ? const Color(0xFFD4A8FF) : Colors.white38,
+                    color: active ? const Color(0xFFD4A8FF) : AppColors.textFaint,
                     fontSize: 12,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -424,7 +423,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
             Text(
               cat.isNotEmpty ? 'No $cat creator challenges yet' : 'No creator challenges yet',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             const Text('Check back soon — creators are always adding new challenges.',

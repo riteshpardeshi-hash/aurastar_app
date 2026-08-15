@@ -5,6 +5,8 @@ import '../challenges/screens/category_challenges_screen.dart';
 import '../explore/screens/brand_profile_screen.dart';
 import '../explore/screens/creator_profile_screen.dart';
 import '../../../core/services/search_service.dart';
+import '../../shared/theme/app_text_styles.dart';
+import '../../shared/theme/app_colors.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -268,7 +270,7 @@ class _SearchScreenState extends State<SearchScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 18, 18, 6),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
               child: Row(
                 children: [
                   GestureDetector(
@@ -279,15 +281,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           color: Colors.white, size: 20),
                     ),
                   ),
-                  const Text(
-                    'Search',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay',
-                    ),
-                  ),
+                  const Text('Search', style: AppTextStyles.screenTitle),
                 ],
               ),
             ),
@@ -324,7 +318,7 @@ class _SearchScreenState extends State<SearchScreen> {
               decoration: InputDecoration(
                 hintText: 'Search challenges, brands, creators...',
                 hintStyle: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.35),
+                    color: AppColors.textFaint,
                     fontSize: 15,
                     fontFamily: 'SpaceGrotesk'),
                 border: InputBorder.none,
@@ -388,7 +382,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Text(
                   f,
                   style: TextStyle(
-                    color: active ? Colors.white : Colors.white60,
+                    color: active ? Colors.white : AppColors.textMuted,
                     fontSize: 13,
                     fontWeight:
                         active ? FontWeight.w700 : FontWeight.w500,
@@ -409,7 +403,7 @@ class _SearchScreenState extends State<SearchScreen> {
         child: Text(
           'Start typing to search',
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.30),
+              color: AppColors.textFaint,
               fontSize: 15,
               fontFamily: 'SpaceGrotesk'),
         ),
@@ -613,7 +607,7 @@ class _SearchRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: AppColors.textMuted,
                         fontSize: 12,
                         fontFamily: 'SpaceGrotesk',
                       ),

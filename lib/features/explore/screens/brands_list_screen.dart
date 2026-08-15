@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/brands_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'brand_profile_screen.dart';
 
 class BrandsListScreen extends StatefulWidget {
@@ -71,7 +72,7 @@ class _BrandsListScreenState extends State<BrandsListScreen> {
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Search brands...',
-                hintStyle: const TextStyle(color: Colors.white38),
+                hintStyle: const TextStyle(color: AppColors.textFaint),
                 prefixIcon: const Icon(Icons.search, color: Colors.white38),
                 filled: true,
                 fillColor: const Color(0xFF14141F),
@@ -96,12 +97,12 @@ class _BrandsListScreenState extends State<BrandsListScreen> {
     if (_error) {
       return const Center(
           child: Text('Failed to load brands.',
-              style: TextStyle(color: Colors.white54)));
+              style: TextStyle(color: AppColors.textMuted)));
     }
     if (_brands!.isEmpty) {
       return const Center(
           child: Text('No brands found.',
-              style: TextStyle(color: Colors.white54)));
+              style: TextStyle(color: AppColors.textMuted)));
     }
     return ListView.builder(
       itemCount: _brands!.length,

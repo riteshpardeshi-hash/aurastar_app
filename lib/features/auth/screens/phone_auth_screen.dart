@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -172,29 +174,23 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     SizedBox(height: size.height * 0.07),
 
                     // ── Title ──────────────────────────────────────────────────
-                    Center(
-                      child: Column(
-                        children: [
-                          const Text(
-                            'SIGN IN',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 3,
-                            ),
+                    // Left-aligned to match the rest of the onboarding flow
+                    // (Rules/Trust Setup/Permissions) instead of this
+                    // screen's old one-off centered block.
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('SIGN IN', style: AppTextStyles.compactTitle),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 40,
+                          height: 2,
+                          decoration: BoxDecoration(
+                            color: _accent,
+                            borderRadius: BorderRadius.circular(1),
                           ),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: 40,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: _accent,
-                              borderRadius: BorderRadius.circular(1),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
 
                     SizedBox(height: size.height * 0.06),
@@ -203,7 +199,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     const Text(
                       'Phone no.',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppColors.textMuted,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),
@@ -224,7 +220,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     const Text(
                       'OTP',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: AppColors.textMuted,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),

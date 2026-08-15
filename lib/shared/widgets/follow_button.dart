@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/creators_service.dart';
+import '../theme/app_colors.dart';
 
 class FollowButton extends StatefulWidget {
   final String targetUserId;
@@ -125,7 +126,7 @@ class _FollowButtonState extends State<FollowButton> {
                   ? const Text(
                       'Following',
                       style: TextStyle(
-                        color: Colors.white54,
+                        color: AppColors.textMuted,
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),

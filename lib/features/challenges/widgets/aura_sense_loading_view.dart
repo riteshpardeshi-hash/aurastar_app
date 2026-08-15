@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_colors.dart';
 
 const List<String> kAuraSenseTrivia = [
   'When did the first modern fashion runway happen?',
@@ -161,7 +162,7 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
                   ] else ...[
                     const Text('Taking longer than usual...',
                         style: TextStyle(
-                            color: Colors.white54,
+                            color: AppColors.textMuted,
                             fontSize: 13,
                             decoration: TextDecoration.none)),
                     const SizedBox(height: 14),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'user_video_detail_screen.dart';
 
@@ -48,6 +49,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       // rather than silently corrupt the wrong document).
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
+      'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
       'status': submissionStatusFromApi(submission),
       // See my_account_screen.dart's _normaliseSubmission: `/profile/videos`'s
       // nested `submission` omits `auraPoints`; openapi.yaml defines it as
@@ -96,9 +98,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
-        title: const Text('My Videos',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-        centerTitle: false,
+        title: const Text('My Videos'),
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -132,7 +132,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                   const SizedBox(height: 20),
                   const Text('No videos yet',
                       style: TextStyle(
-                          color: Colors.white54,
+                          color: AppColors.textMuted,
                           fontSize: 18,
                           fontWeight: FontWeight.w600)),
                 ],
@@ -158,6 +158,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       itemBuilder: (context, i) {
         final data = _videos[i];
         final videoUrl = data['videoUrl'] as String;
+        final thumbnailUrl = data['thumbnailUrl'] as String;
         final status = data['status'] as String;
         final auraPoints = data['auraPoints'] as int;
         final aiScore = data['aiScore'];
@@ -192,7 +193,10 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                VideoThumbnailWidget(
+                    videoUrl: videoUrl,
+                    thumbnailUrl: thumbnailUrl,
+                    fit: BoxFit.cover),
                 Positioned(
                   top: 6,
                   right: 6,

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:permission_handler_platform_interface/permission_handler_platform_interface.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -83,6 +84,97 @@ void main() {
         reason: 'the mute re-assertion must be the call immediately '
             'preceding play(), so nothing can slip in between them');
   });
+
+  // Regression coverage: _initCamera used to fire the old CameraController's
+  // dispose() without awaiting it before constructing/initializing the new
+  // one for the flipped lens. dispose() is an async native call that frees
+  // the hardware camera session; not awaiting it let the old session's
+  // teardown overlap with the new session's acquisition. Most camera HALs
+  // (Android's camera2 in particular) only allow one open session at a
+  // time, so that race either threw or hung indefinitely — this is what
+  // made flipping the camera get stuck on the loading spinner. The fake
+  // platform below models the race: createCamera() throws if a previous
+  // dispose() is still in flight, which the pre-fix code triggers because
+  // it never waits for that dispose to finish.
+  testWidgets(
+      'flipping the camera awaits the previous session\'s disposal before '
+      'opening the new one', (tester) async {
+    globals.cameras = const [
+      CameraDescription(
+        name: 'back',
+        lensDirection: CameraLensDirection.back,
+        sensorOrientation: 90,
+      ),
+      CameraDescription(
+        name: 'front',
+        lensDirection: CameraLensDirection.front,
+        sensorOrientation: 270,
+      ),
+    ];
+
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byIcon(Icons.flip_camera_ios_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.flip_camera_ios_rounded));
+    // Let the (deliberately slow) disposal of the old session and the new
+    // controller's initialize both settle.
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Camera unavailable'), findsNothing,
+        reason: 'flipping cameras must not race the previous session\'s '
+            'disposal against the new controller\'s initialize()');
+    expect(find.byIcon(Icons.flip_camera_ios_rounded), findsOneWidget,
+        reason: 'camera should be back in the ready state after flipping, '
+            'not stuck on the loading spinner');
+  });
+
+  // Regression coverage: neither this screen nor the app manifest restricts
+  // device rotation (checked live: no android:screenOrientation on the
+  // activity, and Info.plist lists landscape as a supported orientation),
+  // and _initCamera never called CameraController.lockCaptureOrientation().
+  // So a device that was rotated during recording captured video
+  // tagged/encoded in that orientation — the sensor and encoder have no
+  // idea this UI is portrait-only. That's what produced a submission that
+  // played back sideways (and got flagged by the AI scorer itself for
+  // "wrong orientation", since it saw the same file).
+  testWidgets('camera initialization locks capture orientation to portrait',
+      (tester) async {
+    globals.cameras = const [
+      CameraDescription(
+        name: 'back',
+        lensDirection: CameraLensDirection.back,
+        sensorOrientation: 90,
+      ),
+    ];
+
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(fakeCamera.lockedOrientations, [DeviceOrientation.portraitUp],
+        reason: 'recording must always be locked to portraitUp regardless '
+            'of how the device happens to be held/rotated, otherwise the '
+            'captured video is encoded sideways');
+  });
 }
 
 class _FakeGrantedPermissionHandler extends PermissionHandlerPlatform {
@@ -95,14 +187,40 @@ class _FakeGrantedPermissionHandler extends PermissionHandlerPlatform {
 
 class _FakeCameraPlatform extends CameraPlatform {
   int _nextCameraId = 0;
+  // Models a camera HAL that only allows one open session at a time (true
+  // of Android's camera2 API): tracks camera ids that have been created but
+  // not yet handed to dispose(). CameraController.dispose() itself awaits
+  // `_initializeFuture` before ever calling this platform's dispose() — so
+  // even though that await resolves near-instantly (the future is already
+  // completed by the time a flip happens), it still yields at least one
+  // microtask. A caller that fires dispose() without awaiting it therefore
+  // reaches a new createCamera() call in the very same synchronous turn,
+  // strictly before the old session's dispose() has even been invoked here
+  // — this set catches exactly that overlap, the same overlap that hangs
+  // or throws against a real camera HAL.
+  final Set<int> _openIds = {};
+  final List<DeviceOrientation> lockedOrientations = [];
+
+  @override
+  Future<void> lockCaptureOrientation(
+      int cameraId, DeviceOrientation orientation) async {
+    lockedOrientations.add(orientation);
+  }
 
   @override
   Future<int> createCamera(
     CameraDescription cameraDescription,
     ResolutionPreset? resolutionPreset, {
     bool enableAudio = false,
-  }) async =>
-      _nextCameraId++;
+  }) async {
+    if (_openIds.isNotEmpty) {
+      throw CameraException('CameraAccessException',
+          'Camera is still open on a previous, not-yet-released session');
+    }
+    final id = _nextCameraId++;
+    _openIds.add(id);
+    return id;
+  }
 
   @override
   Future<void> initializeCamera(
@@ -138,7 +256,9 @@ class _FakeCameraPlatform extends CameraPlatform {
       XFile('${Directory.systemTemp.path}/fake_recording.mp4');
 
   @override
-  Future<void> dispose(int cameraId) async {}
+  Future<void> dispose(int cameraId) async {
+    _openIds.remove(cameraId);
+  }
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import '../../../core/globals.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'brand_preview_screen.dart';
 
 class BrandCameraScreen extends StatefulWidget {
@@ -57,7 +59,14 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
   Future<void> initCamera(int cameraIndex) async {
     if (cameras.isEmpty) return;
 
-    controller?.dispose();
+    // Await the previous session's teardown before opening a new one —
+    // most camera HALs only allow one open session at a time, so firing
+    // dispose() without awaiting let it race the new controller's
+    // initialize() and could hang indefinitely (the "flip camera gets
+    // stuck on loading" bug).
+    await controller?.dispose();
+    controller = null;
+    if (mounted) setState(() {});
 
     controller = CameraController(
       cameras[cameraIndex],
@@ -70,6 +79,14 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
       if (mounted) setState(() { controller = null; _cameraError = true; });
       return;
     }
+    // Neither this screen nor the app manifest restricts device rotation,
+    // so without this, recording while (even briefly) rotated captures the
+    // video tagged/encoded in that orientation instead of upright. Best
+    // effort: a lock failure here shouldn't take down an otherwise-working
+    // camera.
+    try {
+      await controller!.lockCaptureOrientation(DeviceOrientation.portraitUp);
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       selectedCameraIndex = cameraIndex;
@@ -113,7 +130,7 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
               const Icon(Icons.videocam_off_rounded, color: Colors.white38, size: 52),
               const SizedBox(height: 12),
               const Text('Camera unavailable',
-                  style: TextStyle(color: Colors.white54)),
+                  style: TextStyle(color: AppColors.textMuted)),
               const SizedBox(height: 20),
               TextButton(
                 onPressed: () {
@@ -145,7 +162,23 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
       ),
       body: Column(
         children: [
-          Expanded(child: CameraPreview(controller!)),
+          // CameraPreview has no intrinsic size — inside an Expanded slot it
+          // simply stretches to fill the box, distorting the image whenever
+          // the sensor's aspect ratio (previewSize, always reported in
+          // landscape orientation regardless of device rotation) doesn't
+          // match the available space. FittedBox+SizedBox at the true
+          // (width/height swapped for portrait) preview size scale-crops
+          // instead of stretching.
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller!.value.previewSize!.height,
+                height: controller!.value.previewSize!.width,
+                child: CameraPreview(controller!),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(

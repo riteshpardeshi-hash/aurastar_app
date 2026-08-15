@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/brands_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -64,7 +65,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             : _brand == null
                 ? const Center(
                     child: Text('Brand not found',
-                        style: TextStyle(color: Colors.white54)))
+                        style: TextStyle(color: AppColors.textMuted)))
                 : _buildBody(context, _brand!),
       ),
     );
@@ -226,7 +227,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
           if (username.isNotEmpty) ...[
             const SizedBox(height: 2),
             Text('@$username',
-                style: const TextStyle(color: Colors.white60, fontSize: 14)),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
           ],
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -234,7 +235,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white70, fontSize: 12.5, height: 1.4)),
+                    color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
           ],
           if (website.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -280,7 +281,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                 fontWeight: FontWeight.w800,
                 fontFamily: 'SpaceGrotesk')),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
       ],
     );
   }
@@ -294,7 +295,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             Icon(Icons.flag_outlined, color: Colors.white24, size: 40),
             SizedBox(height: 10),
             Text('No challenges yet',
-                style: TextStyle(color: Colors.white38, fontSize: 13)),
+                style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
           ],
         ),
       ),

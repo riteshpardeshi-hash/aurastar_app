@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_gates_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorGateRulesScreen extends StatefulWidget {
   const CreatorGateRulesScreen({super.key});
@@ -42,14 +43,13 @@ class _CreatorGateRulesScreenState extends State<CreatorGateRulesScreen> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Gate Rules',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Gate Rules'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
           : _rules == null
               ? const Center(
-                  child: Text('Could not load gate rules', style: TextStyle(color: Colors.white54)))
+                  child: Text('Could not load gate rules', style: TextStyle(color: AppColors.textMuted)))
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
                   children: [
@@ -59,7 +59,7 @@ class _CreatorGateRulesScreenState extends State<CreatorGateRulesScreen> {
                     const Text(
                       'Every LIVE challenge unlocks a series of participant-count gates. '
                       'Reach a gate\'s target and you earn its Aura reward automatically.',
-                      style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5),
                     ),
                     const SizedBox(height: 20),
                     ...gates.map(_gateTile),
@@ -118,10 +118,10 @@ class _CreatorGateRulesScreenState extends State<CreatorGateRulesScreen> {
                 Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
                 const SizedBox(height: 4),
                 Text('$required participants to unlock',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 if ((description ?? '').isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(description!, style: const TextStyle(color: Colors.white38, fontSize: 12, height: 1.4)),
+                  Text(description!, style: const TextStyle(color: AppColors.textFaint, fontSize: 12, height: 1.4)),
                 ],
               ],
             ),
@@ -154,7 +154,7 @@ class _CreatorGateRulesScreenState extends State<CreatorGateRulesScreen> {
         children: [
           Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
           const SizedBox(height: 6),
-          Text(body, style: const TextStyle(color: Colors.white54, fontSize: 12.5, height: 1.5)),
+          Text(body, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.5)),
         ],
       ),
     );
@@ -182,7 +182,7 @@ class _CreatorGateRulesScreenState extends State<CreatorGateRulesScreen> {
                   children: [
                     const Icon(Icons.circle, color: Colors.white38, size: 5),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(i, style: const TextStyle(color: Colors.white54, fontSize: 12.5, height: 1.4))),
+                    Expanded(child: Text(i, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4))),
                   ],
                 ),
               )),

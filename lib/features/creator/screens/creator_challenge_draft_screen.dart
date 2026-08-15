@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 /// Create mode when [existingDraft] is null; edit mode otherwise (only
 /// allowed by the backend while the draft is DRAFT or CHANGES_REQUESTED —
@@ -218,8 +219,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(_isEdit ? 'Edit Challenge' : 'Create Challenge',
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: Text(_isEdit ? 'Edit Challenge' : 'Create Challenge'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -279,7 +279,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                           ),
                           child: Text(name,
                               style: TextStyle(
-                                  color: sel ? const Color(0xFFD4A8FF) : Colors.white38,
+                                  color: sel ? const Color(0xFFD4A8FF) : AppColors.textFaint,
                                   fontSize: 13,
                                   fontWeight: sel ? FontWeight.w700 : FontWeight.w400)),
                         ),
@@ -308,7 +308,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                       child: Text(d,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: sel ? const Color(0xFFD4A8FF) : Colors.white38,
+                              color: sel ? const Color(0xFFD4A8FF) : AppColors.textFaint,
                               fontSize: 12,
                               fontWeight: sel ? FontWeight.w700 : FontWeight.w400)),
                     ),
@@ -336,7 +336,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                       child: const Text('Uploaded',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: Colors.white54, fontSize: 12)),
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ),
                   ],
                 ),
@@ -365,7 +365,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                       const SizedBox(height: 8),
                       Text(
                         _pickedVideo != null ? 'Video selected — tap to change' : 'Record or upload a reference video',
-                        style: const TextStyle(color: Colors.white54, fontSize: 13),
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                       ),
                     ],
                   ),
@@ -469,7 +469,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
   }
 
   Widget _label(String text) => Text(text,
-      style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600));
+      style: const TextStyle(color: AppColors.textMuted, fontSize: 13, fontWeight: FontWeight.w600));
 
   InputDecoration _inputDecor(String hint) => InputDecoration(
         hintText: hint,

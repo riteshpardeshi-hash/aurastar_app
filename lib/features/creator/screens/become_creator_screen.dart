@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_page_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'create_creator_profile_screen.dart';
 
 /// Standalone entry point for the "Become a Creator" dashboard button.
@@ -41,13 +42,7 @@ class _BecomeCreatorScreenState extends State<BecomeCreatorScreen> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Become a Creator',
-          style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'ClashDisplay'),
-        ),
+        title: const Text('Become a Creator'),
       ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _progressFuture,
@@ -67,7 +62,7 @@ class _BecomeCreatorScreenState extends State<BecomeCreatorScreen> {
                         color: Colors.white38, size: 40),
                     const SizedBox(height: 16),
                     const Text('Failed to load your progress.',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: AppColors.textMuted)),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: _reload,
@@ -149,7 +144,7 @@ class _BecomeCreatorScreenState extends State<BecomeCreatorScreen> {
                             : 'Keep completing challenges to unlock the Creator Program.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 13, height: 1.5),
+                            color: AppColors.textMuted, fontSize: 13, height: 1.5),
                       ),
                     ],
                   ),
@@ -180,7 +175,7 @@ class _BecomeCreatorScreenState extends State<BecomeCreatorScreen> {
                   Text(
                     '${(requiredAura - currentAura).clamp(0, requiredAura)} Aura to go — take on more challenges to close the gap.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                    style: const TextStyle(color: AppColors.textFaint, fontSize: 13),
                   ),
               ],
             ),

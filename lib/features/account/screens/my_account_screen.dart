@@ -8,6 +8,8 @@ import '../../../core/services/challenges_service.dart';
 import '../../../core/utils/error_message.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/avatar_widget.dart';
 import '../../challenges/widgets/achievement_card.dart';
@@ -34,15 +36,7 @@ class _AchievementCardsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'MY ACHIEVEMENT CARDS',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-          ),
-        ),
+        const Text('MY ACHIEVEMENT CARDS', style: AppTextStyles.sectionHeader),
         const SizedBox(height: 14),
         SizedBox(
           // AchievementCardView is a fixed 268-wide card internally;
@@ -357,6 +351,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       // rather than silently corrupt the wrong document).
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
+      'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
       'status': submissionStatusFromApi(submission),
       // `/profile/videos`'s nested `submission` object omits `auraPoints`
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
@@ -459,7 +454,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text('@$username',
-                      style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                   if (city.isNotEmpty) ...[
                     const SizedBox(height: 5),
                     Row(
@@ -469,7 +464,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         const SizedBox(width: 4),
                         Text(city,
                             style: const TextStyle(
-                                color: Colors.white38, fontSize: 12)),
+                                color: AppColors.textFaint, fontSize: 12)),
                       ],
                     ),
                   ],
@@ -482,7 +477,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         const SizedBox(width: 4),
                         Text(gender,
                             style: const TextStyle(
-                                color: Colors.white38, fontSize: 12)),
+                                color: AppColors.textFaint, fontSize: 12)),
                       ],
                     ),
                   ],
@@ -551,7 +546,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                           const Text(
                             'YOUR AURA POINTS',
                             style: TextStyle(
-                                color: Colors.white70,
+                                color: AppColors.textMuted,
                                 fontSize: 11,
                                 letterSpacing: 0.5),
                           ),
@@ -601,11 +596,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text('LEVEL',
-                              style: TextStyle(
-                                  color: Colors.white60,
-                                  fontSize: 9,
-                                  letterSpacing: 1)),
+                          Text('LEVEL',
+                              style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
                           Text(
                             '$level',
                             style: const TextStyle(
@@ -674,7 +666,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 const Text(
                   'DAILY STREAK',
                   style: TextStyle(
-                      color: Colors.white54, fontSize: 10, letterSpacing: 1),
+                      color: AppColors.textMuted, fontSize: 10, letterSpacing: 1),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -694,13 +686,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               Text(
                 'Best: $longest',
                 style: const TextStyle(
-                    color: Colors.white54, fontSize: 12),
+                    color: AppColors.textMuted, fontSize: 12),
               ),
               const SizedBox(height: 4),
               Text(
                 'Completed: $completed',
                 style: const TextStyle(
-                    color: Colors.white38, fontSize: 11),
+                    color: AppColors.textFaint, fontSize: 11),
               ),
             ],
           ),
@@ -753,7 +745,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     Text(
                       'Share your code. When your friend completes a challenge, you earn 50 Auras!',
                       style: TextStyle(
-                          color: Colors.white54, fontSize: 11, height: 1.4),
+                          color: AppColors.textMuted, fontSize: 11, height: 1.4),
                     ),
                   ],
                 ),
@@ -764,7 +756,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 children: [
                   const Text(
                     'Tap to copy Referral code',
-                    style: TextStyle(color: Colors.white38, fontSize: 9),
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 9),
                   ),
                   const SizedBox(height: 5),
                   GestureDetector(
@@ -923,7 +915,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         fontWeight: FontWeight.w800)),
                 Text(label,
                     style: const TextStyle(
-                        color: Colors.white38, fontSize: 10)),
+                        color: AppColors.textFaint, fontSize: 10)),
               ],
             ),
           ],
@@ -953,15 +945,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       children: [
         Row(
           children: [
-            const Text(
-              'MY VIDEOS',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-              ),
-            ),
+            const Text('MY VIDEOS', style: AppTextStyles.sectionHeader),
             const Spacer(),
             if (_videos.length > 4)
               GestureDetector(
@@ -990,7 +974,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             ),
             child: const Center(
               child: Text('No videos yet',
-                  style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
             ),
           )
         else
@@ -1004,6 +988,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             children: List.generate(preview.length, (i) {
               final data = preview[i];
               final videoUrl = data['videoUrl'] as String;
+              final thumbnailUrl = data['thumbnailUrl'] as String;
               final status = data['status'] as String;
               final auraPoints = data['auraPoints'] as int;
               final aiScore = data['aiScore'];
@@ -1039,7 +1024,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     fit: StackFit.expand,
                     children: [
                       VideoThumbnailWidget(
-                          videoUrl: videoUrl, fit: BoxFit.cover),
+                          videoUrl: videoUrl,
+                          thumbnailUrl: thumbnailUrl,
+                          fit: BoxFit.cover),
                       Positioned(
                         top: 6,
                         right: 6,
@@ -1132,7 +1119,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 15),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 15),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
@@ -1243,19 +1230,11 @@ class _RewardsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'MY REWARDS',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5,
-          ),
-        ),
+        const Text('MY REWARDS', style: AppTextStyles.sectionHeader),
         const SizedBox(height: 4),
         const Text(
           'Rewards earned from streaks, leaderboards, and challenges',
-          style: TextStyle(color: Colors.white38, fontSize: 12),
+          style: TextStyle(color: AppColors.textFaint, fontSize: 12),
         ),
         const SizedBox(height: 14),
         for (final reward in rewards)
@@ -1343,7 +1322,7 @@ class _RewardCardState extends State<_RewardCard> {
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(subtitle,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -1392,7 +1371,7 @@ class _RewardCardState extends State<_RewardCard> {
               ),
               child: Text(
                 status == 'expired' ? 'Expired' : 'Claimed',
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                style: const TextStyle(color: AppColors.textFaint, fontSize: 10),
               ),
             ),
         ],
@@ -1565,7 +1544,7 @@ class _ReferralsSheetState extends State<_ReferralsSheet> {
                             SizedBox(height: 10),
                             Text('No referrals yet',
                                 style: TextStyle(
-                                    color: Colors.white38, fontSize: 14)),
+                                    color: AppColors.textFaint, fontSize: 14)),
                             SizedBox(height: 4),
                             Text('Share your code to invite friends',
                                 style: TextStyle(
@@ -1638,7 +1617,7 @@ class _ReferralsSheetState extends State<_ReferralsSheet> {
                                       if (username.isNotEmpty)
                                         Text('@$username',
                                             style: const TextStyle(
-                                                color: Colors.white38,
+                                                color: AppColors.textFaint,
                                                 fontSize: 11)),
                                       if (joined.isNotEmpty)
                                         Text('Joined $joined',

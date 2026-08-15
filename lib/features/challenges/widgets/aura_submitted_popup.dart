@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'achievement_card.dart';
 
 class AuraSubmittedPopup extends StatefulWidget {
@@ -334,7 +335,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   ] else ...[
                     const Text('Taking longer than usual...',
                         style: TextStyle(
-                            color: Colors.white54,
+                            color: AppColors.textMuted,
                             fontSize: 13,
                             decoration: TextDecoration.none)),
                     const SizedBox(height: 14),
@@ -660,7 +661,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       Expanded(
                         child: Text(entry.value,
                             style: const TextStyle(
-                                color: Colors.white70,
+                                color: AppColors.textMuted,
                                 fontSize: 13.5,
                                 height: 1.4,
                                 decoration: TextDecoration.none)),
@@ -790,7 +791,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         child: const Text(
           'Continue',
           style: TextStyle(
-              color: Colors.white70,
+              color: AppColors.textMuted,
               fontSize: 13,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none),
@@ -963,7 +964,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                                       child: Text(
                                         reason,
                                         style: const TextStyle(
-                                            color: Colors.white70,
+                                            color: AppColors.textMuted,
                                             fontSize: 13.5,
                                             height: 1.4,
                                             decoration: TextDecoration.none),
@@ -1028,7 +1029,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             'AI couldn\'t process your video right now. Check My Account — an admin will review it shortly.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Colors.white54,
+                color: AppColors.textMuted,
                 fontSize: 13,
                 height: 1.4,
                 decoration: TextDecoration.none),

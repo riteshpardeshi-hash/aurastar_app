@@ -211,6 +211,7 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
     'isActive': c['isActive'] as bool? ?? true,
+    'status': c['status'] as String? ?? 'approved',
     'createdAt': c['createdAt'],
   };
 }

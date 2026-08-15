@@ -3,6 +3,7 @@ import '../../features/challenges/screens/all_general_challenges_screen.dart';
 import '../../features/challenges/screens/brand_challenges_screen.dart';
 import '../../features/challenges/screens/trending_screen.dart';
 import '../../features/account/screens/saved_challenges_screen.dart';
+import '../theme/app_colors.dart';
 
 /// Opens the guided center-button action sheet.
 /// Call from any screen that hosts the bottom nav.
@@ -152,7 +153,7 @@ class _AuraActionSheet extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text(subtitle,
-                      style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
                 ],
               ),
             ),

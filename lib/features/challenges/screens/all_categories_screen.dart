@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'category_challenges_screen.dart';
 
 const _categoryTileColor = Color(0xFF7B2CBF);
@@ -85,15 +86,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                           color: Colors.white, size: 20),
                     ),
                   ),
-                  const Text(
-                    'All Categories',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay',
-                    ),
-                  ),
+                  const Text('All Categories', style: AppTextStyles.screenTitle),
                 ],
               ),
             ),

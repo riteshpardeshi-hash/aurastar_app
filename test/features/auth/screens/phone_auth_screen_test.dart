@@ -43,10 +43,11 @@ void main() {
     expect(find.textContaining('TimeoutException'), findsNothing,
         reason: 'the raw Dart exception text must never reach the user');
     expect(
-      find.textContaining('No internet connection'),
+      find.textContaining("Couldn't reach Aura's servers"),
       findsOneWidget,
       reason: 'humanizeError() should turn a timeout into an actionable, '
-          'friendly message',
+          'friendly message that doesn\'t assert a specific cause (no '
+          'internet vs. server unreachable) the app can\'t actually verify',
     );
   });
 }

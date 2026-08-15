@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/videos_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../video/widgets/video_player_widget.dart';
 
 class UserVideoDetailScreen extends StatefulWidget {
@@ -310,7 +311,7 @@ class _StarButton extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '$count',
-            style: const TextStyle(fontSize: 13, color: Colors.white54),
+            style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
           ),
         ],
       ),

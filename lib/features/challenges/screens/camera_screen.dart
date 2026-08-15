@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/globals.dart';
 import '../../../core/services/video_cache_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../video/screens/preview_screen.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -100,7 +101,8 @@ class _CameraScreenState extends State<CameraScreen>
     if (gen != _initGen) return; // superseded by a newer call meanwhile
 
     if (!camStatus.isGranted || !micStatus.isGranted) {
-      _cam?.dispose();
+      await _cam?.dispose();
+      if (gen != _initGen) return; // superseded while disposing
       _cam = null;
       if (mounted) {
         setState(() {
@@ -113,9 +115,21 @@ class _CameraScreenState extends State<CameraScreen>
       return;
     }
 
+    // Fully release the previous camera session before opening the new one.
+    // dispose() is an async native call that frees the hardware handle —
+    // firing it without awaiting let the old session's teardown overlap
+    // with the new controller's initialize() acquiring the other lens.
+    // Most camera HALs (Android's camera2 in particular) only allow one
+    // open session at a time, so that race either threw or, worse, just
+    // hung forever: this is what made flipping the camera get stuck on
+    // the loading spinner.
+    await _cam?.dispose();
+    if (gen != _initGen) return; // superseded while disposing
+    _cam = null;
+    if (mounted) setState(() {}); // show the loading spinner during the swap
+
     final controller = CameraController(cameras[index], ResolutionPreset.high,
         enableAudio: true);
-    _cam?.dispose();
     _cam = controller;
     try {
       await controller.initialize();
@@ -130,6 +144,17 @@ class _CameraScreenState extends State<CameraScreen>
       }
       return;
     }
+    // Neither this screen nor the app manifest restricts device rotation,
+    // so without this, recording while (even briefly) rotated captures the
+    // video tagged/encoded in that orientation — the sensor and encoder
+    // don't know this UI is portrait-only. That produced submissions that
+    // play back sideways everywhere, including in the AI scoring pipeline,
+    // which then dinged the user for "recording in the wrong orientation"
+    // on a video they held upright for. Best-effort: a lock failure here
+    // shouldn't take down an otherwise-working camera.
+    try {
+      await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+    } catch (_) {}
     if (gen != _initGen) {
       controller.dispose(); // superseded — don't leak it
       return;
@@ -298,7 +323,7 @@ class _CameraScreenState extends State<CameraScreen>
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 14),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
             ),
             const SizedBox(height: 20),
             if (_permissionPermanentlyDenied)
@@ -327,7 +352,25 @@ class _CameraScreenState extends State<CameraScreen>
       fit: StackFit.expand,
       children: [
         // ── Camera preview ──────────────────────────────────────────────────
-        CameraPreview(_cam!),
+        // CameraPreview has no intrinsic size of its own — inside a
+        // StackFit.expand Stack it simply stretches to fill whatever box
+        // it's given, distorting the image whenever the sensor's aspect
+        // ratio (previewSize, always reported in landscape orientation
+        // regardless of device rotation) doesn't match the much taller
+        // phone-screen aspect ratio. FittedBox+SizedBox at the true
+        // (width/height swapped for portrait) preview size scale-crops
+        // instead of stretching — same idiom already used for the ghost
+        // overlay's VideoPlayer below.
+        Center(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: _cam!.value.previewSize!.height,
+              height: _cam!.value.previewSize!.width,
+              child: CameraPreview(_cam!),
+            ),
+          ),
+        ),
 
         // ── Ghost overlay — small PiP in bottom-right corner ───────────────
         // Always reserve the slot (not just once the video is ready) so the
@@ -511,7 +554,7 @@ class _CameraScreenState extends State<CameraScreen>
                                 ? 'Ghost unavailable'
                                 : 'Ghost ${_ghostOn ? 'ON' : 'OFF'}',
                             style: TextStyle(
-                              color: _ghostFailed ? Colors.white38 : Colors.white,
+                              color: _ghostFailed ? AppColors.textFaint : Colors.white,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),

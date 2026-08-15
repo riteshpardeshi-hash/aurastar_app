@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/notifications_service.dart';
+import '../../shared/theme/app_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -89,7 +90,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           TextButton(
             onPressed: _items.isEmpty ? null : _markAllRead,
             child: const Text('Mark all read',
-                style: TextStyle(color: Color(0xFFD4A8FF), fontSize: 13)),
+                style: TextStyle(color: AppColors.accentLight, fontSize: 13)),
           ),
         ],
       ),
@@ -108,7 +109,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       SizedBox(height: 14),
                       Text('No notifications yet',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white38, fontSize: 15)),
+                          style: TextStyle(color: AppColors.textFaint, fontSize: 15)),
                       SizedBox(height: 6),
                       Text('We\'ll notify you about scores, stars and offers.',
                           textAlign: TextAlign.center,
@@ -225,7 +226,7 @@ class _NotificationTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(time,
                         style:
-                            const TextStyle(color: Colors.white38, fontSize: 11)),
+                            const TextStyle(color: AppColors.textFaint, fontSize: 11)),
                   ],
                 ],
               ),

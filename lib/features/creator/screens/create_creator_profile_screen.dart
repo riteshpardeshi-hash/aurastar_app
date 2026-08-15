@@ -6,6 +6,7 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'creator_dashboard_screen.dart';
 
 class CreateCreatorProfileScreen extends StatefulWidget {
@@ -314,13 +315,7 @@ class _CreateCreatorProfileScreenState
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Become a Creator',
-          style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'ClashDisplay'),
-        ),
+        title: const Text('Become a Creator'),
       ),
       body: switch (_step) {
         _Step.loading => const Center(child: CircularProgressIndicator(color: _accent)),
@@ -384,7 +379,7 @@ class _CreateCreatorProfileScreenState
                 const Text(
                   'Keep completing challenges to unlock the Creator Program.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54, fontSize: 13, height: 1.5),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5),
                 ),
               ],
             ),
@@ -403,7 +398,7 @@ class _CreateCreatorProfileScreenState
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(r,
-                            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4)),
                       ),
                     ],
                   ),
@@ -457,7 +452,7 @@ class _CreateCreatorProfileScreenState
                   ? 'Your creator page is live at ${_pageUrl!}. Head to your dashboard to launch your first challenge!'
                   : 'Your creator page is live. Head to your dashboard to launch your first challenge!',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.6),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.6),
             ),
             const SizedBox(height: 28),
             SizedBox(
@@ -539,7 +534,7 @@ class _CreateCreatorProfileScreenState
                   'Build a brand, grow followers, and earn Aura\nwhen players compete on your content.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: Colors.white54, fontSize: 13, height: 1.5),
+                      color: AppColors.textMuted, fontSize: 13, height: 1.5),
                 ),
               ],
             ),
@@ -643,7 +638,7 @@ class _CreateCreatorProfileScreenState
             child: DropdownButton<String>(
               value: _selectedCategory,
               hint: const Text('Select a category',
-                  style: TextStyle(color: Colors.white38, fontSize: 14)),
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 14)),
               dropdownColor: const Color(0xFF1A0A30),
               iconEnabledColor: Colors.white38,
               isExpanded: true,
@@ -760,7 +755,7 @@ class _NameStatusRow extends StatelessWidget {
 
     switch (status) {
       case _NameStatus.checking:
-        color   = Colors.white38;
+        color   = AppColors.textFaint;
         leading = const SizedBox(
           width: 13,
           height: 13,
@@ -827,7 +822,7 @@ class _SuggestedChallengeTile extends StatelessWidget {
                       style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                   if (category.isNotEmpty)
                     Text(category,
-                        style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                        style: const TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),
@@ -902,7 +897,7 @@ class _BenefitCard extends StatelessWidget {
           Text(subtitle,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white38, fontSize: 10)),
+              style: const TextStyle(color: AppColors.textFaint, fontSize: 10)),
         ],
       ),
     );
@@ -919,7 +914,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
         text,
         style: const TextStyle(
-            color: Colors.white70,
+            color: AppColors.textMuted,
             fontSize: 13,
             fontWeight: FontWeight.w600),
       );

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/splash_gate.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../auth/screens/phone_auth_screen.dart';
 import '../../auth/screens/profile_setup_screen.dart';
@@ -215,7 +216,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           content: const Text(
             'A critical update is required to continue using Aura Arena. Please update to the latest version.',
-            style: TextStyle(color: Colors.white70, height: 1.5),
+            style: TextStyle(color: AppColors.textMuted, height: 1.5),
           ),
           actions: [
             TextButton(
@@ -248,7 +249,7 @@ class _SplashScreenState extends State<SplashScreen>
         ),
         content: const Text(
           'A new version of Aura Arena is available with improvements and new features.',
-          style: TextStyle(color: Colors.white70, height: 1.5),
+          style: TextStyle(color: AppColors.textMuted, height: 1.5),
         ),
         actions: [
           TextButton(
@@ -256,7 +257,7 @@ class _SplashScreenState extends State<SplashScreen>
             child: Text(
               'Later',
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: AppColors.textMuted,
                   fontSize: 14),
             ),
           ),
@@ -526,7 +527,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'Copy the challenge as close as you can.\nAuraSense is watching.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: AppColors.textMuted,
                           fontSize: size.width * 0.038,
                           height: 1.5,
                         ),
@@ -656,7 +657,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'The closer you get, the higher your Aura.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: AppColors.textMuted,
                           fontSize: size.width * 0.038,
                           height: 1.5,
                         ),
@@ -766,7 +767,7 @@ class _SplashScreenState extends State<SplashScreen>
                         'Level up faster and unlock offers\nfrom the brands you love.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: AppColors.textMuted,
                           fontSize: size.width * 0.038,
                           height: 1.5,
                         ),

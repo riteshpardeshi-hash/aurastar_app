@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/utils/video_aspect_ratio.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_submitted_screen.dart';
 
 class BrandPreviewScreen extends StatefulWidget {
@@ -123,7 +125,7 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
             child: Center(
               child: _controller.value.isInitialized
                   ? AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
+                      aspectRatio: correctedVideoAspectRatio(_controller.value),
                       child: VideoPlayer(_controller),
                     )
                   : const CircularProgressIndicator(),
@@ -139,7 +141,7 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '${(_progress * 100).toInt()}%',
-                        style: const TextStyle(color: Colors.white54),
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],
                   )

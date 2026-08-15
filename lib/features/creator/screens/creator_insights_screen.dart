@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/creator_account_service.dart';
 import '../../../core/services/creator_challenges_service.dart' show pickField, pickInt, pickString;
 import '../widgets/creator_insights_chart.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorInsightsScreen extends StatefulWidget {
   const CreatorInsightsScreen({super.key});
@@ -37,14 +38,13 @@ class _CreatorInsightsScreenState extends State<CreatorInsightsScreen>
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Creator Insights',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Creator Insights'),
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: _accent,
           indicatorWeight: 3,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
+          unselectedLabelColor: AppColors.textFaint,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
           tabs: const [
@@ -199,7 +199,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                 Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -231,7 +231,7 @@ class _OverviewTabState extends State<_OverviewTab> {
                 Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                 if (status.isNotEmpty)
-                  Text(status, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  Text(status, style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
               ],
             ),
           ),
@@ -239,11 +239,11 @@ class _OverviewTabState extends State<_OverviewTab> {
             children: [
               const Icon(Icons.groups_rounded, color: Colors.white38, size: 14),
               const SizedBox(width: 3),
-              Text('$participants', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text('$participants', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               const SizedBox(width: 10),
               const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 14),
               const SizedBox(width: 3),
-              Text('$stars', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text('$stars', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ],
           ),
         ],
@@ -426,7 +426,7 @@ class _PerformanceTabState extends State<_PerformanceTab> {
         ),
         child: Text(label,
             style: TextStyle(
-                color: selected ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                color: selected ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -451,7 +451,7 @@ class _PerformanceTabState extends State<_PerformanceTab> {
                 Text(label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -579,7 +579,7 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(_sortOptions[_sort] ?? 'Sort',
-                          style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
                       const SizedBox(width: 4),
                       const Icon(Icons.arrow_drop_down_rounded, color: Colors.white54, size: 18),
                     ],
@@ -596,7 +596,7 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
             else if (_items.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 40),
-                child: Center(child: Text('No challenges found', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                child: Center(child: Text('No challenges found', style: TextStyle(color: AppColors.textFaint, fontSize: 13))),
               )
             else
               ..._items.map(_tile),
@@ -623,7 +623,7 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
         ),
         child: Text(label,
             style: TextStyle(
-                color: selected ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                color: selected ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -652,7 +652,7 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
                 Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                 if (status.isNotEmpty)
-                  Text(status, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  Text(status, style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
               ],
             ),
           ),
@@ -663,11 +663,11 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
                 children: [
                   const Icon(Icons.visibility_rounded, color: Colors.white38, size: 13),
                   const SizedBox(width: 3),
-                  Text('$views', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text('$views', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                   const SizedBox(width: 8),
                   const Icon(Icons.groups_rounded, color: Colors.white38, size: 13),
                   const SizedBox(width: 3),
-                  Text('$participants', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text('$participants', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 ],
               ),
               if (aura != null) ...[

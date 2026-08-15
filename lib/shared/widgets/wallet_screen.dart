@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
 import '../../core/utils/wallet_today_total.dart';
+import '../theme/app_colors.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -64,7 +65,7 @@ class _WalletScreenState extends State<WalletScreen> {
           : _error != null
               ? Center(
                   child: Text(_error!,
-                      style: const TextStyle(color: Colors.white54)),
+                      style: const TextStyle(color: AppColors.textMuted)),
                 )
               : RefreshIndicator(
                   color: _accent,
@@ -102,7 +103,7 @@ class _WalletScreenState extends State<WalletScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Total Auras',
-                  style: TextStyle(color: Colors.white60, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
               const SizedBox(height: 4),
               Text(
                 '$_balance',
@@ -154,7 +155,7 @@ class _WalletScreenState extends State<WalletScreen> {
           SizedBox(height: 14),
           Text('No transactions yet',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 15)),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 15)),
           SizedBox(height: 6),
           Text('Complete a challenge to earn Auras',
               textAlign: TextAlign.center,
@@ -251,7 +252,7 @@ class _WalletScreenState extends State<WalletScreen> {
           Expanded(
             child: Text(
               description,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.3),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.3),
             ),
           ),
           const SizedBox(width: 8),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_colors.dart';
 
 /// Single-series time-series line/area chart for one insights metric.
 /// One series never needs a legend box — the caller's section title already
@@ -26,7 +27,7 @@ class _CreatorInsightsChartState extends State<CreatorInsightsChart> {
       return const SizedBox(
         height: 180,
         child: Center(
-            child: Text('No data for this period', style: TextStyle(color: Colors.white38, fontSize: 12))),
+            child: Text('No data for this period', style: TextStyle(color: AppColors.textFaint, fontSize: 12))),
       );
     }
     return LayoutBuilder(builder: (context, constraints) {
@@ -97,7 +98,7 @@ class _ChartPainter extends CustomPainter {
 
     void label(String text, Offset offset, {TextAlign align = TextAlign.left}) {
       final tp = TextPainter(
-        text: TextSpan(text: text, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+        text: TextSpan(text: text, style: const TextStyle(color: AppColors.textFaint, fontSize: 10)),
         textDirection: TextDirection.ltr,
         textAlign: align,
       )..layout();
@@ -149,7 +150,7 @@ class _ChartPainter extends CustomPainter {
 
     label(points.first.key, Offset(_leftPad, size.height - 14));
     final lastLabelTp = TextPainter(
-      text: TextSpan(text: points.last.key, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+      text: TextSpan(text: points.last.key, style: const TextStyle(color: AppColors.textFaint, fontSize: 10)),
       textDirection: TextDirection.ltr,
     )..layout();
     lastLabelTp.paint(canvas, Offset(size.width - _rightPad - lastLabelTp.width, size.height - 14));
@@ -167,7 +168,7 @@ class _ChartPainter extends CustomPainter {
           TextSpan(
               text: '${point.value}',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-          TextSpan(text: '  ${point.key}', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          TextSpan(text: '  ${point.key}', style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
         ]),
         textDirection: TextDirection.ltr,
       )..layout();

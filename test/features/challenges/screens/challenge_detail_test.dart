@@ -66,6 +66,33 @@ void main() {
                 'sourceType': 'Aura Original',
                 'creatorId': 'system',
                 'isActive': true,
+                'status': 'approved',
+              },
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path.endsWith('/challenges/challenge-pending')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenge': {
+                '_id': 'challenge-pending',
+                'title': 'Pending Challenge',
+                'instructions': '',
+                'videoUrl': freshVideoUrl,
+                'thumbnailUrl': '',
+                'starsCount': 0,
+                'submissionsCount': 0,
+                'category': 'dance',
+                'difficulty': 'Easy',
+                'sourceType': 'Aura Original',
+                'creatorId': 'system',
+                'isActive': true,
+                'status': 'pending',
               },
             },
           }),
@@ -120,6 +147,97 @@ void main() {
           'videoUrl, not the possibly-expired one the calling list screen '
           'already had',
     );
+  });
+
+  // Regression coverage: _isPaused used to be hardcoded to `false`, so a
+  // challenge whose backend `status` isn't `approved` (POST
+  // /challenges/{id}/submissions requires `approved` per openapi.yaml) still
+  // showed the normal "Take Challenge" CTA. The user only found out the
+  // challenge wasn't accepting submissions after recording a full take and
+  // uploading it, when PreviewScreen surfaced the server's 400. This screen
+  // must know up front instead.
+  testWidgets(
+      'a non-approved challenge shows "Submissions Paused" instead of the '
+      'take-challenge CTA', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Pending Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-pending',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Submissions Paused'), findsOneWidget);
+    expect(find.text('Take this Challenge'), findsNothing);
+  });
+
+  // Regression coverage: the previous fix above only checked _isPaused
+  // *after* the fetch resolved. But _isPaused starts out `false` and the
+  // "Take this Challenge" CTA was tappable on the very first frame, before
+  // GET /challenges/{id} had a chance to come back — a real race on any
+  // network slower than the test harness's synchronous mock. A user could
+  // tap through to the camera, record, and upload before the paused status
+  // was ever known client-side. The CTA must not appear until the status
+  // check has actually resolved.
+  testWidgets(
+      'the take-challenge CTA is not shown before the status check resolves',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Pending Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-pending',
+      ),
+    ));
+
+    // Single frame, before the mocked GET has resolved.
+    await tester.pump();
+
+    expect(find.text('Take this Challenge'), findsNothing);
+  });
+
+  // Regression coverage: fetchChallenge() swallows its own errors and
+  // returns null (see ChallengesService), so a transient network failure
+  // used to leave _isPaused at its `false` default forever — silently
+  // failing open instead of blocking the CTA.
+  testWidgets(
+      'a failed status check does not fall back to the take-challenge CTA',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Unreachable Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-unreachable',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Take this Challenge'), findsNothing);
   });
 }
 

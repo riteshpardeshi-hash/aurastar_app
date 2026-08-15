@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'brand_camera_screen.dart';
 
 class CreateChallenge extends StatefulWidget {
@@ -124,13 +125,7 @@ class _CreateChallengeState extends State<CreateChallenge> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Create Challenge',
-          style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'ClashDisplay'),
-        ),
+        title: const Text('Create Challenge'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -201,7 +196,7 @@ class _CreateChallengeState extends State<CreateChallenge> {
                             style: TextStyle(
                               color: sel
                                   ? const Color(0xFFD4A8FF)
-                                  : Colors.white38,
+                                  : AppColors.textFaint,
                               fontSize: 13,
                               fontWeight: sel
                                   ? FontWeight.w700
@@ -246,7 +241,7 @@ class _CreateChallengeState extends State<CreateChallenge> {
                         name,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: sel ? color : Colors.white38,
+                          color: sel ? color : AppColors.textFaint,
                           fontSize: 12,
                           fontWeight:
                               sel ? FontWeight.w700 : FontWeight.w400,
@@ -269,14 +264,14 @@ class _CreateChallengeState extends State<CreateChallenge> {
                   Text(
                     '${_steps.length} step${_steps.length == 1 ? '' : 's'}',
                     style:
-                        const TextStyle(color: Colors.white38, fontSize: 12),
+                        const TextStyle(color: AppColors.textFaint, fontSize: 12),
                   ),
               ],
             ),
             const SizedBox(height: 4),
             const Text(
               'Add step-by-step instructions participants must follow.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 12),
             ),
             const SizedBox(height: 10),
 

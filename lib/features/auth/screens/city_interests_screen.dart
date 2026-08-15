@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/reference_data_service.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'interests_screen.dart';
 
 class CityInterestsScreen extends StatefulWidget {
@@ -260,20 +262,12 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                             )),
                           ),
                     SizedBox(height: size.height * 0.04),
-                    const Text(
-                      'Personalise\nyour feed',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
+                    const Text('Personalise\nyour feed',
+                        style: AppTextStyles.compactTitle),
                     const SizedBox(height: 8),
                     Text(
                       'Help us show you the right challenges',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 14),
                     ),
                     SizedBox(height: size.height * 0.042),
 
@@ -362,7 +356,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                                 ),
                         child: Text(
                           'Skip for now',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 14),
+                          style: TextStyle(color: AppColors.textFaint, fontSize: 14),
                         ),
                       ),
                     ),
@@ -431,7 +425,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                 child: Text(
                   value ?? hint,
                   style: TextStyle(
-                    color: value != null ? Colors.white : Colors.white.withValues(alpha: 0.30),
+                    color: value != null ? Colors.white : AppColors.textFaint,
                     fontSize: 15,
                   ),
                 ),
@@ -554,7 +548,7 @@ class _SearchPickerSheetState extends State<_SearchPickerSheet> {
                 cursorColor: _purple,
                 decoration: InputDecoration(
                   hintText: 'Search…',
-                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.30), fontSize: 14),
+                  hintStyle: TextStyle(color: AppColors.textFaint, fontSize: 14),
                   prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.35), size: 20),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 13),
@@ -569,7 +563,7 @@ class _SearchPickerSheetState extends State<_SearchPickerSheet> {
                 ? Center(
                     child: Text(
                       'No results found',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 14),
+                      style: TextStyle(color: AppColors.textFaint, fontSize: 14),
                     ),
                   )
                 : ListView.separated(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import 'trust_setup_screen.dart';
 
 class RulesScreen extends StatelessWidget {
@@ -58,19 +60,12 @@ class RulesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 36),
-              const Text(
-                'Rules First',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              const Text('Rules First', style: AppTextStyles.compactTitle),
               const SizedBox(height: 4),
               Text(
                 'Read before you play.',
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45), fontSize: 14),
+                    color: AppColors.textMuted, fontSize: 14),
               ),
               const SizedBox(height: 24),
               Expanded(
@@ -158,7 +153,7 @@ class _RuleTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(body,
                     style: const TextStyle(
-                        color: Colors.white54,
+                        color: AppColors.textMuted,
                         fontSize: 12,
                         height: 1.45)),
               ],

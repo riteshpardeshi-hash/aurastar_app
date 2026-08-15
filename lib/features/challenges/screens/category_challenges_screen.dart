@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -141,7 +143,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
               children: [
                 Text(
                   widget.categoryName,
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                  style: AppTextStyles.screenTitle,
                 ),
                 if (_totalAttempts > 0)
                   Text(
@@ -185,7 +187,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                 child: Text(
                   _filters[i],
                   style: TextStyle(
-                    color: active ? _accent : Colors.white38,
+                    color: active ? _accent : AppColors.textFaint,
                     fontSize: 12,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -359,7 +361,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
           children: [
             Icon(Icons.search_off_rounded, color: Colors.white24, size: 52),
             const SizedBox(height: 16),
-            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w600)),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(sub, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white30, fontSize: 13, height: 1.5)),
           ],

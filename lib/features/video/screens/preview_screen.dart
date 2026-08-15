@@ -6,6 +6,8 @@ import 'package:video_player/video_player.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/upload_queue_service.dart';
+import '../../../core/utils/video_aspect_ratio.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/widgets/aura_sense_loading_view.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
@@ -132,7 +134,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'No internet. We\'ll retry automatically when you\'re back online.'),
+                "Can't reach Aura right now. We'll retry automatically."),
             duration: Duration(seconds: 4),
           ),
         );
@@ -273,6 +275,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
     return text.contains('face verification');
   }
 
+  // The backend rejects the submission when the challenge has been paused
+  // or closed (by its creator or an admin) — a challenge-state problem, not
+  // a video problem. Retrying hits the same rejection every time, so this
+  // needs the same "send the user elsewhere" treatment as a missing rubric,
+  // not a "Retry Upload" button.
+  bool get _isChallengeNotAccepting {
+    final text = (_lastError ?? '').toLowerCase();
+    return text.contains('not accepting submissions');
+  }
+
   // ── Build ───────────────────────────────────────────────────────────────────
 
   void _giveUpOnScoring() {
@@ -347,7 +359,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         alignment: Alignment.center,
                         children: [
                           AspectRatio(
-                            aspectRatio: _player.value.aspectRatio,
+                            aspectRatio: correctedVideoAspectRatio(_player.value),
                             child: VideoPlayer(_player),
                           ),
                           if (!_isPlaying)
@@ -503,7 +515,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
             Text(
               'Keep app open • Failed upload = no attempt lost',
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.35), fontSize: 12),
+                  color: AppColors.textFaint, fontSize: 12),
             ),
           ],
         ),
@@ -520,17 +532,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
             Row(
               children: [
                 Icon(
-                    _isMissingRubric
-                        ? Icons.rule_folder_outlined
-                        : _isNetworkError
-                            ? Icons.wifi_off_rounded
-                            : Icons.error_outline_rounded,
-                    color: _isMissingRubric ? Colors.amber : Colors.redAccent,
+                    _isChallengeNotAccepting
+                        ? Icons.pause_circle_outline_rounded
+                        : _isMissingRubric
+                            ? Icons.rule_folder_outlined
+                            : _isNetworkError
+                                ? Icons.wifi_off_rounded
+                                : Icons.error_outline_rounded,
+                    color: (_isMissingRubric || _isChallengeNotAccepting)
+                        ? Colors.amber
+                        : Colors.redAccent,
                     size: 18),
                 const SizedBox(width: 8),
-                Text(_isMissingRubric ? 'Challenge not ready' : 'Upload failed',
+                Text(
+                    _isChallengeNotAccepting
+                        ? 'Submissions closed'
+                        : _isMissingRubric
+                            ? 'Challenge not ready'
+                            : 'Upload failed',
                     style: TextStyle(
-                        color: _isMissingRubric ? Colors.amber : Colors.redAccent,
+                        color: (_isMissingRubric || _isChallengeNotAccepting)
+                            ? Colors.amber
+                            : Colors.redAccent,
                         fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 if (_isNetworkError) ...[
@@ -555,10 +578,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              _isMissingRubric
+              _isChallengeNotAccepting
+                  ? 'This challenge isn\'t accepting submissions right now. Your video wasn\'t the problem — please try a different challenge instead.'
+                  : _isMissingRubric
                   ? 'This challenge hasn\'t been set up for scoring yet. Your video wasn\'t the problem — please try a different challenge instead.'
                   : _isNetworkError
-                      ? 'Your video is saved. We\'ll retry automatically when you\'re back online.'
+                      ? "Your video is saved. We'll retry automatically once we can reach Aura again."
                       // The raw backend message just states the mismatch,
                       // not what to do about it. Since retrying the same
                       // clip fails identically (see _isFaceMismatch), tell
@@ -596,7 +621,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
               Text(
                 _lastError!,
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.30), fontSize: 10),
+                    color: AppColors.textFaint, fontSize: 10),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -635,25 +660,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
                               MaterialPageRoute(
                                   builder: (_) => const SettingsScreen()),
                             )
-                        // A missing rubric is a challenge-setup problem, not
-                        // something a retry can fix — send the user back
-                        // instead of re-running the same failing upload.
-                        : _isMissingRubric
+                        // A missing rubric or a paused/closed challenge are
+                        // both challenge-state problems, not something a
+                        // retry can fix — send the user back instead of
+                        // re-running the same failing upload.
+                        : (_isMissingRubric || _isChallengeNotAccepting)
                             ? () => Navigator.pop(context)
-                            // Same reasoning as missing rubric: the same
-                            // video will never pass face verification, so
-                            // pop back to the camera for a new take.
+                            // Same reasoning: the same video will never pass
+                            // face verification, so pop back to the camera
+                            // for a new take.
                             : _isFaceMismatch
                                 ? () => Navigator.pop(context)
                                 : _upload,
                     child: Container(
                       height: 52,
                       decoration: BoxDecoration(
-                        color: _isMissingRubric ? Colors.amber : Colors.redAccent,
+                        color: (_isMissingRubric || _isChallengeNotAccepting)
+                            ? Colors.amber
+                            : Colors.redAccent,
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: (_isMissingRubric
+                            color: (_isMissingRubric || _isChallengeNotAccepting
                                     ? Colors.amber
                                     : Colors.redAccent)
                                 .withValues(alpha: 0.40),
@@ -666,13 +694,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         child: Text(
                             _isProfileIncomplete
                                 ? 'Complete Your Profile'
-                                : _isMissingRubric
+                                : (_isMissingRubric || _isChallengeNotAccepting)
                                     ? 'Choose Another Challenge'
                                     : _isFaceMismatch
                                         ? 'Retake'
                                         : 'Retry Upload',
                             style: TextStyle(
-                                color: _isMissingRubric
+                                color: (_isMissingRubric || _isChallengeNotAccepting)
                                     ? Colors.black87
                                     : Colors.white,
                                 fontSize: 15,

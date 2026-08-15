@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_status_screen.dart';
 
@@ -98,11 +99,11 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
         title: const Text('Archive Challenge', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
             'This hides the challenge from player feeds. Your data is preserved and this can be reviewed later.',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -141,8 +142,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('My Challenges',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('My Challenges'),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _createNew,
@@ -220,7 +220,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
         ),
         child: Text(label,
             style: TextStyle(
-                color: selected ? Colors.white : Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+                color: selected ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -235,7 +235,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
             const Icon(Icons.videocam_outlined, color: Colors.white24, size: 52),
             const SizedBox(height: 16),
             const Text('No challenges yet',
-                style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w600)),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             const Text('Create your first challenge to start building your audience.',
                 textAlign: TextAlign.center,
@@ -323,7 +323,7 @@ class _ChallengeCard extends StatelessWidget {
                       ),
                       if (categoryName.isNotEmpty) ...[
                         const SizedBox(width: 8),
-                        Text(categoryName, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text(categoryName, style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
                       ],
                     ],
                   ),

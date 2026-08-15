@@ -90,7 +90,11 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
       return;
     }
 
-    // Slow path — extract frame from video (downloads the file)
+    // Slow path — extract frame from video (downloads the file). The
+    // video_thumbnail plugin has no partial/byte-range fetch, so it always
+    // pulls the whole clip before it can decode a frame; 12s was too tight
+    // for a several-MB submission on a real mobile connection and was the
+    // main cause of thumbnails silently falling back to the placeholder.
     try {
       final data = await VideoThumbnail.thumbnailData(
         video: widget.videoUrl,
@@ -98,7 +102,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         maxWidth: 480,
         quality: 75,
         timeMs: 500,
-      ).timeout(const Duration(seconds: 12));
+      ).timeout(const Duration(seconds: 30));
       debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
       if (data != null) videoThumbnailCache[widget.videoUrl] = data;
       if (mounted) setState(() { _bytes = data; _loading = false; });

@@ -6,6 +6,9 @@ import '../../../core/services/api_client.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/services/video_cache_service.dart';
+import '../../../core/utils/video_aspect_ratio.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../widgets/achievement_card.dart' show kChallengeBaseUrl;
 import 'camera_screen.dart';
@@ -39,8 +42,15 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   bool _isFullscreen = false;
 
   // Challenge data
-  int _auraPoints = 150;
   bool _isPaused = false;
+  // `_isPaused` only becomes trustworthy once _fetchChallengeData's GET
+  // resolves — until then (or if it fails) it's just the `false` default,
+  // which used to leave the "Take this Challenge" CTA tappable for however
+  // long the request takes, or forever on a swallowed error. Gate the CTA
+  // on this instead of on _isPaused alone so a slow/failed status check
+  // can't be raced into recording+uploading a take for a closed challenge.
+  bool _statusReady = false;
+  bool _statusCheckFailed = false;
   String _thumbnailUrl = '';
   // Some entry points (e.g. search results) construct this screen without a
   // videoUrl/instructions — they're filled in from the full challenge fetch
@@ -48,6 +58,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // (trending, dashboard, etc.) render instantly without waiting on the fetch.
   late String _videoUrl = widget.videoUrl;
   late String _instructions = widget.instructions;
+  bool _detailsExpanded = false;
 
   // Submissions
   List<Map<String, dynamic>> _submissions = [];
@@ -66,14 +77,34 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   }
 
   Future<void> _fetchChallengeData() async {
-    if (widget.challengeId.isEmpty) return;
+    if (widget.challengeId.isEmpty) {
+      // Nothing to check the status of — don't leave the CTA stuck loading.
+      if (mounted) setState(() => _statusReady = true);
+      return;
+    }
     try {
       final data = await ChallengesService().fetchChallenge(widget.challengeId);
-      if (data == null || !mounted) return;
+      if (!mounted) return;
+      if (data == null) {
+        // fetchChallenge() already swallows the real error — we only know
+        // the status couldn't be confirmed. Fail closed instead of leaving
+        // _isPaused at its `false` default, which would let the user record
+        // and upload a take before finding out server-side.
+        setState(() {
+          _statusReady = true;
+          _statusCheckFailed = true;
+        });
+        return;
+      }
       final c = normaliseChallenge(data);
       setState(() {
-        _auraPoints = c['starsCount'] as int;
-        _isPaused = false;
+        // POST /challenges/{id}/submissions requires `status: approved`
+        // (openapi.yaml) — anything else (pending/rejected/flagged) fails
+        // server-side with "not accepting submissions" only after the user
+        // has already recorded and uploaded a take. Surface that up front
+        // instead of hardcoding this to false.
+        _isPaused = c['status'] != 'approved';
+        _statusReady = true;
         _thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
         // Per openapi.yaml, Challenge.videoUrl is resolved fresh on every
         // read — a presigned (expiring) RAW URL while the reference video
@@ -93,7 +124,15 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         }
       });
       if (_videoUrl.isNotEmpty) VideoCacheService.ensureCached(_videoUrl);
-    } catch (_) {}
+    } catch (_) {
+      // Same fail-closed reasoning as the data == null branch above.
+      if (mounted) {
+        setState(() {
+          _statusReady = true;
+          _statusCheckFailed = true;
+        });
+      }
+    }
   }
 
   Future<void> _fetchSubmissions() async {
@@ -176,6 +215,76 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     setState(() => _isFullscreen = false);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
+
+  String _formatDuration(Duration d) {
+    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  Widget _buildVideoControls() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 28, 12, 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.75),
+          ],
+        ),
+      ),
+      child: AnimatedBuilder(
+        animation: _videoController!,
+        builder: (context, _) {
+          final value = _videoController!.value;
+          return Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  value.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+                onPressed: () {
+                  if (value.isPlaying) {
+                    _videoController!.pause();
+                  } else {
+                    _videoController!.play();
+                  }
+                },
+              ),
+              Text(
+                _formatDuration(value.position),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: VideoProgressIndicator(
+                  _videoController!,
+                  allowScrubbing: true,
+                  padding: EdgeInsets.zero,
+                  colors: VideoProgressColors(
+                    playedColor: _accent,
+                    bufferedColor: Colors.white.withValues(alpha: 0.3),
+                    backgroundColor: Colors.white.withValues(alpha: 0.15),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatDuration(value.duration),
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showCameraRulesModal() {
@@ -277,7 +386,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         fontSize: 15)),
                 Text(subtitle,
                     style: const TextStyle(
-                        color: Colors.white54, fontSize: 12)),
+                        color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
             const Spacer(),
@@ -321,45 +430,23 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         SizedBox(
                             height: MediaQuery.of(context).padding.top + 52),
 
-                        // Title
-                        Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 0, 20, 6),
-                          child: Text(
-                            widget.title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w900,
-                              height: 1.15,
-                            ),
-                          ),
-                        ),
-
-                        // Subtitle (first line of instructions, purple)
-                        if (_subtitle.isNotEmpty)
-                          Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                            child: Text(
-                              _subtitle,
-                              style: const TextStyle(
-                                color: _accent,
-                                fontSize: 14,
-                                fontStyle: FontStyle.italic,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-
                         // Video player
                         _buildVideoSection(),
 
+                        // Title
+                        Padding(
+                          padding:
+                              const EdgeInsets.fromLTRB(20, 16, 20, 6),
+                          child: Text(
+                            widget.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.heroTitle,
+                          ),
+                        ),
+
                         // Details section
                         _buildDetailsSection(),
-
-                        // Rewards section
-                        _buildRewardsSection(),
 
                         // Submissions section
                         _buildSubmissionsSection(),
@@ -451,13 +538,12 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                           } else {
                             _videoController?.play();
                           }
-                          setState(() {});
                         },
                         child: Center(
                           child: _videoInitialized
                               ? AspectRatio(
-                                  aspectRatio:
-                                      _videoController!.value.aspectRatio,
+                                  aspectRatio: correctedVideoAspectRatio(
+                                      _videoController!.value),
                                   child: VideoPlayer(_videoController!),
                                 )
                               : const CircularProgressIndicator(
@@ -474,20 +560,37 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                           ),
                         ),
                       ),
-                      if (_videoInitialized &&
-                          !_videoController!.value.isPlaying)
-                        Center(
-                          child: IgnorePointer(
-                            child: Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: _accent.withValues(alpha: 0.85),
-                                shape: BoxShape.circle,
+                      if (_videoInitialized)
+                        AnimatedBuilder(
+                          animation: _videoController!,
+                          builder: (context, _) {
+                            if (_videoController!.value.isPlaying) {
+                              return const SizedBox.shrink();
+                            }
+                            return Center(
+                              child: IgnorePointer(
+                                child: Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: BoxDecoration(
+                                    color: _accent.withValues(alpha: 0.85),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.play_arrow_rounded,
+                                      color: Colors.white, size: 36),
+                                ),
                               ),
-                              child: const Icon(Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 36),
-                            ),
+                            );
+                          },
+                        ),
+                      if (_videoInitialized)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: SafeArea(
+                            top: false,
+                            child: _buildVideoControls(),
                           ),
                         ),
                     ],
@@ -502,6 +605,52 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   // ── Bottom button (paused / already submitted / take) ─────────────────────
   Widget _buildBottomButton() {
+    if (!_statusReady) {
+      return Container(
+        height: 58,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+        ),
+        child: const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+                color: Colors.white54, strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_statusCheckFailed) {
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            _statusReady = false;
+            _statusCheckFailed = false;
+          });
+          _fetchChallengeData();
+        },
+        child: Container(
+          height: 58,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+          ),
+          child: const Center(
+            child: Text("Couldn't check availability — Tap to retry",
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ),
+      );
+    }
+
     if (_isPaused) {
       return Container(
         height: 58,
@@ -558,7 +707,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     ? 'Submitted · $score pts — Try again?'
                     : 'Try again',
                 style: TextStyle(
-                    color: approved ? Colors.greenAccent : Colors.white70,
+                    color: approved ? Colors.greenAccent : AppColors.textMuted,
                     fontSize: 14,
                     fontWeight: FontWeight.w700),
               ),
@@ -574,16 +723,24 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         height: 58,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
+            colors: [Color(0xFF4C1D95), Color(0xFF2E1065)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: const Color(0xFFA78BFA).withValues(alpha: 0.55),
+            width: 1.5,
+          ),
           boxShadow: [
             BoxShadow(
-              color: _accent.withValues(alpha: 0.50),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
+              color: _accent.withValues(alpha: 0.45),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+            BoxShadow(
+              color: const Color(0xFFA78BFA).withValues(alpha: 0.25),
+              blurRadius: 12,
+              spreadRadius: 1,
             ),
           ],
         ),
@@ -623,10 +780,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Top Submissions',
-                style: TextStyle(
-                    color: _accent, fontSize: 20, fontWeight: FontWeight.w700),
+                style: AppTextStyles.sectionHeader.copyWith(color: _accent),
               ),
               const SizedBox(width: 8),
               Container(
@@ -639,7 +795,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 child: Text(
                   '${_submissions.length}',
                   style: const TextStyle(
-                      color: Color(0xFFD4A8FF),
+                      color: AppColors.accentLight,
                       fontSize: 12,
                       fontWeight: FontWeight.w700),
                 ),
@@ -744,20 +900,20 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // ── Video section ──────────────────────────────────────────────────────────
   Widget _buildVideoSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(60, 0, 60, 28),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: GestureDetector(
         onTap: _initAndPlayVideo,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: AspectRatio(
-            aspectRatio: 4 / 5,
+            aspectRatio: 3 / 4,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 // Background / thumbnail — actual playback always happens in
                 // the fullscreen overlay, so this card only ever shows the
                 // thumbnail (never the raw VideoPlayer, which would stretch
-                // to fill this 4:5 box instead of preserving aspect ratio).
+                // to fill this 3:4 box instead of preserving aspect ratio).
                 VideoThumbnailWidget(
                     videoUrl: _videoUrl,
                     thumbnailUrl: _thumbnailUrl,
@@ -808,76 +964,54 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Details :',
-            style: TextStyle(
-              color: _accent,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTextStyles.sectionHeader.copyWith(color: _accent),
           ),
           const SizedBox(height: 14),
-          ...bullets.map(
-            (b) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Numbered steps already carry their own "1. "/"2. " marker
-                  // — don't also prepend a bullet.
-                  if (!_isNumberedInstructions)
-                    const Text('• ',
-                        style: TextStyle(
-                            color: Colors.white, fontSize: 15, height: 1.5)),
-                  Expanded(
-                    child: Text(
-                      b,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          height: 1.5),
+          if (_detailsExpanded)
+            ...bullets.map(
+              (b) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Numbered steps already carry their own "1. "/"2. "
+                    // marker — don't also prepend a bullet.
+                    if (!_isNumberedInstructions)
+                      const Text('• ',
+                          style: TextStyle(
+                              color: Colors.white, fontSize: 15, height: 1.5)),
+                    Expanded(
+                      child: Text(
+                        b,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            height: 1.5),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Rewards section ────────────────────────────────────────────────────────
-  Widget _buildRewardsSection() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Rewards :',
-            style: TextStyle(
-              color: _accent,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Icon(Icons.diamond, color: _accent, size: 44),
-              const SizedBox(width: 8),
-              Text(
-                '$_auraPoints',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 56,
-                  fontWeight: FontWeight.w900,
-                  height: 1.0,
+                  ],
                 ),
               ),
-            ],
+            )
+          else
+            Text(
+              _instructions.trim(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 15, height: 1.5),
+            ),
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: () =>
+                setState(() => _detailsExpanded = !_detailsExpanded),
+            child: Text(
+              _detailsExpanded ? 'Read less' : 'Read more',
+              style: const TextStyle(
+                  color: _accent, fontSize: 13, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -902,29 +1036,17 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     return lines.isNotEmpty && lines.every(_numberedLineRegExp.hasMatch);
   }
 
-  String get _subtitle {
-    final text = _instructions.trim();
-    if (text.isEmpty || _isNumberedInstructions) return '';
-    final firstLine = text.split('\n').first.trim();
-    if (firstLine.length <= 80 && _instructions.contains('\n')) {
-      return firstLine;
-    }
-    return '';
-  }
-
   List<String> get _bulletPoints {
     final text = _instructions.trim();
     if (text.isEmpty) return [];
 
     // If multi-line, split by newlines
     if (text.contains('\n')) {
-      final lines = text
+      return text
           .split('\n')
           .map((l) => l.trim())
           .where((l) => l.isNotEmpty)
           .toList();
-      // Skip first line if it was used as subtitle
-      return _subtitle.isNotEmpty ? lines.skip(1).toList() : lines;
     }
 
     // Single paragraph — split into sentences
@@ -1022,7 +1144,7 @@ class _CameraRulesSheet extends StatelessWidget {
                   ),
                   Text(
                     'Quick reminder',
-                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                   ),
                 ],
               ),
@@ -1064,7 +1186,7 @@ class _CameraRulesSheet extends StatelessWidget {
                         Text(
                           r.body,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.45),
+                            color: AppColors.textMuted,
                             fontSize: 12,
                             height: 1.4,
                           ),
@@ -1120,7 +1242,7 @@ class _CameraRulesSheet extends StatelessWidget {
             child: Text(
               'Not now',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.35),
+                color: AppColors.textFaint,
                 fontSize: 14,
               ),
             ),
@@ -1241,7 +1363,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                   Text(
                     'Select a reason',
                     style:
-                        TextStyle(color: Colors.white38, fontSize: 12),
+                        TextStyle(color: AppColors.textFaint, fontSize: 12),
                   ),
                 ],
               ),
@@ -1278,7 +1400,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                       child: Text(
                         reason,
                         style: TextStyle(
-                          color: selected ? Colors.white : Colors.white60,
+                          color: selected ? Colors.white : AppColors.textMuted,
                           fontSize: 14,
                           fontWeight: selected
                               ? FontWeight.w600
@@ -1326,7 +1448,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                         'Submit Report',
                         style: TextStyle(
                           color: _selected == null
-                              ? Colors.white38
+                              ? AppColors.textFaint
                               : Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -1446,7 +1568,7 @@ class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
                           fontWeight: FontWeight.w800)),
                   Text('@${widget.username}',
                       style: const TextStyle(
-                          color: Colors.white38, fontSize: 12)),
+                          color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ],
@@ -1478,7 +1600,7 @@ class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
                     Expanded(
                       child: Text(reason,
                           style: TextStyle(
-                            color: selected ? Colors.white : Colors.white60,
+                            color: selected ? Colors.white : AppColors.textMuted,
                             fontSize: 14,
                             fontWeight: selected
                                 ? FontWeight.w600
@@ -1522,7 +1644,7 @@ class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
                         'Submit Report',
                         style: TextStyle(
                           color: _selected == null
-                              ? Colors.white38
+                              ? AppColors.textFaint
                               : Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w700,

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../features/challenges/widgets/achievement_card.dart'
     show kChallengeBaseUrl;
+import '../../../shared/theme/app_colors.dart';
 import '../admin/creator_admin_screen.dart';
 
 class CreatorEntriesScreen extends StatefulWidget {
@@ -43,7 +45,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
             Text(widget.challengeTitle,
                 style: const TextStyle(
                     fontSize: 11,
-                    color: Colors.white54,
+                    color: AppColors.textMuted,
                     fontWeight: FontWeight.normal),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
@@ -81,7 +83,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                       color: Colors.white24, size: 48),
                   const SizedBox(height: 12),
                   const Text('No approved entries yet',
-                      style: TextStyle(color: Colors.white38)),
+                      style: TextStyle(color: AppColors.textFaint)),
                 ],
               ),
             );
@@ -184,7 +186,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                   ? 'Player videos cannot be downloaded. This protects player privacy and is required by platform policy. Violations may result in a creator strike.'
                   : 'Player submission videos cannot be shared externally. Respect player privacy by sharing the challenge link to grow participation instead.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.5),
             ),
 
             // Policy detail row
@@ -204,7 +206,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                       isDownload
                           ? 'Screens are protected where possible. Use analytics to review performance instead.'
                           : 'Share challenge link only — no raw player video is ever shared publicly.',
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                   ),
                 ],
@@ -275,7 +277,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
               child: TextButton(
                 onPressed: () => Navigator.pop(sheetCtx),
                 child: const Text('Dismiss',
-                    style: TextStyle(color: Colors.white38, fontSize: 13)),
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
               ),
             ),
           ],
@@ -324,7 +326,7 @@ class _SortToggle extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(label,
             style: TextStyle(
-                color: sel ? Colors.white : Colors.white54,
+                color: sel ? Colors.white : AppColors.textMuted,
                 fontSize: 11,
                 fontWeight: FontWeight.w600)),
       ),
@@ -390,7 +392,7 @@ class _EntryRow extends StatelessWidget {
                 style: TextStyle(
                     color: rank <= 3
                         ? const Color(0xFFD4A8FF)
-                        : Colors.white38,
+                        : AppColors.textFaint,
                     fontSize: 12,
                     fontWeight: FontWeight.w700),
               ),
@@ -436,7 +438,7 @@ class _EntryRow extends StatelessWidget {
                       if (dateStr.isNotEmpty)
                         Text(dateStr,
                             style: const TextStyle(
-                                color: Colors.white38, fontSize: 11)),
+                                color: AppColors.textFaint, fontSize: 11)),
                     ],
                   );
                 },
@@ -570,7 +572,7 @@ class _EntryDetailSheetState extends State<_EntryDetailSheet> {
                   children: [
                     if (_initialized)
                       AspectRatio(
-                        aspectRatio: _ctrl!.value.aspectRatio,
+                        aspectRatio: correctedVideoAspectRatio(_ctrl!.value),
                         child: VideoPlayer(_ctrl!),
                       )
                     else
@@ -622,7 +624,7 @@ class _EntryDetailSheetState extends State<_EntryDetailSheet> {
                             const SizedBox(width: 4),
                             const Text('Private entry',
                                 style: TextStyle(
-                                    color: Colors.white70, fontSize: 10)),
+                                    color: AppColors.textMuted, fontSize: 10)),
                           ],
                         ),
                       ),
@@ -710,7 +712,7 @@ class _EntryDetailSheetState extends State<_EntryDetailSheet> {
                   ),
                   child: Text(widget.feedback,
                       style: const TextStyle(
-                          color: Colors.white70, fontSize: 13)),
+                          color: AppColors.textMuted, fontSize: 13)),
                 ),
               ),
             ],
@@ -734,7 +736,7 @@ class _EntryDetailSheetState extends State<_EntryDetailSheet> {
                     const Expanded(
                       child: Text(
                         'Player entry • No share or download • Visible only to you and admin',
-                        style: TextStyle(color: Colors.white38, fontSize: 11),
+                        style: TextStyle(color: AppColors.textFaint, fontSize: 11),
                       ),
                     ),
                   ],
@@ -822,13 +824,13 @@ class _EntryDetailSheetState extends State<_EntryDetailSheet> {
             style: TextStyle(color: Colors.white, fontSize: 16)),
         content: const Text(
           'Flag this entry for admin review? Use this for safety or policy violations.',
-          style: TextStyle(color: Colors.white70, fontSize: 14),
+          style: TextStyle(color: AppColors.textMuted, fontSize: 14),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dlgCtx),
               child: const Text('Cancel',
-                  style: TextStyle(color: Colors.white54))),
+                  style: TextStyle(color: AppColors.textMuted))),
           TextButton(
             onPressed: () async {
               Navigator.pop(dlgCtx);

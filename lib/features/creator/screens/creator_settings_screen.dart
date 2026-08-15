@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_account_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorSettingsScreen extends StatefulWidget {
   const CreatorSettingsScreen({super.key});
@@ -115,11 +116,11 @@ class _CreatorSettingsScreenState extends State<CreatorSettingsScreen> {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
             'Your creator page will be removed and all live challenges archived. Your account is kept and you can keep using the app as a player. This cannot be undone from within the app.',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -161,8 +162,7 @@ class _CreatorSettingsScreenState extends State<CreatorSettingsScreen> {
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Creator Settings',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Creator Settings'),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -186,7 +186,7 @@ class _CreatorSettingsScreenState extends State<CreatorSettingsScreen> {
                         activeThumbColor: _accent,
                         contentPadding: EdgeInsets.zero,
                         title: Text(_notificationLabels[key] ?? key,
-                            style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                       )),
 
                   const SizedBox(height: 20),
@@ -272,7 +272,7 @@ class _CreatorSettingsScreenState extends State<CreatorSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                  Text(subtitle, style: const TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),

@@ -5,6 +5,7 @@ import 'create_challenge.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 import '../admin/creator_admin_screen.dart';
 import '../admin/brand_participants_screen.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorHomeScreen extends StatelessWidget {
   const CreatorHomeScreen({super.key});
@@ -230,7 +231,7 @@ class CreatorHomeScreen extends StatelessWidget {
                     if (username.isNotEmpty)
                       Text('@$username',
                           style: const TextStyle(
-                              color: Colors.white70, fontSize: 14)),
+                              color: AppColors.textMuted, fontSize: 14)),
                   ],
                 ),
               ),
@@ -260,7 +261,7 @@ class CreatorHomeScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(bio,
                 style:
-                    const TextStyle(color: Colors.white70, fontSize: 13)),
+                    const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           ],
         ],
       ),
@@ -472,7 +473,7 @@ class CreatorHomeScreen extends StatelessWidget {
           const SizedBox(height: 2),
           const Text('This Week',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 11)),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -521,7 +522,7 @@ class CreatorHomeScreen extends StatelessWidget {
               children: [
                 const Text('Top Challenge',
                     style: TextStyle(
-                        color: Colors.white54,
+                        color: AppColors.textMuted,
                         fontSize: 11,
                         fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
@@ -545,7 +546,7 @@ class CreatorHomeScreen extends StatelessWidget {
                       fontSize: 20,
                       fontWeight: FontWeight.bold)),
               const Text('submissions',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  style: TextStyle(color: AppColors.textFaint, fontSize: 10)),
             ],
           ),
         ],
@@ -579,7 +580,7 @@ class CreatorHomeScreen extends StatelessWidget {
           Text(title,
               textAlign: TextAlign.center,
               style:
-                  const TextStyle(color: Colors.white54, fontSize: 11)),
+                  const TextStyle(color: AppColors.textMuted, fontSize: 11)),
           if (subtitle != null) ...[
             const SizedBox(height: 2),
             Text(subtitle,
@@ -630,7 +631,7 @@ class CreatorHomeScreen extends StatelessWidget {
                           fontSize: 14)),
                   const Text('Tap to review participants',
                       style:
-                          TextStyle(color: Colors.white54, fontSize: 12)),
+                          TextStyle(color: AppColors.textMuted, fontSize: 12)),
                 ],
               ),
             ),
@@ -713,11 +714,11 @@ class CreatorHomeScreen extends StatelessWidget {
                   Icon(Icons.flash_on, color: Colors.white24, size: 32),
                   SizedBox(height: 8),
                   Text('No approved challenges yet',
-                      style: TextStyle(color: Colors.white54)),
+                      style: TextStyle(color: AppColors.textMuted)),
                   SizedBox(height: 4),
                   Text('Create a challenge to get started',
                       style:
-                          TextStyle(color: Colors.white38, fontSize: 12)),
+                          TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),
@@ -789,7 +790,7 @@ class CreatorHomeScreen extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text('$subCount',
                             style: const TextStyle(
-                                color: Colors.white70, fontSize: 12)),
+                                color: AppColors.textMuted, fontSize: 12)),
                         if (pendingCount > 0) ...[
                           const SizedBox(width: 8),
                           Container(
@@ -906,7 +907,7 @@ class CreatorHomeScreen extends StatelessWidget {
                           Text(
                               'submitted to $challengeTitle',
                               style: const TextStyle(
-                                  color: Colors.white54,
+                                  color: AppColors.textMuted,
                                   fontSize: 12),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis),
@@ -916,7 +917,7 @@ class CreatorHomeScreen extends StatelessWidget {
                     if (timeStr.isNotEmpty)
                       Text(timeStr,
                           style: const TextStyle(
-                              color: Colors.white38,
+                              color: AppColors.textFaint,
                               fontSize: 11)),
                   ],
                 ),

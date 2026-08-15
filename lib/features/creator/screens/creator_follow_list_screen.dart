@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_account_service.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 
 enum FollowListMode { followers, following }
@@ -82,7 +83,7 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
           : _rows.isEmpty
               ? Center(
                   child: Text(_isFollowers ? 'No followers yet' : 'Not following anyone yet',
-                      style: const TextStyle(color: Colors.white54)),
+                      style: const TextStyle(color: AppColors.textMuted)),
                 )
               : RefreshIndicator(
                   color: _accent,
@@ -136,7 +137,7 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
                 children: [
                   Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
                   if (username.isNotEmpty)
-                    Text('@$username', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                    Text('@$username', style: const TextStyle(color: AppColors.textFaint, fontSize: 12)),
                 ],
               ),
             ),

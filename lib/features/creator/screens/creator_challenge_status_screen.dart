@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../core/services/creator_gates_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_analytics_screen.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_participants_screen.dart';
@@ -145,11 +146,11 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
         title: const Text('Publish Challenge', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
             'This makes your challenge visible to all players and awards you the approved Aura Points. Continue?',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -183,11 +184,11 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           backgroundColor: const Color(0xFF12102A),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: Text(confirmTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: Text(confirmBody ?? '', style: const TextStyle(color: Colors.white70)),
+          content: Text(confirmBody ?? '', style: const TextStyle(color: AppColors.textMuted)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context, true),
@@ -239,7 +240,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           ? const Center(child: CircularProgressIndicator(color: _accent))
           : _challenge == null
               ? const Center(
-                  child: Text('Challenge not found', style: TextStyle(color: Colors.white54)))
+                  child: Text('Challenge not found', style: TextStyle(color: AppColors.textMuted)))
               : _buildBody(_challenge!),
     );
   }
@@ -277,7 +278,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           ),
           if (description.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text(description, style: const TextStyle(color: Colors.white60, fontSize: 14, height: 1.5)),
+            Text(description, style: const TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.5)),
           ],
 
           if ((status == 'CHANGES_REQUESTED' || status == 'REJECTED') &&
@@ -296,7 +297,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 ),
-                child: Text(adminFeedback!, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
+                child: Text(adminFeedback!, style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4)),
               ),
             ..._feedback.map((f) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -305,7 +306,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
                     children: [
                       const Icon(Icons.circle, color: Color(0xFFF59E0B), size: 6),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(f, style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4))),
+                      Expanded(child: Text(f, style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4))),
                     ],
                   ),
                 )),
@@ -324,7 +325,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Text(text, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        child: Text(text, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
       );
 
   Widget _statusBanner(String status, int? auraScore) {
@@ -355,7 +356,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
         children: [
           Text(meta.$2, style: TextStyle(color: meta.$1, fontSize: 15, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text(meta.$3, style: const TextStyle(color: Colors.white60, fontSize: 12.5, height: 1.4)),
+          Text(meta.$3, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
         ],
       ),
     );
@@ -372,7 +373,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
-        child: const Text('Gate progress unavailable', style: TextStyle(color: Colors.white38, fontSize: 12)),
+        child: const Text('Gate progress unavailable', style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
       );
     }
 
@@ -431,7 +432,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
             isAllGatesCompleted
                 ? '$participantCount participants · $completedGates/$totalGates gates unlocked'
                 : '$participantCount / ${nextTarget ?? '?'} participants · $completedGates/$totalGates gates unlocked',
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
       ),
@@ -452,7 +453,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
             children: [
               Text('$value', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
               const SizedBox(height: 2),
-              Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10.5), textAlign: TextAlign.center),
+              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5), textAlign: TextAlign.center),
             ],
           ),
         );
@@ -613,7 +614,7 @@ class _RulesDialogState extends State<_RulesDialog> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text(r['description'] as String,
-                                    style: const TextStyle(color: Colors.white54, fontSize: 12, height: 1.3)),
+                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.3)),
                               ),
                           ],
                         ),
@@ -629,7 +630,7 @@ class _RulesDialogState extends State<_RulesDialog> {
               contentPadding: EdgeInsets.zero,
               activeColor: _accent,
               title: const Text('I acknowledge these rules',
-                  style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
             ),
           ],
         ),
@@ -637,7 +638,7 @@ class _RulesDialogState extends State<_RulesDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
         ),
         TextButton(
           onPressed: _accepted ? () => Navigator.pop(context, true) : null,

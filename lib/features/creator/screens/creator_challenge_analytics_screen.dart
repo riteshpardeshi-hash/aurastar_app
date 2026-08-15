@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../widgets/creator_insights_chart.dart';
 
 /// Tabs over the "Creator Challenges" analytics sub-suite (9 endpoints) plus
@@ -41,15 +42,14 @@ class _CreatorChallengeAnalyticsScreenState extends State<CreatorChallengeAnalyt
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text('Analytics',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: const Text('Analytics'),
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
           indicatorColor: _accent,
           indicatorWeight: 3,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
+          unselectedLabelColor: AppColors.textFaint,
           labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
           tabs: const [
@@ -112,7 +112,7 @@ Widget _dateRangeChips(String current, ValueChanged<String> onChange) {
                     ),
                     child: Text(_dateRangeLabels[r]!,
                         style: TextStyle(
-                            color: current == r ? Colors.white : Colors.white54,
+                            color: current == r ? Colors.white : AppColors.textMuted,
                             fontSize: 12,
                             fontWeight: FontWeight.w600)),
                   ),
@@ -148,7 +148,7 @@ class _StatGrid extends StatelessWidget {
                 Text(s.$2,
                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 3),
-                Text(s.$1, style: const TextStyle(color: Colors.white54, fontSize: 11.5)),
+                Text(s.$1, style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
               ],
             ),
           ),
@@ -446,7 +446,7 @@ class _ScoresTabState extends State<_ScoresTab> {
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      SizedBox(width: 70, child: Text(d['range'] as String? ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                      SizedBox(width: 70, child: Text(d['range'] as String? ?? '', style: const TextStyle(color: AppColors.textMuted, fontSize: 12))),
                       Expanded(
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(4),
@@ -460,7 +460,7 @@ class _ScoresTabState extends State<_ScoresTab> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text('${d['count']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text('${d['count']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ],
                   ),
                 )),
@@ -475,10 +475,10 @@ class _ScoresTabState extends State<_ScoresTab> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    SizedBox(width: 24, child: Text('${i + 1}', style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w700))),
+                    SizedBox(width: 24, child: Text('${i + 1}', style: const TextStyle(color: AppColors.textFaint, fontSize: 12, fontWeight: FontWeight.w700))),
                     Expanded(
                       child: Text(t['userId'] as String? ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ),
                     Text('${t['aiScore']}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
                   ],
@@ -609,7 +609,7 @@ class _SharesFollowersTabState extends State<_SharesFollowersTab> {
             )
           else
             ...platforms.map((p) => Text('${p['label']}: ${p['count']}',
-                style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12))),
         ],
         const SizedBox(height: 24),
         const _SectionTitle('Followers'),
@@ -712,13 +712,13 @@ class _GatesTrendsTabState extends State<_GatesTrendsTab> {
         const SizedBox(height: 16),
         if (!_loading) ...[
           if (attemptsTrend != null && attemptsTrend.isNotEmpty) ...[
-            const Text('Attempts', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+            const Text('Attempts', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             CreatorInsightsChart(points: attemptsTrend),
             const SizedBox(height: 16),
           ],
           if (participantsTrend != null && participantsTrend.isNotEmpty) ...[
-            const Text('Participants', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w600)),
+            const Text('Participants', style: TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             CreatorInsightsChart(points: participantsTrend, color: const Color(0xFF22C55E)),
             const SizedBox(height: 16),

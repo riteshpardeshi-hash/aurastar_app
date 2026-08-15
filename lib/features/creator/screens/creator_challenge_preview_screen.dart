@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../video/widgets/video_player_widget.dart';
 
 /// Renders a challenge exactly as players will see it after publish —
@@ -56,7 +57,7 @@ class _CreatorChallengePreviewScreenState
           : _preview == null
               ? const Center(
                   child: Text('Preview unavailable',
-                      style: TextStyle(color: Colors.white54)))
+                      style: TextStyle(color: AppColors.textMuted)))
               : _buildBody(_preview!),
     );
   }
@@ -112,7 +113,7 @@ class _CreatorChallengePreviewScreenState
         if (description.isNotEmpty) ...[
           const SizedBox(height: 14),
           Text(description,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.5)),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5)),
         ],
         if (instructions != null) ...[
           const SizedBox(height: 20),
@@ -169,7 +170,7 @@ class _CreatorChallengePreviewScreenState
         children: [
           Icon(icon, color: Colors.white54, size: 13),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
         ],
       ),
     );
@@ -190,7 +191,7 @@ class _CreatorChallengePreviewScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
             const SizedBox(height: 4),
             Text(value, style: const TextStyle(color: Colors.white, fontSize: 13)),
           ],
@@ -214,7 +215,7 @@ class _CreatorChallengePreviewScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label,
-                style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
             const SizedBox(height: 6),
             for (final item in items)
               Padding(

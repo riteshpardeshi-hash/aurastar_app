@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/aura_tier.dart';
+import '../theme/app_colors.dart';
 
 class LevelUpSheet extends StatelessWidget {
   final int level;
@@ -54,7 +55,7 @@ class LevelUpSheet extends StatelessWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Level', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                  const Text('Level', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
                   Text(
                     '$level',
                     style: const TextStyle(

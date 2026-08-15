@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../screens/creator_entries_screen.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorAdminScreen extends StatelessWidget {
   const CreatorAdminScreen({super.key});
@@ -16,7 +17,7 @@ class CreatorAdminScreen extends StatelessWidget {
       return const Scaffold(
           backgroundColor: Color(0xFF080810),
           body: Center(child: Text('Not signed in.',
-              style: TextStyle(color: Colors.white54))));
+              style: TextStyle(color: AppColors.textMuted))));
     }
 
     return Scaffold(
@@ -50,7 +51,7 @@ class CreatorAdminScreen extends StatelessWidget {
                       color: Colors.white24, size: 48),
                   const SizedBox(height: 12),
                   const Text('No live challenges yet',
-                      style: TextStyle(color: Colors.white38)),
+                      style: TextStyle(color: AppColors.textFaint)),
                 ],
               ),
             );
@@ -296,7 +297,7 @@ class _StatCard extends StatelessWidget {
                         fontWeight: FontWeight.w800)),
                 Text(label,
                     style: const TextStyle(
-                        color: Colors.white54, fontSize: 11)),
+                        color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
           ],
@@ -383,7 +384,7 @@ class _ChallengeCard extends StatelessWidget {
             const SizedBox(height: 16),
             const Text('Score Distribution',
                 style: TextStyle(
-                    color: Colors.white54,
+                    color: AppColors.textMuted,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.4)),
@@ -421,7 +422,7 @@ class _ChallengeCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(_distLabels[i],
                             style: const TextStyle(
-                                color: Colors.white38, fontSize: 9)),
+                                color: AppColors.textFaint, fontSize: 9)),
                       ],
                     ),
                   ),
@@ -479,7 +480,7 @@ class _ChallengeCard extends StatelessWidget {
                 fontSize: 13,
                 fontWeight: FontWeight.w700)),
         Text(label,
-            style: const TextStyle(color: Colors.white38, fontSize: 10)),
+            style: const TextStyle(color: AppColors.textFaint, fontSize: 10)),
       ],
     );
   }

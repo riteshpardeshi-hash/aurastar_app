@@ -8,6 +8,7 @@ import '../../splash/screens/splash_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -132,7 +133,7 @@ class SettingsScreen extends StatelessWidget {
         child: Text(
           title.toUpperCase(),
           style: const TextStyle(
-            color: Colors.white38,
+            color: AppColors.textFaint,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
@@ -193,12 +194,12 @@ class SettingsScreen extends StatelessWidget {
             style:
                 TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text('Are you sure you want to log out?',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -234,12 +235,12 @@ class SettingsScreen extends StatelessWidget {
                 TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         content: const Text(
             'This signs you out everywhere, including other phones or tablets logged into this account. You\'ll need to log in again on each device.',
-            style: TextStyle(color: Colors.white70)),
+            style: TextStyle(color: AppColors.textMuted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -382,7 +383,7 @@ class _HelpItem extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(body,
                     style: const TextStyle(
-                        color: Colors.white60,
+                        color: AppColors.textMuted,
                         fontSize: 13,
                         height: 1.45)),
               ],

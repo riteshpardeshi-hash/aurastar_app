@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../shared/theme/app_text_styles.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/challenges/screens/challenge_detail.dart';
 import '../../../features/challenges/screens/all_categories_screen.dart' show categoryIconAsset;
@@ -79,7 +81,7 @@ class HomeFeedScreen extends StatelessWidget {
             Text(
               'Search challenges, brands, creators…',
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.30), fontSize: 14),
+                  color: AppColors.textFaint, fontSize: 14),
             ),
           ],
         ),
@@ -333,12 +335,7 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
                     color: accent.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text('FEATURED',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5)),
+                  child: const Text('FEATURED', style: AppTextStyles.eyebrow),
                 ),
               ),
               Positioned(
@@ -752,11 +749,7 @@ class _CategoriesSectionState extends State<_CategoriesSection> {
       children: [
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text('Browse by Category',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
+          child: Text('Browse by Category', style: AppTextStyles.sectionHeader),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14),

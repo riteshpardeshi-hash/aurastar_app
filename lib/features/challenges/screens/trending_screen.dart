@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -51,14 +52,6 @@ class _TrendingScreenState extends State<TrendingScreen>
   String _cacheKey(int tab, String sort) => sort;
 
   // ── Data ──────────────────────────────────────────────────────────────────
-
-  String _windowLabel(int tab) {
-    switch (tab) {
-      case 0:  return 'in the last 6 hours';
-      case 1:  return 'today';
-      default: return 'this week';
-    }
-  }
 
   Future<void> _loadTab(int tab) async {
     final key = _cacheKey(tab, _sort);
@@ -127,8 +120,7 @@ class _TrendingScreenState extends State<TrendingScreen>
             Icon(Icons.local_fire_department_rounded,
                 color: Color(0xFFFF6B35), size: 22),
             SizedBox(width: 8),
-            Text('Trending',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text('Trending'),
           ],
         ),
         centerTitle: false,
@@ -144,7 +136,7 @@ class _TrendingScreenState extends State<TrendingScreen>
                 indicatorColor: _accent,
                 indicatorSize: TabBarIndicatorSize.label,
                 labelColor: Colors.white,
-                unselectedLabelColor: Colors.white38,
+                unselectedLabelColor: AppColors.textFaint,
                 labelStyle: const TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w700),
                 dividerColor: Colors.transparent,
@@ -203,27 +195,26 @@ class _TrendingScreenState extends State<TrendingScreen>
     }
     if (items.isEmpty) return _buildEmpty();
 
-    return ListView.builder(
+    return GridView.builder(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       itemCount: items.length,
-      itemBuilder: (_, i) => _buildCard(items[i], i, tab),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.85,
+      ),
+      itemBuilder: (_, i) => _buildCard(items[i], i),
     );
   }
 
   // ── Trending card ─────────────────────────────────────────────────────────
 
-  Widget _buildCard(_TrendingItem item, int index, int tab) {
+  Widget _buildCard(_TrendingItem item, int index) {
     final title        = item.data['title']        as String? ?? '';
     final videoUrl     = item.data['videoUrl']     as String? ?? '';
     final thumbnailUrl = item.data['thumbnailUrl'] as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
-    // Despite the API docs describing category as a populated object with a
-    // name, this endpoint's response actually returns a raw unresolved
-    // ObjectId string — showing it as-is renders a meaningless 24-char hex
-    // string as the "category" label. Hide it rather than resolve it, since
-    // there's no id→name lookup wired into this screen.
-    final rawCategory  = item.data['category']     as String? ?? '';
-    final category     = _looksLikeObjectId(rawCategory) ? '' : rawCategory;
     final isTop3       = index < 3;
 
     return GestureDetector(
@@ -238,7 +229,6 @@ class _TrendingScreenState extends State<TrendingScreen>
             ),
           )),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: _card,
           borderRadius: BorderRadius.circular(16),
@@ -256,167 +246,95 @@ class _TrendingScreenState extends State<TrendingScreen>
                 ]
               : null,
         ),
-        child: Row(
-          children: [
-            // Rank + thumbnail
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    bottomLeft: Radius.circular(16),
-                  ),
-                  child: SizedBox(
-                    width: 100,
-                    height: 120,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        VideoThumbnailWidget(
-                            videoUrl: videoUrl,
-                            thumbnailUrl: thumbnailUrl,
-                            fit: BoxFit.cover),
-                        Positioned.fill(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  Colors.black.withValues(alpha: 0.6),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              VideoThumbnailWidget(
+                  videoUrl: videoUrl,
+                  thumbnailUrl: thumbnailUrl,
+                  fit: BoxFit.cover),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.5, 1.0],
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: isTop3
-                          ? _accent.withValues(alpha: 0.90)
-                          : Colors.black54,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        _rankLabel(index),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: index < 3 ? 14 : 11,
-                          fontWeight: FontWeight.w900,
-                          height: 1,
-                        ),
+              ),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: isTop3
+                        ? _accent.withValues(alpha: 0.90)
+                        : Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      _rankLabel(index),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: index < 3 ? 13 : 10,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
-
-            // Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+              ),
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
                     Row(
                       children: [
-                        if (category.isNotEmpty) ...[
-                          Flexible(
-                            child: Text(category,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white38, fontSize: 11)),
-                          ),
-                          const Text(' · ',
-                              style: TextStyle(
-                                  color: Colors.white24, fontSize: 11)),
-                        ],
-                        const Icon(Icons.star_rounded, color: _accent, size: 11),
+                        const Icon(Icons.star_rounded, color: _accent, size: 12),
                         const SizedBox(width: 3),
                         Text(
                           '${item.starsCount}',
                           style: const TextStyle(
                               color: Color(0xFFD4A8FF),
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    if (_sort == 'joined' && item.attemptCount > 0)
+                    if ((_sort == 'joined' && item.attemptCount > 0) ||
+                        (_sort == 'liked' && item.starsCount > 0)) ...[
+                      const SizedBox(height: 4),
                       _StatRow(
-                        icon: Icons.people_outline_rounded,
-                        color: const Color(0xFFFF6B35),
-                        text:
-                            '${_fmt(item.attemptCount)} joined ${_windowLabel(tab)}',
-                      )
-                    else if (_sort == 'liked' && item.starsCount > 0)
-                      _StatRow(
-                        icon: Icons.favorite_rounded,
-                        color: const Color(0xFFFF6B9D),
-                        text:
-                            '${_fmt(item.starsCount)} likes ${_windowLabel(tab)}',
+                        icon: _sort == 'joined'
+                            ? Icons.people_outline_rounded
+                            : Icons.favorite_rounded,
+                        color: _sort == 'joined'
+                            ? const Color(0xFFFF6B35)
+                            : const Color(0xFFFF6B9D),
+                        text: _fmt(
+                            _sort == 'joined' ? item.attemptCount : item.starsCount),
                       ),
+                    ],
                   ],
                 ),
               ),
-            ),
-
-            // Take button
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: GestureDetector(
-                onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChallengeDetail(
-                        title: title,
-                        instructions: instructions,
-                        videoUrl: videoUrl,
-                        challengeId: item.challengeId,
-                      ),
-                    )),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)]),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text('Take',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -434,7 +352,7 @@ class _TrendingScreenState extends State<TrendingScreen>
           SizedBox(height: 16),
           Text('Nothing trending yet',
               style: TextStyle(
-                  color: Colors.white38,
+                  color: AppColors.textFaint,
                   fontSize: 16,
                   fontWeight: FontWeight.w600)),
           SizedBox(height: 8),
@@ -529,7 +447,7 @@ class _SortPill extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.white38,
+                color: selected ? Colors.white : AppColors.textFaint,
                 fontSize: 12,
                 fontWeight:
                     selected ? FontWeight.w700 : FontWeight.w400,
@@ -569,7 +487,3 @@ class _StatRow extends StatelessWidget {
     );
   }
 }
-
-// Detects an unresolved MongoDB ObjectId (24 hex chars) so it can be hidden
-// instead of shown as a meaningless "category" label.
-bool _looksLikeObjectId(String s) => RegExp(r'^[0-9a-f]{24}$').hasMatch(s);

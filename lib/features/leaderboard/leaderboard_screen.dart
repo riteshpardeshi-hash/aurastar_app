@@ -6,6 +6,7 @@ import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/friends_service.dart';
 import '../../core/services/leaderboard_service.dart';
+import '../../shared/theme/app_colors.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -41,20 +42,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Leaderboard',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontFamily: 'ClashDisplay',
-          ),
-        ),
+        title: const Text('Leaderboard'),
         actions: const [_FriendsIconButton()],
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: _accent,
           indicatorWeight: 3,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
+          unselectedLabelColor: AppColors.textFaint,
           labelStyle: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 13,
@@ -348,7 +343,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                     child: Text(
                       title,
                       style: TextStyle(
-                        color: sel ? Colors.white : Colors.white54,
+                        color: sel ? Colors.white : AppColors.textMuted,
                         fontSize: 12,
                         fontWeight: sel ? FontWeight.bold : FontWeight.normal,
                         fontFamily: 'SpaceGrotesk',
@@ -677,7 +672,7 @@ class _PlayerRow extends StatelessWidget {
                     : Text(
                       rankLabel ?? '$rank',
                       style: TextStyle(
-                        color: isCurrentUser ? Colors.white : Colors.white38,
+                        color: isCurrentUser ? Colors.white : AppColors.textFaint,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                         fontFamily: 'SpaceGrotesk',
@@ -718,7 +713,7 @@ class _PlayerRow extends StatelessWidget {
                   Text(
                     '@$username',
                     style: const TextStyle(
-                      color: Colors.white38,
+                      color: AppColors.textFaint,
                       fontSize: 11,
                       fontFamily: 'SpaceGrotesk',
                     ),
@@ -744,7 +739,7 @@ class _PlayerRow extends StatelessWidget {
               Text(
                 scoreSuffix,
                 style: const TextStyle(
-                  color: Colors.white38,
+                  color: AppColors.textFaint,
                   fontSize: 10,
                   fontFamily: 'SpaceGrotesk',
                 ),
@@ -849,7 +844,7 @@ class _SubmissionRow extends StatelessWidget {
                     : Text(
                       '$rank',
                       style: TextStyle(
-                        color: isCurrentUser ? Colors.white : Colors.white38,
+                        color: isCurrentUser ? Colors.white : AppColors.textFaint,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                         fontFamily: 'SpaceGrotesk',
@@ -892,7 +887,7 @@ class _SubmissionRow extends StatelessWidget {
               Text(
                 _fmt(stars),
                 style: const TextStyle(
-                  color: Colors.white38,
+                  color: AppColors.textFaint,
                   fontSize: 12,
                   fontFamily: 'SpaceGrotesk',
                 ),
@@ -1052,7 +1047,7 @@ Widget _emptyState(String title, String subtitle, {Widget? action}) => Center(
       Text(
         title,
         style: const TextStyle(
-          color: Colors.white38,
+          color: AppColors.textFaint,
           fontSize: 16,
           fontFamily: 'SpaceGrotesk',
         ),

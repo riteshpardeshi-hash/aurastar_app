@@ -17,6 +17,7 @@ import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/trending_screen.dart';
+import '../explore/screens/creator_profile_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
 import '../explore/screens/brands_list_screen.dart';
 import '../../shared/widgets/aura_action_sheet.dart';
@@ -28,6 +29,8 @@ import '../creator/screens/become_creator_screen.dart';
 import '../admin/screens/admin_screen.dart';
 import '../video/screens/preview_screen.dart';
 import '../../core/services/upload_queue_service.dart';
+import '../../shared/theme/app_text_styles.dart';
+import '../../shared/theme/app_colors.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -113,6 +116,8 @@ class _DashboardState extends State<Dashboard> {
                 profile['username'] as String? ??
                 profile['name'] as String? ??
                 'User');
+    final username =
+        profile['profileName'] as String? ?? profile['username'] as String? ?? '';
     final photoUrl = (profile['avatar'] as String? ?? '').isNotEmpty
         ? profile['avatar'] as String
         : profile['profileImageUrl'] as String? ?? '';
@@ -131,6 +136,7 @@ class _DashboardState extends State<Dashboard> {
       'level': level,
       'tierName': tierName,
       'displayName': displayName,
+      'username': username,
       'photoUrl': photoUrl,
       'hasCreatorPage': hasCreatorPage,
       'streakDay': streakDay,
@@ -153,6 +159,7 @@ class _DashboardState extends State<Dashboard> {
               isCreator: false,
               userId: '',
               displayName: 'Guest',
+              username: '',
               photoUrl: '',
               streakDay: 0,
               lastStreakDate: '');
@@ -191,7 +198,7 @@ class _DashboardState extends State<Dashboard> {
                         color: Colors.white38, size: 40),
                     const SizedBox(height: 16),
                     const Text('Failed to load profile.',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: AppColors.textMuted)),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () => _loadProfile(userId),
@@ -222,6 +229,7 @@ class _DashboardState extends State<Dashboard> {
         final isBrand = hasCreatorPage;
         final isCreator = hasCreatorPage;
         final displayName = data['displayName'] as String;
+        final username = data['username'] as String;
         final photoUrl = data['photoUrl'] as String;
         final streakDay = data['streakDay'] as int;
         final lastStreakDate = data['lastStreakDate'] as String;
@@ -296,6 +304,7 @@ class _DashboardState extends State<Dashboard> {
           isCreator: isCreator,
           userId: userId,
           displayName: displayName,
+          username: username,
           photoUrl: photoUrl,
           streakDay: streakDay,
           lastStreakDate: lastStreakDate,
@@ -313,6 +322,7 @@ class _DashboardState extends State<Dashboard> {
     required bool isCreator,
     required String userId,
     required String displayName,
+    required String username,
     required String photoUrl,
     required int streakDay,
     required String lastStreakDate,
@@ -329,8 +339,8 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(
                   child: SafeArea(
                     bottom: false,
-                    child: _buildHeader(
-                        context, points, tier, displayName, userId, photoUrl),
+                    child: _buildHeader(context, points, tier, displayName,
+                        username, userId, photoUrl),
                   ),
                 ),
                 SliverToBoxAdapter(
@@ -361,7 +371,7 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context, int points, AuraTier tier,
-      String displayName, String userId, String photoUrl) {
+      String displayName, String username, String userId, String photoUrl) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
@@ -386,7 +396,7 @@ class _DashboardState extends State<Dashboard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                displayName,
+                username.isNotEmpty ? '@$username' : displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -519,7 +529,7 @@ class _DashboardState extends State<Dashboard> {
       label       = 'Day $displayDay/7 — keep it up!';
     } else {
       borderColor = streakColor.withValues(alpha: 0.20);
-      labelColor  = Colors.white54;
+      labelColor  = AppColors.textMuted;
       emoji       = '🔥';
       label       = 'Day $displayDay/7 — play a challenge to continue';
     }
@@ -631,7 +641,6 @@ class _DashboardState extends State<Dashboard> {
                 orElse: () => list.first);
 
         String title = 'Bollywood Walk';
-        int auraPoints = 150;
         String videoUrl = '';
         String thumbnailUrl = '';
         String instructions = '';
@@ -639,7 +648,6 @@ class _DashboardState extends State<Dashboard> {
 
         if (hero != null) {
           title = hero['title'] as String? ?? title;
-          auraPoints = hero['starsCount'] as int? ?? auraPoints;
           videoUrl = hero['videoUrl'] as String? ?? '';
           thumbnailUrl = hero['thumbnailUrl'] as String? ?? '';
           instructions = hero['instructions'] as String? ?? '';
@@ -648,125 +656,103 @@ class _DashboardState extends State<Dashboard> {
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-          child: Container(
-            height: 320,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF4B3EAA), width: 1.5),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(19),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _VideoThumbnailWidget(
-                    videoUrl: videoUrl,
-                    thumbnailUrl: thumbnailUrl,
-                  ),
-                  // Bottom-to-top dark gradient for text readability
-                  Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        stops: [0.2, 1.0],
-                        colors: [Colors.transparent, Colors.black],
+          child: GestureDetector(
+            onTap: challengeId.isNotEmpty
+                ? () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ChallengeDetail(
+                          title: title,
+                          instructions: instructions,
+                          videoUrl: videoUrl,
+                          challengeId: challengeId,
+                        ),
+                      ),
+                    )
+                : null,
+            child: Container(
+              height: 320,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF4B3EAA), width: 1.5),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(19),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _VideoThumbnailWidget(
+                      videoUrl: videoUrl,
+                      thumbnailUrl: thumbnailUrl,
+                    ),
+                    // Bottom-to-top dark gradient for text readability
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: [0.2, 1.0],
+                          colors: [Colors.transparent, Colors.black],
+                        ),
                       ),
                     ),
-                  ),
-                  // Content — bottom-left
-                  Positioned(
-                    left: 16,
-                    bottom: 16,
-                    right: 16,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Aura points row
-                        Row(
+                    // Featured tag
+                    Positioned(
+                      left: 16,
+                      top: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.3)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.diamond_rounded,
-                                color: Color(0xFFD4A8FF), size: 22),
-                            const SizedBox(width: 6),
+                            Icon(Icons.star_rounded,
+                                color: Color(0xFFD4A8FF), size: 14),
+                            SizedBox(width: 4),
                             Text(
-                              '$auraPoints',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                fontFamily: 'ClashDisplay',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        // Challenge title
-                        Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Take this Challenge button
-                        GestureDetector(
-                          onTap: challengeId.isNotEmpty
-                              ? () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => ChallengeDetail(
-                                        title: title,
-                                        instructions: instructions,
-                                        videoUrl: videoUrl,
-                                        challengeId: challengeId,
-                                      ),
-                                    ),
-                                  )
-                              : null,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 24, vertical: 12),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF6B2FD9), Color(0xFF9B4DFF)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            child: const Text(
-                              'Take this Challenge',
+                              'Featured',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 15,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 fontFamily: 'SpaceGrotesk',
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Diamond pagination indicators
-                        Row(
-                          children: const [
-                            Icon(Icons.diamond_outlined,
-                                color: Colors.white54, size: 14),
-                            SizedBox(width: 6),
-                            Icon(Icons.diamond_outlined,
-                                color: Colors.white54, size: 14),
                           ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                    // Content — bottom-left
+                    Positioned(
+                      left: 16,
+                      bottom: 16,
+                      right: 16,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Diamond pagination indicators
+                          Row(
+                            children: const [
+                              Icon(Icons.diamond_outlined,
+                                  color: Colors.white54, size: 14),
+                              SizedBox(width: 6),
+                              Icon(Icons.diamond_outlined,
+                                  color: Colors.white54, size: 14),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -785,12 +771,7 @@ class _DashboardState extends State<Dashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Brand Videos',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay')),
+              const Text('Brand Videos', style: AppTextStyles.sectionHeader),
               GestureDetector(
                 onTap: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const AllGeneralChallengesScreen())),
@@ -856,32 +837,6 @@ class _DashboardState extends State<Dashboard> {
                                               fit: BoxFit.cover),
                                         ),
                                       ),
-                                    Positioned(
-                                      bottom: 0,
-                                      left: 0,
-                                      right: 0,
-                                      child: Container(
-                                        padding: const EdgeInsets.fromLTRB(6, 18, 6, 7),
-                                        decoration: const BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [Colors.transparent, Colors.black87],
-                                          ),
-                                        ),
-                                        child: Text(title,
-                                            textAlign: TextAlign.center,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              fontFamily: 'SpaceGrotesk',
-                                              height: 1.3,
-                                            )),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -903,7 +858,6 @@ class _DashboardState extends State<Dashboard> {
                         final data = docs[3 + i];
                         final title = data['title'] as String? ?? '';
                         final description = data['instructions'] as String? ?? '';
-                        final auraPoints = data['starsCount'] as int? ?? 0;
                         final videoUrl = data['videoUrl'] as String? ?? '';
                         final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
                         const brandLogoUrl = '';
@@ -942,38 +896,6 @@ class _DashboardState extends State<Dashboard> {
                                                 fit: BoxFit.cover),
                                           ),
                                         ),
-                                      Padding(
-                                        padding: const EdgeInsets.all(10),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          children: [
-                                            Text(title.toUpperCase(),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w900,
-                                                  letterSpacing: 0.3,
-                                                  fontFamily: 'ClashDisplay',
-                                                )),
-                                            const SizedBox(height: 6),
-                                            Row(children: [
-                                              const Icon(Icons.diamond_rounded,
-                                                  color: Color(0xFFD4A8FF), size: 13),
-                                              const SizedBox(width: 3),
-                                              Text('$auraPoints',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 13,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontFamily: 'SpaceGrotesk',
-                                                  )),
-                                            ]),
-                                          ],
-                                        ),
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -1004,12 +926,7 @@ class _DashboardState extends State<Dashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Trending videos',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay')),
+              const Text('Trending videos', style: AppTextStyles.sectionHeader),
               GestureDetector(
                 onTap: () => Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const TrendingScreen())),
@@ -1072,32 +989,6 @@ class _DashboardState extends State<Dashboard> {
                                           fit: BoxFit.cover),
                                     ),
                                   ),
-                                Positioned(
-                                  bottom: 0,
-                                  left: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.fromLTRB(6, 18, 6, 7),
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [Colors.transparent, Colors.black87],
-                                      ),
-                                    ),
-                                    child: Text(title,
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          fontFamily: 'SpaceGrotesk',
-                                          height: 1.3,
-                                        )),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -1131,8 +1022,7 @@ class _DashboardState extends State<Dashboard> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Creator Videos',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, fontFamily: 'ClashDisplay')),
+                  const Text('Creator Videos', style: AppTextStyles.sectionHeader),
                   GestureDetector(
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
@@ -1143,13 +1033,16 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
             SizedBox(
-              height: 148,
+              height: 110,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: docs.length,
                 itemBuilder: (_, i) {
                   final data     = docs[i];
+                  final creatorId = data['_id'] as String? ??
+                      data['id'] as String? ??
+                      '';
                   final pageName = data['pageName'] as String? ??
                       data['displayName'] as String? ??
                       data['name'] as String? ??
@@ -1160,8 +1053,12 @@ class _DashboardState extends State<Dashboard> {
                       '';
 
                   return GestureDetector(
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
+                    onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => creatorId.isNotEmpty
+                                ? CreatorProfileScreen(creatorId: creatorId)
+                                : const CreatorVideosScreen())),
                     child: Container(
                       width: 90,
                       margin: const EdgeInsets.only(right: 14),
@@ -1193,24 +1090,6 @@ class _DashboardState extends State<Dashboard> {
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600,
                                   fontFamily: 'SpaceGrotesk')),
-                          const SizedBox(height: 8),
-                          Container(
-                            height: 28,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: _accent,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Center(
-                              child: Text('Follow',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    fontFamily: 'SpaceGrotesk',
-                                  )),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -1226,134 +1105,32 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Banners ────────────────────────────────────────────────────────────────
+  // Static promo banner (decorative, no tap action) — was previously faking
+  // a "banner" by rendering the challenges list with a diamond/aura-points
+  // overlay, which showed a challenge card instead of an actual banner.
   Widget _buildBannersSection(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _challengesFuture,
-      builder: (context, snap) {
-        final docs = snap.data ?? [];
-        if (!snap.hasData) return const SizedBox.shrink();
-
-        // If no backend data yet, show a static placeholder banner
-        final count = docs.isEmpty ? 1 : docs.length.clamp(0, 3);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text('Banners',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay')),
-            ),
-            SizedBox(
-              height: 160,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: count,
-                itemBuilder: (_, i) {
-                  final hasDoc = i < docs.length;
-                  final data = hasDoc ? docs[i] : null;
-                  final title = data?['title'] as String? ?? 'Featured Challenge';
-                  final description = data?['instructions'] as String? ?? 'Complete this challenge to earn Aura points.';
-                  final auraPoints = data?['starsCount'] as int? ?? 150;
-                  final videoUrl = data?['videoUrl'] as String? ?? '';
-                  final thumbnailUrl = data?['thumbnailUrl'] as String? ?? '';
-                  final challengeId = data?['id'] as String? ?? '';
-
-                  return GestureDetector(
-                    onTap: challengeId.isNotEmpty
-                        ? () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => ChallengeDetail(
-                              title: title,
-                              instructions: description,
-                              videoUrl: videoUrl,
-                              challengeId: challengeId,
-                            )))
-                        : null,
-                    child: Container(
-                      width: MediaQuery.of(context).size.width - 24,
-                      margin: EdgeInsets.only(right: i < count - 1 ? 12 : 0),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            _VideoThumbnailWidget(
-                                videoUrl: videoUrl,
-                                thumbnailUrl: thumbnailUrl),
-                            // left-to-right dark gradient
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  stops: [0.0, 0.55, 0.80],
-                                  colors: [
-                                    Color(0xEE000000),
-                                    Color(0xBB000000),
-                                    Colors.transparent,
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(title.toUpperCase(),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w900,
-                                        height: 1.1,
-                                        fontFamily: 'ClashDisplay',
-                                      )),
-                                  const SizedBox(height: 6),
-                                  Text(description,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white60,
-                                        fontSize: 11,
-                                        height: 1.4,
-                                        fontFamily: 'SpaceGrotesk',
-                                      )),
-                                  const SizedBox(height: 10),
-                                  Row(children: [
-                                    const Icon(Icons.diamond_rounded,
-                                        color: Color(0xFFD4A8FF), size: 16),
-                                    const SizedBox(width: 4),
-                                    Text('$auraPoints+',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                          fontFamily: 'SpaceGrotesk',
-                                        )),
-                                  ]),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text('Banners', style: AppTextStyles.sectionHeader),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Image.asset(
+                'assets/images/homescreen/dashboard banner.png',
+                fit: BoxFit.cover,
               ),
             ),
-            const SizedBox(height: 24),
-          ],
-        );
-      },
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
@@ -1419,7 +1196,7 @@ class _DashboardState extends State<Dashboard> {
                     style: TextStyle(
                       color: points >= 500
                           ? const Color(0xFFD4A8FF)
-                          : Colors.white38,
+                          : AppColors.textFaint,
                       fontSize: 12,
                     ),
                   ),
@@ -1520,7 +1297,7 @@ class _DashboardState extends State<Dashboard> {
               'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
               textAlign: TextAlign.center,
               style:
-                  TextStyle(color: Colors.white54, fontSize: 14, height: 1.5),
+                  TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 24),
             // Progress bar
@@ -1536,7 +1313,7 @@ class _DashboardState extends State<Dashboard> {
                 ),
                 Text(
                   '${required - currentPoints.clamp(0, required)} to go',
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                  style: const TextStyle(color: AppColors.textFaint, fontSize: 12),
                 ),
               ],
             ),
@@ -1756,7 +1533,7 @@ class _DashboardState extends State<Dashboard> {
               'Profile',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white38,
+                color: AppColors.textFaint,
                 fontSize: 9,
                 fontFamily: 'SpaceGrotesk',
                 height: 1.2,
@@ -1788,7 +1565,7 @@ class _DashboardState extends State<Dashboard> {
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: active ? _accent : Colors.white38,
+                color: active ? _accent : AppColors.textFaint,
                 fontSize: 9,
                 fontFamily: 'SpaceGrotesk',
                 height: 1.2,
@@ -1949,13 +1726,13 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
         content: const Text(
           'This video hasn\'t been uploaded yet. Discarding it means it '
           'won\'t be submitted and you won\'t earn any Aura points for it.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Keep it',
-                style: TextStyle(color: Colors.white70)),
+                style: TextStyle(color: AppColors.textMuted)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),

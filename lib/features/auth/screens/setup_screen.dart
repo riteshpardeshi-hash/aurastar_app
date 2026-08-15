@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import '../../dashboard/dashboard.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -68,50 +70,45 @@ class _SetupScreenState extends State<SetupScreen> {
                     children: [
                       const SizedBox(height: 36),
 
-                      // ── Title ─────────────────────────────────────────────
-                      const Text(
-                        'Permissions',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // Purple underline
-                      Center(
-                        child: Container(
-                          width: 120,
-                          height: 2,
-                          decoration: BoxDecoration(
-                            color: _purple,
-                            borderRadius: BorderRadius.circular(1),
+                      // Left-aligned to match the rest of the onboarding
+                      // flow (Rules/Trust Setup) instead of this screen's
+                      // old one-off centered block.
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Title ─────────────────────────────────────────
+                          const Text('Permissions', style: AppTextStyles.compactTitle),
+                          const SizedBox(height: 10),
+                          // Purple underline
+                          Container(
+                            width: 120,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: _purple,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
+                          const SizedBox(height: 14),
 
-                      // ── Subtitles ──────────────────────────────────────────
-                      const Text(
-                        'Required for Scoring',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Color(0xFF9B59B6),
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'We need this to record challenges and award Aura',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
+                          // ── Subtitles ────────────────────────────────────
+                          const Text(
+                            'Required for Scoring',
+                            style: TextStyle(
+                              color: Color(0xFF9B59B6),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'We need this to record challenges and award Aura',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 28),
@@ -296,7 +293,7 @@ class _PermCard extends StatelessWidget {
                 Text(
                   description,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
+                    color: AppColors.textMuted,
                     fontSize: 12,
                     height: 1.4,
                   ),
@@ -306,7 +303,7 @@ class _PermCard extends StatelessWidget {
                   Text(
                     subDescription!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.30),
+                      color: AppColors.textFaint,
                       fontSize: 11,
                       height: 1.4,
                     ),
@@ -337,7 +334,7 @@ class _PermCard extends StatelessWidget {
                   style: TextStyle(
                     color: required
                         ? const Color(0xFFFF6B6B)
-                        : Colors.white.withValues(alpha: 0.45),
+                        : AppColors.textMuted,
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../shared/theme/app_text_styles.dart';
 import '../services/arcade_progress_service.dart';
 import '../widgets/game_card.dart';
 import '../games/aura_flash_tap_game.dart';
@@ -151,24 +152,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               // ── Header ──────────────────────────────────────────────────────
               Text(
                 eyebrow.toUpperCase(),
-                style: TextStyle(
-                  color: headerAccent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 3,
-                  fontFamily: 'SpaceGrotesk',
-                ),
+                style: AppTextStyles.eyebrow.copyWith(color: headerAccent),
               ),
               const SizedBox(height: 10),
               Text(
                 title,
-                style: const TextStyle(
-                  color: _text,
-                  fontSize: 38,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -1.2,
-                  fontFamily: 'ClashDisplay',
-                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.heroTitle.copyWith(color: _text),
               ),
               const SizedBox(height: 8),
               Text(
@@ -198,13 +189,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                       children: [
                         Text(
                           'DAILY PULSE',
-                          style: TextStyle(
-                            color: headerAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.8,
-                            fontFamily: 'SpaceGrotesk',
-                          ),
+                          style: AppTextStyles.eyebrow.copyWith(color: headerAccent),
                         ),
                         const SizedBox(height: 7),
                         Text(

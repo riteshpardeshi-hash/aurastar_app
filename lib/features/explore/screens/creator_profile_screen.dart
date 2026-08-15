@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../video/widgets/video_player_widget.dart';
@@ -50,10 +50,6 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     });
   }
 
-  void _share(String displayName) {
-    Share.share('Check out @$displayName on Aura Arena!');
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,7 +59,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             ? const Center(child: CircularProgressIndicator(color: _accent))
             : _creator == null
                 ? const Center(
-                    child: Text('Creator not found', style: TextStyle(color: Colors.white54)))
+                    child: Text('Creator not found', style: TextStyle(color: AppColors.textMuted)))
                 : _buildBody(context, _creator!),
       ),
     );
@@ -87,8 +83,6 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             child: Row(
               children: [
                 _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
-                const Spacer(),
-                _circleIconButton(Icons.menu_rounded, () => _share(displayName)),
               ],
             ),
           ),
@@ -246,14 +240,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                     if (username.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text('@$username',
-                          style: const TextStyle(color: Colors.white60, fontSize: 14)),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
                     ],
                     if (bio.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(bio,
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.4)),
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
                     ],
                   ],
                 ),
@@ -295,7 +289,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                 fontWeight: FontWeight.w800,
                 fontFamily: 'SpaceGrotesk')),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
       ],
     );
   }
@@ -321,7 +315,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
           children: [
             Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 40),
             SizedBox(height: 10),
-            Text('No videos yet', style: TextStyle(color: Colors.white38, fontSize: 13)),
+            Text('No videos yet', style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
           ],
         ),
       ),

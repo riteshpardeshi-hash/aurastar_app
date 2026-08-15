@@ -12,7 +12,14 @@ String humanizeError(Object error) {
       lower.contains('connection refused') ||
       lower.contains('connection failed') ||
       lower.contains('timeoutexception')) {
-    return 'No internet connection. Please check your network and try again.';
+    // These exact exception types fire identically whether the device has
+    // no connection at all, or the device is online and Aura's own backend
+    // (a single non-redundant host) is briefly unreachable — there's no way
+    // to tell those apart from the exception alone. The old copy here
+    // ("No internet connection") asserted the first cause as fact, which
+    // reads as a diagnosis the app can't actually make and is misleading
+    // when it's really the second — the user's connection is fine.
+    return "Couldn't reach Aura's servers. Please check your connection and try again.";
   }
   return raw.replaceFirst('Exception: ', '');
 }

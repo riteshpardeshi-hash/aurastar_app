@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/aura_action_sheet.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../core/utils/cdn_url.dart';
 import '../../search/search_screen.dart';
 import '../../leaderboard/leaderboard_screen.dart';
@@ -184,7 +185,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
             const SizedBox(width: 8),
             Text('Search brand challenges…',
                 style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.35), fontSize: 14)),
+                    color: AppColors.textFaint, fontSize: 14)),
           ],
         ),
       ),
@@ -216,7 +217,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
               child: Text(
                 _categories[i],
                 style: TextStyle(
-                  color: active ? Colors.white : Colors.white60,
+                  color: active ? Colors.white : AppColors.textMuted,
                   fontSize: 13,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w400,
                 ),
@@ -455,7 +456,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                   ? 'No ${_categories[_selectedCat]} brand challenges yet'
                   : 'No brand challenges yet',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white38, fontSize: 15),
+              style: const TextStyle(color: AppColors.textFaint, fontSize: 15),
             ),
           ],
         ),
@@ -747,7 +748,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
           const SizedBox(height: 3),
           Text(label,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white38, fontSize: 9)),
+              style: const TextStyle(color: AppColors.textFaint, fontSize: 9)),
         ],
       ),
     );

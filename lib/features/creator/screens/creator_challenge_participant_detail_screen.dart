@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 class CreatorChallengeParticipantDetailScreen extends StatefulWidget {
   final String challengeId;
@@ -81,8 +82,7 @@ class _CreatorChallengeParticipantDetailScreenState
         backgroundColor: _bg,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(name.isEmpty ? 'Participant' : name,
-            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+        title: Text(name.isEmpty ? 'Participant' : name),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -120,7 +120,7 @@ class _CreatorChallengeParticipantDetailScreenState
                               Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                               const SizedBox(height: 4),
                               Text('$attemptsCount attempts${verdict.isNotEmpty ? ' · $verdict' : ''}',
-                                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                             ],
                           ),
                         ),
@@ -141,7 +141,7 @@ class _CreatorChallengeParticipantDetailScreenState
                     const Padding(
                       padding: EdgeInsets.only(top: 20),
                       child: Center(
-                          child: Text('No attempts found', style: TextStyle(color: Colors.white38, fontSize: 13))),
+                          child: Text('No attempts found', style: TextStyle(color: AppColors.textFaint, fontSize: 13))),
                     )
                   else
                     ..._attempts.map(_attemptTile),
@@ -191,13 +191,13 @@ class _CreatorChallengeParticipantDetailScreenState
                     style: TextStyle(color: statusColor, fontWeight: FontWeight.w700, fontSize: 13)),
                 if (submittedAt.isNotEmpty) ...[
                   const SizedBox(height: 3),
-                  Text(_formatDate(submittedAt), style: const TextStyle(color: Colors.white38, fontSize: 11.5)),
+                  Text(_formatDate(submittedAt), style: const TextStyle(color: AppColors.textFaint, fontSize: 11.5)),
                 ],
               ],
             ),
           ),
           if (score != null)
-            Text('$score', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13)),
+            Text('$score', style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600, fontSize: 13)),
         ],
       ),
     );

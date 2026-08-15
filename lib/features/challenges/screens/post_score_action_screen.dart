@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../dashboard/dashboard.dart';
 
 class PostScoreActionScreen extends StatefulWidget {
@@ -205,7 +206,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
           const Text(
             'AURA SCORE',
             style: TextStyle(
-              color: Colors.white54,
+              color: AppColors.textMuted,
               fontSize: 12,
               letterSpacing: 2.5,
               fontWeight: FontWeight.w600,
@@ -242,7 +243,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
             const SizedBox(height: 10),
             const Text(
               'Keep trying — you\'ll get it!',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
           ],
 
@@ -256,7 +257,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
               child: Text(
                 'BREAKDOWN',
                 style: TextStyle(
-                  color: Colors.white38,
+                  color: AppColors.textFaint,
                   fontSize: 10,
                   letterSpacing: 2,
                   fontWeight: FontWeight.w700,
@@ -339,7 +340,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
                   Text(
                     'Share your score card as an Instagram Story.',
                     style: TextStyle(
-                        color: Colors.white60, fontSize: 12, height: 1.35),
+                        color: AppColors.textMuted, fontSize: 12, height: 1.35),
                   ),
                 ],
               ),
@@ -393,7 +394,7 @@ class _SubScoreBar extends StatelessWidget {
                   Text(
                     weight,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: AppColors.textFaint,
                       fontSize: 11,
                     ),
                   ),
