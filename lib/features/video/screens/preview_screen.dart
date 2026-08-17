@@ -359,7 +359,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         alignment: Alignment.center,
                         children: [
                           AspectRatio(
-                            aspectRatio: correctedVideoAspectRatio(_player.value),
+                            aspectRatio: portraitPreviewAspectRatio(_player.value),
                             child: VideoPlayer(_player),
                           ),
                           if (!_isPlaying)

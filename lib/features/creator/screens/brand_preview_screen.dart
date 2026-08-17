@@ -125,7 +125,7 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
             child: Center(
               child: _controller.value.isInitialized
                   ? AspectRatio(
-                      aspectRatio: correctedVideoAspectRatio(_controller.value),
+                      aspectRatio: portraitPreviewAspectRatio(_controller.value),
                       child: VideoPlayer(_controller),
                     )
                   : const CircularProgressIndicator(),
