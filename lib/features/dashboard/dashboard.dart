@@ -1,16 +1,18 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
-import '../../core/services/creator_page_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
-import '../../shared/widgets/video_thumbnail_widget.dart' show videoThumbnailCache;
+import '../../shared/widgets/video_thumbnail_widget.dart'
+    show videoThumbnailCache;
+import '../../shared/widgets/aura_score_badge.dart';
+import '../../shared/widgets/category_icon_badge.dart';
 import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/avatar_widget.dart';
 import '../../shared/widgets/wallet_screen.dart';
@@ -49,6 +51,9 @@ class _DashboardState extends State<Dashboard> {
       ChallengesService()
           .fetchChallenges(limit: 20)
           .then((raw) => raw.map(normaliseChallenge).toList());
+
+  late final Future<Map<String, String>> _categoryNamesFuture =
+      ChallengesService().fetchCategoryNameMap();
 
   // Creator-page-tagged pages for the "Creator Videos" shelf.
   late final Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
@@ -102,12 +107,11 @@ class _DashboardState extends State<Dashboard> {
     final results = await Future.wait([
       AuthApiService().getProfile(),
       AuthApiService().fetchStreak(),
-      CreatorPageService().fetchOwnPage(),
     ]);
     final profile = results[0];
     if (profile == null) throw Exception('Failed to load profile');
     final streak = results[1];
-    final hasCreatorPage = results[2] != null;
+    final role = profile['role'] as String?;
 
     final displayName =
         (profile['displayName'] as String?)?.trim().isNotEmpty == true
@@ -117,11 +121,15 @@ class _DashboardState extends State<Dashboard> {
                 profile['name'] as String? ??
                 'User');
     final username =
-        profile['profileName'] as String? ?? profile['username'] as String? ?? '';
-    final photoUrl = (profile['avatar'] as String? ?? '').isNotEmpty
-        ? profile['avatar'] as String
-        : profile['profileImageUrl'] as String? ?? '';
-    final points = (profile['auraPoints'] as num?)?.toInt() ??
+        profile['profileName'] as String? ??
+        profile['username'] as String? ??
+        '';
+    final photoUrl =
+        (profile['avatar'] as String? ?? '').isNotEmpty
+            ? profile['avatar'] as String
+            : profile['profileImageUrl'] as String? ?? '';
+    final points =
+        (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
     // Server-computed and authoritative — do not recompute level/tier from
@@ -138,7 +146,7 @@ class _DashboardState extends State<Dashboard> {
       'displayName': displayName,
       'username': username,
       'photoUrl': photoUrl,
-      'hasCreatorPage': hasCreatorPage,
+      'role': role,
       'streakDay': streakDay,
       'lastStreakDate': lastStreakDate,
     };
@@ -151,18 +159,20 @@ class _DashboardState extends State<Dashboard> {
       builder: (context, uidSnap) {
         final userId = uidSnap.data;
         if (!uidSnap.hasData || userId == null || userId.isEmpty) {
-          return _buildScaffold(context,
-              points: 0,
-              tierName: null,
-              isAdmin: false,
-              isBrand: false,
-              isCreator: false,
-              userId: '',
-              displayName: 'Guest',
-              username: '',
-              photoUrl: '',
-              streakDay: 0,
-              lastStreakDate: '');
+          return _buildScaffold(
+            context,
+            points: 0,
+            tierName: null,
+            isAdmin: false,
+            isBrand: false,
+            isCreator: false,
+            userId: '',
+            displayName: 'Guest',
+            username: '',
+            photoUrl: '',
+            streakDay: 0,
+            lastStreakDate: '',
+          );
         }
         if (_profileUserId != userId) {
           _autoRetriedProfile = false;
@@ -194,16 +204,20 @@ class _DashboardState extends State<Dashboard> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.wifi_off_rounded,
-                        color: Colors.white38, size: 40),
+                    const Icon(
+                      Icons.wifi_off_rounded,
+                      color: Colors.white38,
+                      size: 40,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('Failed to load profile.',
-                        style: TextStyle(color: AppColors.textMuted)),
+                    const Text(
+                      'Failed to load profile.',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
                     const SizedBox(height: 20),
                     ElevatedButton(
                       onPressed: () => _loadProfile(userId),
-                      style:
-                          ElevatedButton.styleFrom(backgroundColor: _accent),
+                      style: ElevatedButton.styleFrom(backgroundColor: _accent),
                       child: const Text('Retry'),
                     ),
                   ],
@@ -221,13 +235,14 @@ class _DashboardState extends State<Dashboard> {
 
         final data = snap.data!;
         final points = data['points'] as int;
-        // No REST admin-role signal exists yet — admin UI stays hidden until
-        // the backend exposes one (the admin panel itself is still Firestore-
-        // only and out of scope for this pass).
-        const isAdmin = false;
-        final hasCreatorPage = data['hasCreatorPage'] as bool;
-        final isBrand = hasCreatorPage;
-        final isCreator = hasCreatorPage;
+        // `role` is the backend's source of truth (player/brand/admin/creator)
+        // — an admin can promote a user straight to `creator` via RBAC without
+        // a `/creator/page` record ever existing, so gate on this, not on
+        // whether a creator page was ever created.
+        final role = data['role'] as String?;
+        final isAdmin = role == 'admin';
+        final isBrand = role == 'brand' || role == 'creator' || isAdmin;
+        final isCreator = isBrand;
         final displayName = data['displayName'] as String;
         final username = data['username'] as String;
         final photoUrl = data['photoUrl'] as String;
@@ -271,7 +286,9 @@ class _DashboardState extends State<Dashboard> {
                           child: Text(
                             'Your streak ends at midnight — play now to save it!',
                             style: TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w600),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -279,15 +296,20 @@ class _DashboardState extends State<Dashboard> {
                     backgroundColor: const Color(0xFF2D1800),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     duration: const Duration(seconds: 5),
                     action: SnackBarAction(
                       label: 'Play',
                       textColor: Colors.amber,
-                      onPressed: () => Navigator.push(context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  const AllGeneralChallengesScreen())),
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder:
+                                  (_) => const AllGeneralChallengesScreen(),
+                            ),
+                          ),
                     ),
                   ),
                 );
@@ -339,12 +361,20 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(
                   child: SafeArea(
                     bottom: false,
-                    child: _buildHeader(context, points, tier, displayName,
-                        username, userId, photoUrl),
+                    child: _buildHeader(
+                      context,
+                      points,
+                      tier,
+                      displayName,
+                      username,
+                      userId,
+                      photoUrl,
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(
-                    child: _buildStreakBanner(streakDay, lastStreakDate)),
+                  child: _buildStreakBanner(streakDay, lastStreakDate),
+                ),
                 const SliverToBoxAdapter(child: _PendingUploadBanner()),
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
                 SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
@@ -353,8 +383,8 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
                 if (!isCreator && !isBrand && !isAdmin)
                   SliverToBoxAdapter(
-                      child:
-                          _buildBecomeCreatorBanner(context, userId, points)),
+                    child: _buildBecomeCreatorBanner(context, userId, points),
+                  ),
                 if (!isCreator && !isBrand && !isAdmin)
                   SliverToBoxAdapter(child: _buildBecomeCreatorButton(context)),
                 if (isAdmin)
@@ -363,15 +393,26 @@ class _DashboardState extends State<Dashboard> {
               ],
             ),
           ),
-          _buildBottomNav(context, displayName: displayName, photoUrl: photoUrl),
+          _buildBottomNav(
+            context,
+            displayName: displayName,
+            photoUrl: photoUrl,
+          ),
         ],
       ),
     );
   }
 
   // ── Header ─────────────────────────────────────────────────────────────────
-  Widget _buildHeader(BuildContext context, int points, AuraTier tier,
-      String displayName, String username, String userId, String photoUrl) {
+  Widget _buildHeader(
+    BuildContext context,
+    int points,
+    AuraTier tier,
+    String displayName,
+    String username,
+    String userId,
+    String photoUrl,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Row(
@@ -408,16 +449,20 @@ class _DashboardState extends State<Dashboard> {
               ),
               const SizedBox(height: 4),
               GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const WalletScreen())),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const WalletScreen()),
+                    ),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A0A2E),
                     borderRadius: BorderRadius.circular(20),
-                    border:
-                        Border.all(color: _accent.withValues(alpha: 0.6)),
+                    border: Border.all(color: _accent.withValues(alpha: 0.6)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -450,8 +495,11 @@ class _DashboardState extends State<Dashboard> {
 
           // ── Avatar ────────────────────────────────────
           GestureDetector(
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const MyAccountScreen())),
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MyAccountScreen()),
+                ),
             child: Container(
               width: 38,
               height: 38,
@@ -483,18 +531,20 @@ class _DashboardState extends State<Dashboard> {
     final yesterdayStr =
         '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
 
-    final qualifiedToday    = lastStreakDate == todayStr;
+    final qualifiedToday = lastStreakDate == todayStr;
     final qualifiedYesterday = lastStreakDate == yesterdayStr;
     final bonusJustCredited = streakDay == 0 && qualifiedToday;
 
     // Broken: had an active streak but missed at least one full day
-    final broken = streakDay > 0 &&
+    final broken =
+        streakDay > 0 &&
         !qualifiedToday &&
         !qualifiedYesterday &&
         lastStreakDate.isNotEmpty;
 
     // At risk: after 7 pm, streak active, haven't played today yet
-    final atRisk = !broken && streakDay > 0 && !qualifiedToday && now.hour >= 19;
+    final atRisk =
+        !broken && streakDay > 0 && !qualifiedToday && now.hour >= 19;
 
     if (streakDay == 0 && !bonusJustCredited) return const SizedBox.shrink();
 
@@ -509,29 +559,29 @@ class _DashboardState extends State<Dashboard> {
 
     if (broken) {
       borderColor = const Color(0xFFFF4444).withValues(alpha: 0.45);
-      labelColor  = const Color(0xFFFF6B6B);
-      emoji       = '💔';
-      label       = 'Streak broken — play today to start a new one!';
+      labelColor = const Color(0xFFFF6B6B);
+      emoji = '💔';
+      label = 'Streak broken — play today to start a new one!';
     } else if (bonusJustCredited) {
       borderColor = streakColor.withValues(alpha: 0.50);
-      labelColor  = streakColor;
-      emoji       = '🎉';
-      label       = '7-Day Streak complete! +50 Auras awarded';
+      labelColor = streakColor;
+      emoji = '🎉';
+      label = '7-Day Streak complete! +50 Auras awarded';
     } else if (atRisk) {
       borderColor = Colors.amber.withValues(alpha: 0.65);
-      labelColor  = Colors.amber;
-      emoji       = '⚠️';
-      label       = 'Streak ends at midnight — play now to save it!';
+      labelColor = Colors.amber;
+      emoji = '⚠️';
+      label = 'Streak ends at midnight — play now to save it!';
     } else if (qualifiedToday) {
       borderColor = streakColor.withValues(alpha: 0.40);
-      labelColor  = streakColor;
-      emoji       = '🔥';
-      label       = 'Day $displayDay/7 — keep it up!';
+      labelColor = streakColor;
+      emoji = '🔥';
+      label = 'Day $displayDay/7 — keep it up!';
     } else {
       borderColor = streakColor.withValues(alpha: 0.20);
-      labelColor  = AppColors.textMuted;
-      emoji       = '🔥';
-      label       = 'Day $displayDay/7 — play a challenge to continue';
+      labelColor = AppColors.textMuted;
+      emoji = '🔥';
+      label = 'Day $displayDay/7 — play a challenge to continue';
     }
 
     return Container(
@@ -554,12 +604,17 @@ class _DashboardState extends State<Dashboard> {
                 Row(
                   children: List.generate(7, (i) {
                     final dayNum = i + 1;
-                    final isCompleted = broken
-                        ? false
-                        : (dayNum < displayDay ||
-                            (dayNum == displayDay && (qualifiedToday || bonusJustCredited)));
+                    final isCompleted =
+                        broken
+                            ? false
+                            : (dayNum < displayDay ||
+                                (dayNum == displayDay &&
+                                    (qualifiedToday || bonusJustCredited)));
                     final isCurrent =
-                        !broken && !bonusJustCredited && dayNum == displayDay && !qualifiedToday;
+                        !broken &&
+                        !bonusJustCredited &&
+                        dayNum == displayDay &&
+                        !qualifiedToday;
                     final isPast = broken && dayNum <= displayDay;
 
                     Color dotBg;
@@ -568,17 +623,25 @@ class _DashboardState extends State<Dashboard> {
 
                     if (isPast) {
                       dotBg = const Color(0xFFFF4444).withValues(alpha: 0.18);
-                      dotChild = const Icon(Icons.close_rounded,
-                          color: Color(0xFFFF6B6B), size: 11);
+                      dotChild = const Icon(
+                        Icons.close_rounded,
+                        color: Color(0xFFFF6B6B),
+                        size: 11,
+                      );
                     } else if (isCompleted) {
                       dotBg = streakColor;
-                      dotChild = const Icon(Icons.local_fire_department_rounded,
-                          color: Colors.white, size: 12);
+                      dotChild = const Icon(
+                        Icons.local_fire_department_rounded,
+                        color: Colors.white,
+                        size: 12,
+                      );
                     } else if (isCurrent) {
-                      dotBg     = Colors.transparent;
+                      dotBg = Colors.transparent;
                       dotBorder = Border.all(
-                          color: atRisk ? Colors.amber : streakColor, width: 1.5);
-                      dotChild  = Text(
+                        color: atRisk ? Colors.amber : streakColor,
+                        width: 1.5,
+                      );
+                      dotChild = Text(
                         '$dayNum',
                         style: TextStyle(
                           color: atRisk ? Colors.amber : streakColor,
@@ -587,13 +650,14 @@ class _DashboardState extends State<Dashboard> {
                         ),
                       );
                     } else {
-                      dotBg    = Colors.white.withValues(alpha: 0.06);
+                      dotBg = Colors.white.withValues(alpha: 0.06);
                       dotChild = Text(
                         '$dayNum',
                         style: const TextStyle(
-                            color: Colors.white24,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600),
+                          color: Colors.white24,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
                       );
                     }
 
@@ -635,16 +699,20 @@ class _DashboardState extends State<Dashboard> {
       future: _challengesFuture,
       builder: (context, snap) {
         final list = snap.data ?? [];
-        final hero = list.isEmpty
-            ? null
-            : list.firstWhere((c) => c['creatorId'] == 'system',
-                orElse: () => list.first);
+        final hero =
+            list.isEmpty
+                ? null
+                : list.firstWhere(
+                  (c) => c['creatorId'] == 'system',
+                  orElse: () => list.first,
+                );
 
         String title = 'Bollywood Walk';
         String videoUrl = '';
         String thumbnailUrl = '';
         String instructions = '';
         String challengeId = '';
+        String categoryId = '';
 
         if (hero != null) {
           title = hero['title'] as String? ?? title;
@@ -652,24 +720,27 @@ class _DashboardState extends State<Dashboard> {
           thumbnailUrl = hero['thumbnailUrl'] as String? ?? '';
           instructions = hero['instructions'] as String? ?? '';
           challengeId = hero['id'] as String? ?? '';
+          categoryId = hero['category'] as String? ?? '';
         }
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
           child: GestureDetector(
-            onTap: challengeId.isNotEmpty
-                ? () => Navigator.push(
+            onTap:
+                challengeId.isNotEmpty
+                    ? () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ChallengeDetail(
-                          title: title,
-                          instructions: instructions,
-                          videoUrl: videoUrl,
-                          challengeId: challengeId,
-                        ),
+                        builder:
+                            (_) => ChallengeDetail(
+                              title: title,
+                              instructions: instructions,
+                              videoUrl: videoUrl,
+                              challengeId: challengeId,
+                            ),
                       ),
                     )
-                : null,
+                    : null,
             child: Container(
               height: 320,
               width: double.infinity,
@@ -703,18 +774,24 @@ class _DashboardState extends State<Dashboard> {
                       top: 16,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.45),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3)),
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.star_rounded,
-                                color: Color(0xFFD4A8FF), size: 14),
+                            Icon(
+                              Icons.star_rounded,
+                              color: Color(0xFFD4A8FF),
+                              size: 14,
+                            ),
                             SizedBox(width: 4),
                             Text(
                               'Featured',
@@ -729,6 +806,20 @@ class _DashboardState extends State<Dashboard> {
                         ),
                       ),
                     ),
+                    // Category icon — top-right (Featured tag owns top-left)
+                    Positioned(
+                      top: 16,
+                      right: 16,
+                      child: FutureBuilder<Map<String, String>>(
+                        future: _categoryNamesFuture,
+                        builder: (context, catSnap) {
+                          final categoryNames = catSnap.data ?? const {};
+                          return CategoryIconBadge(
+                            categoryName: categoryNames[categoryId],
+                          );
+                        },
+                      ),
+                    ),
                     // Content — bottom-left
                     Positioned(
                       left: 16,
@@ -741,13 +832,21 @@ class _DashboardState extends State<Dashboard> {
                           // Diamond pagination indicators
                           Row(
                             children: const [
-                              Icon(Icons.diamond_outlined,
-                                  color: Colors.white54, size: 14),
+                              Icon(
+                                Icons.diamond_outlined,
+                                color: Colors.white54,
+                                size: 14,
+                              ),
                               SizedBox(width: 6),
-                              Icon(Icons.diamond_outlined,
-                                  color: Colors.white54, size: 14),
+                              Icon(
+                                Icons.diamond_outlined,
+                                color: Colors.white54,
+                                size: 14,
+                              ),
                             ],
                           ),
+                          const SizedBox(height: 8),
+                          const AuraScoreBadge(),
                         ],
                       ),
                     ),
@@ -773,13 +872,21 @@ class _DashboardState extends State<Dashboard> {
             children: [
               const Text('Brand Videos', style: AppTextStyles.sectionHeader),
               GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const AllGeneralChallengesScreen())),
-                child: const Text('See All >',
-                    style: TextStyle(
-                        color: Color(0xFF9B4DCA),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AllGeneralChallengesScreen(),
+                      ),
+                    ),
+                child: const Text(
+                  'See All >',
+                  style: TextStyle(
+                    color: Color(0xFF9B4DCA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -790,124 +897,191 @@ class _DashboardState extends State<Dashboard> {
             final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
-            return Column(
-              children: [
-                // Top row: 3 square thumbnails
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: List.generate(docs.length.clamp(0, 3), (i) {
-                      final data = docs[i];
-                      final title = data['title'] as String? ?? '';
-                      final videoUrl = data['videoUrl'] as String? ?? '';
-                      final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                      final challengeId = data['id'] as String? ?? '';
-                      final instructions = data['instructions'] as String? ?? '';
-                      const brandLogoUrl = '';
+            return FutureBuilder<Map<String, String>>(
+              future: _categoryNamesFuture,
+              builder: (context, catSnap) {
+                final categoryNames = catSnap.data ?? const {};
 
-                      return Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
-                          child: GestureDetector(
-                            onTap: () => Navigator.push(context,
-                                MaterialPageRoute(builder: (_) => ChallengeDetail(
-                                  title: title,
-                                  instructions: instructions,
-                                  videoUrl: videoUrl,
-                                  challengeId: challengeId,
-                                ))),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: SizedBox(
-                                height: 122,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    _VideoThumbnailWidget(
-                                        videoUrl: videoUrl,
-                                        thumbnailUrl: thumbnailUrl),
-                                    if (brandLogoUrl.isNotEmpty)
-                                      Positioned(
-                                        top: 6,
-                                        right: 6,
-                                        child: ClipOval(
-                                          child: Image.network(brandLogoUrl,
-                                              width: 22,
-                                              height: 22,
-                                              fit: BoxFit.cover),
-                                        ),
+                return Column(
+                  children: [
+                    // Top row: 3 square thumbnails
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: List.generate(docs.length.clamp(0, 3), (i) {
+                          final data = docs[i];
+                          final title = data['title'] as String? ?? '';
+                          final videoUrl = data['videoUrl'] as String? ?? '';
+                          final thumbnailUrl =
+                              data['thumbnailUrl'] as String? ?? '';
+                          final challengeId = data['id'] as String? ?? '';
+                          final categoryId = data['category'] as String? ?? '';
+                          final instructions =
+                              data['instructions'] as String? ?? '';
+                          const brandLogoUrl = '';
+
+                          return Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                              child: GestureDetector(
+                                onTap:
+                                    () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => ChallengeDetail(
+                                              title: title,
+                                              instructions: instructions,
+                                              videoUrl: videoUrl,
+                                              challengeId: challengeId,
+                                            ),
                                       ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-                // Bottom row: 2 feature cards
-                if (docs.length > 3) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: List.generate(
-                          (docs.length - 3).clamp(0, 2), (i) {
-                        final data = docs[3 + i];
-                        final title = data['title'] as String? ?? '';
-                        final description = data['instructions'] as String? ?? '';
-                        final videoUrl = data['videoUrl'] as String? ?? '';
-                        final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                        const brandLogoUrl = '';
-                        final challengeId = data['id'] as String? ?? '';
-
-                        return Expanded(
-                          child: Padding(
-                            padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
-                            child: GestureDetector(
-                              onTap: () => Navigator.push(context,
-                                  MaterialPageRoute(builder: (_) => ChallengeDetail(
-                                    title: title,
-                                    instructions: description,
-                                    videoUrl: videoUrl,
-                                    challengeId: challengeId,
-                                  ))),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: SizedBox(
-                                  height: 132,
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      _VideoThumbnailWidget(
+                                    ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: SizedBox(
+                                    height: 122,
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        _VideoThumbnailWidget(
                                           videoUrl: videoUrl,
-                                          thumbnailUrl: thumbnailUrl),
-                                      Container(color: Colors.black.withValues(alpha: 0.45)),
-                                      if (brandLogoUrl.isNotEmpty)
+                                          thumbnailUrl: thumbnailUrl,
+                                        ),
                                         Positioned(
-                                          top: 8,
-                                          right: 8,
-                                          child: ClipOval(
-                                            child: Image.network(brandLogoUrl,
-                                                width: 26,
-                                                height: 26,
-                                                fit: BoxFit.cover),
+                                          top: 6,
+                                          left: 6,
+                                          child: CategoryIconBadge(
+                                            categoryName:
+                                                categoryNames[categoryId],
                                           ),
                                         ),
-                                    ],
+                                        const Positioned(
+                                          bottom: 6,
+                                          left: 6,
+                                          child: AuraScoreBadge(),
+                                        ),
+                                        if (brandLogoUrl.isNotEmpty)
+                                          Positioned(
+                                            top: 6,
+                                            right: 6,
+                                            child: ClipOval(
+                                              child: Image.network(
+                                                brandLogoUrl,
+                                                width: 22,
+                                                height: 22,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ),
                     ),
-                  ),
-                ],
-              ],
+                    // Bottom row: 2 feature cards
+                    if (docs.length > 3) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          children: List.generate(
+                            (docs.length - 3).clamp(0, 2),
+                            (i) {
+                              final data = docs[3 + i];
+                              final title = data['title'] as String? ?? '';
+                              final description =
+                                  data['instructions'] as String? ?? '';
+                              final videoUrl =
+                                  data['videoUrl'] as String? ?? '';
+                              final thumbnailUrl =
+                                  data['thumbnailUrl'] as String? ?? '';
+                              final categoryId =
+                                  data['category'] as String? ?? '';
+                              const brandLogoUrl = '';
+                              final challengeId = data['id'] as String? ?? '';
+
+                              return Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    left: i == 0 ? 0 : 8,
+                                  ),
+                                  child: GestureDetector(
+                                    onTap:
+                                        () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) => ChallengeDetail(
+                                                  title: title,
+                                                  instructions: description,
+                                                  videoUrl: videoUrl,
+                                                  challengeId: challengeId,
+                                                ),
+                                          ),
+                                        ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: SizedBox(
+                                        height: 132,
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            _VideoThumbnailWidget(
+                                              videoUrl: videoUrl,
+                                              thumbnailUrl: thumbnailUrl,
+                                            ),
+                                            Container(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.45,
+                                              ),
+                                            ),
+                                            Positioned(
+                                              top: 8,
+                                              left: 8,
+                                              child: CategoryIconBadge(
+                                                categoryName:
+                                                    categoryNames[categoryId],
+                                              ),
+                                            ),
+                                            const Positioned(
+                                              bottom: 8,
+                                              left: 8,
+                                              child: AuraScoreBadge(),
+                                            ),
+                                            if (brandLogoUrl.isNotEmpty)
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: ClipOval(
+                                                  child: Image.network(
+                                                    brandLogoUrl,
+                                                    width: 26,
+                                                    height: 26,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             );
           },
         ),
@@ -928,13 +1102,19 @@ class _DashboardState extends State<Dashboard> {
             children: [
               const Text('Trending videos', style: AppTextStyles.sectionHeader),
               GestureDetector(
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const TrendingScreen())),
-                child: const Text('See All >',
-                    style: TextStyle(
-                        color: Color(0xFF9B4DCA),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TrendingScreen()),
+                    ),
+                child: const Text(
+                  'See All >',
+                  style: TextStyle(
+                    color: Color(0xFF9B4DCA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -945,59 +1125,90 @@ class _DashboardState extends State<Dashboard> {
             final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: List.generate(docs.length.clamp(0, 3), (i) {
-                  final data = docs[i];
-                  final title = data['title'] as String? ?? '';
-                  final videoUrl = data['videoUrl'] as String? ?? '';
-                  final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
-                  final challengeId = data['id'] as String? ?? '';
-                  final instructions = data['instructions'] as String? ?? '';
-                  const brandLogoUrl = '';
+            return FutureBuilder<Map<String, String>>(
+              future: _categoryNamesFuture,
+              builder: (context, catSnap) {
+                final categoryNames = catSnap.data ?? const {};
 
-                  return Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
-                      child: GestureDetector(
-                        onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => ChallengeDetail(
-                              title: title,
-                              instructions: instructions,
-                              videoUrl: videoUrl,
-                              challengeId: challengeId,
-                            ))),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: SizedBox(
-                            height: 122,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                _VideoThumbnailWidget(
-                                    videoUrl: videoUrl,
-                                    thumbnailUrl: thumbnailUrl),
-                                if (brandLogoUrl.isNotEmpty)
-                                  Positioned(
-                                    top: 6,
-                                    right: 6,
-                                    child: ClipOval(
-                                      child: Image.network(brandLogoUrl,
-                                          width: 22,
-                                          height: 22,
-                                          fit: BoxFit.cover),
-                                    ),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: List.generate(docs.length.clamp(0, 3), (i) {
+                      final data = docs[i];
+                      final title = data['title'] as String? ?? '';
+                      final videoUrl = data['videoUrl'] as String? ?? '';
+                      final thumbnailUrl =
+                          data['thumbnailUrl'] as String? ?? '';
+                      final challengeId = data['id'] as String? ?? '';
+                      final categoryId = data['category'] as String? ?? '';
+                      final instructions =
+                          data['instructions'] as String? ?? '';
+                      const brandLogoUrl = '';
+
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                          child: GestureDetector(
+                            onTap:
+                                () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => ChallengeDetail(
+                                          title: title,
+                                          instructions: instructions,
+                                          videoUrl: videoUrl,
+                                          challengeId: challengeId,
+                                        ),
                                   ),
-                              ],
+                                ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SizedBox(
+                                height: 122,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    _VideoThumbnailWidget(
+                                      videoUrl: videoUrl,
+                                      thumbnailUrl: thumbnailUrl,
+                                    ),
+                                    Positioned(
+                                      top: 6,
+                                      left: 6,
+                                      child: CategoryIconBadge(
+                                        categoryName: categoryNames[categoryId],
+                                      ),
+                                    ),
+                                    const Positioned(
+                                      bottom: 6,
+                                      left: 6,
+                                      child: AuraScoreBadge(),
+                                    ),
+                                    if (brandLogoUrl.isNotEmpty)
+                                      Positioned(
+                                        top: 6,
+                                        right: 6,
+                                        child: ClipOval(
+                                          child: Image.network(
+                                            brandLogoUrl,
+                                            width: 22,
+                                            height: 22,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
+                      );
+                    }),
+                  ),
+                );
+              },
             );
           },
         ),
@@ -1022,12 +1233,26 @@ class _DashboardState extends State<Dashboard> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Creator Videos', style: AppTextStyles.sectionHeader),
+                  const Text(
+                    'Creator Videos',
+                    style: AppTextStyles.sectionHeader,
+                  ),
                   GestureDetector(
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const CreatorVideosScreen())),
-                    child: const Text('See All ›',
-                        style: TextStyle(color: Color(0xFF9B4DCA), fontSize: 13, fontWeight: FontWeight.w600)),
+                    onTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const CreatorVideosScreen(),
+                          ),
+                        ),
+                    child: const Text(
+                      'See All ›',
+                      style: TextStyle(
+                        color: Color(0xFF9B4DCA),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1039,26 +1264,34 @@ class _DashboardState extends State<Dashboard> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: docs.length,
                 itemBuilder: (_, i) {
-                  final data     = docs[i];
-                  final creatorId = data['_id'] as String? ??
-                      data['id'] as String? ??
-                      '';
-                  final pageName = data['pageName'] as String? ??
+                  final data = docs[i];
+                  final creatorId =
+                      data['_id'] as String? ?? data['id'] as String? ?? '';
+                  final pageName =
+                      data['pageName'] as String? ??
                       data['displayName'] as String? ??
                       data['name'] as String? ??
                       'Creator';
-                  final imgUrl   = data['profileImageUrl'] as String? ??
+                  final imgUrl =
+                      data['profileImageUrl'] as String? ??
                       data['avatar'] as String? ??
                       data['profileImage'] as String? ??
                       '';
 
                   return GestureDetector(
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => creatorId.isNotEmpty
-                                ? CreatorProfileScreen(creatorId: creatorId)
-                                : const CreatorVideosScreen())),
+                    onTap:
+                        () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder:
+                                (_) =>
+                                    creatorId.isNotEmpty
+                                        ? CreatorProfileScreen(
+                                          creatorId: creatorId,
+                                        )
+                                        : const CreatorVideosScreen(),
+                          ),
+                        ),
                     child: Container(
                       width: 90,
                       margin: const EdgeInsets.only(right: 14),
@@ -1066,7 +1299,8 @@ class _DashboardState extends State<Dashboard> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 74, height: 74,
+                            width: 74,
+                            height: 74,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
@@ -1074,22 +1308,45 @@ class _DashboardState extends State<Dashboard> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              border: Border.all(color: _accent.withValues(alpha: 0.6), width: 2),
+                              border: Border.all(
+                                color: _accent.withValues(alpha: 0.6),
+                                width: 2,
+                              ),
                             ),
-                            child: imgUrl.isNotEmpty
-                                ? ClipOval(child: Image.network(imgUrl, fit: BoxFit.cover))
-                                : Center(
-                                    child: Text(
-                                      pageName.isNotEmpty ? pageName[0].toUpperCase() : 'C',
-                                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
+                            child:
+                                imgUrl.isNotEmpty
+                                    ? ClipOval(
+                                      child: Image.network(
+                                        imgUrl,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                    : Center(
+                                      child: Text(
+                                        pageName.isNotEmpty
+                                            ? pageName[0].toUpperCase()
+                                            : 'C',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
                                     ),
-                                  ),
                           ),
                           const SizedBox(height: 6),
-                          Text(pageName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600,
-                                  fontFamily: 'SpaceGrotesk')),
+                          Text(
+                            pageName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'SpaceGrotesk',
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1112,10 +1369,6 @@ class _DashboardState extends State<Dashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Text('Banners', style: AppTextStyles.sectionHeader),
-        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: ClipRRect(
@@ -1136,7 +1389,10 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Become Creator banner (regular users only) ─────────────────────────────
   Widget _buildBecomeCreatorBanner(
-      BuildContext context, String userId, int points) {
+    BuildContext context,
+    String userId,
+    int points,
+  ) {
     return GestureDetector(
       onTap: () {
         if (points < 500) {
@@ -1145,8 +1401,7 @@ class _DashboardState extends State<Dashboard> {
         }
         Navigator.push(
           context,
-          MaterialPageRoute(
-              builder: (_) => const CreateCreatorProfileScreen()),
+          MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
         );
       },
       child: Container(
@@ -1159,8 +1414,7 @@ class _DashboardState extends State<Dashboard> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: _accent.withValues(alpha: 0.35)),
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
         child: Row(
           children: [
@@ -1171,8 +1425,11 @@ class _DashboardState extends State<Dashboard> {
                 color: _accent.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.star_rounded,
-                  color: Color(0xFFD4A8FF), size: 26),
+              child: const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFD4A8FF),
+                size: 26,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1194,9 +1451,10 @@ class _DashboardState extends State<Dashboard> {
                         ? 'You qualify! Launch challenges & grow your brand'
                         : '${500 - points} Aura to unlock — keep playing!',
                     style: TextStyle(
-                      color: points >= 500
-                          ? const Color(0xFFD4A8FF)
-                          : AppColors.textFaint,
+                      color:
+                          points >= 500
+                              ? const Color(0xFFD4A8FF)
+                              : AppColors.textFaint,
                       fontSize: 12,
                     ),
                   ),
@@ -1224,24 +1482,30 @@ class _DashboardState extends State<Dashboard> {
         width: double.infinity,
         height: 52,
         child: OutlinedButton.icon(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
-          ),
+          onPressed:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
+              ),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.white,
             side: BorderSide(color: _accent.withValues(alpha: 0.5)),
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
+              borderRadius: BorderRadius.circular(14),
+            ),
           ),
-          icon: const Icon(Icons.diamond_rounded,
-              color: Color(0xFFD4A8FF), size: 18),
+          icon: const Icon(
+            Icons.diamond_rounded,
+            color: Color(0xFFD4A8FF),
+            size: 18,
+          ),
           label: const Text(
             'Become a Creator',
             style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'SpaceGrotesk'),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'SpaceGrotesk',
+            ),
           ),
         ),
       ),
@@ -1257,111 +1521,133 @@ class _DashboardState extends State<Dashboard> {
       context: context,
       backgroundColor: const Color(0xFF100A20),
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 5,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(3)),
-            ),
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-                border:
-                    Border.all(color: _accent.withValues(alpha: 0.40), width: 1.5),
-              ),
-              child:
-                  const Icon(Icons.lock_outline_rounded, color: _accent, size: 30),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              '500 Aura Required',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'ClashDisplay'),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
-              textAlign: TextAlign.center,
-              style:
-                  TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 24),
-            // Progress bar
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder:
+          (ctx) => Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '$currentPoints Aura',
-                  style: const TextStyle(
-                      color: Color(0xFFD4A8FF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700),
+                Container(
+                  width: 48,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
-                Text(
-                  '${required - currentPoints.clamp(0, required)} to go',
-                  style: const TextStyle(color: AppColors.textFaint, fontSize: 12),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _accent.withValues(alpha: 0.40),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.lock_outline_rounded,
+                    color: _accent,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  '500 Aura Required',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'ClashDisplay',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Progress bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '$currentPoints Aura',
+                      style: const TextStyle(
+                        color: Color(0xFFD4A8FF),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '${required - currentPoints.clamp(0, required)} to go',
+                      style: const TextStyle(
+                        color: AppColors.textFaint,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: progress),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder:
+                      (_, v, __) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: v,
+                          minHeight: 10,
+                          backgroundColor: Colors.white.withValues(alpha: 0.08),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF7B2CBF),
+                          ),
+                        ),
+                      ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: const Text('Keep Playing'),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: progress),
-              duration: const Duration(milliseconds: 900),
-              curve: Curves.easeOutCubic,
-              builder: (_, v, __) => ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: v,
-                  minHeight: 10,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(Color(0xFF7B2CBF)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  textStyle: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700),
-                ),
-                child: const Text('Keep Playing'),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
   Widget _buildAdminButton(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminScreen()),
-      ),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminScreen()),
+          ),
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
         height: 46,
@@ -1370,12 +1656,15 @@ class _DashboardState extends State<Dashboard> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(
-          child: Text('Admin Panel',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  fontFamily: 'SpaceGrotesk')),
+          child: Text(
+            'Admin Panel',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              fontFamily: 'SpaceGrotesk',
+            ),
+          ),
         ),
       ),
     );
@@ -1392,7 +1681,11 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Bottom Nav ─────────────────────────────────────────────────────────────
-  Widget _buildBottomNav(BuildContext context, {required String displayName, required String photoUrl}) {
+  Widget _buildBottomNav(
+    BuildContext context, {
+    required String displayName,
+    required String photoUrl,
+  }) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -1431,30 +1724,37 @@ class _DashboardState extends State<Dashboard> {
                       _navItem(
                         icon: Icons.emoji_events_rounded,
                         label: 'Challenges',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const AllGeneralChallengesScreen()),
-                        ),
+                        onTap:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (_) => const AllGeneralChallengesScreen(),
+                              ),
+                            ),
                       ),
                       _navItem(
                         icon: Icons.storefront_rounded,
                         label: 'Brand',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const BrandsListScreen()),
-                        ),
+                        onTap:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const BrandsListScreen(),
+                              ),
+                            ),
                       ),
                       const SizedBox(width: 58),
                       _navItem(
                         icon: Icons.leaderboard_rounded,
                         label: 'Leaderboard',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const LeaderboardScreen()),
-                        ),
+                        onTap:
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LeaderboardScreen(),
+                              ),
+                            ),
                       ),
                       _profileNavItem(
                         context,
@@ -1505,13 +1805,18 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _profileNavItem(BuildContext context, {required String displayName, required String photoUrl}) {
+  Widget _profileNavItem(
+    BuildContext context, {
+    required String displayName,
+    required String photoUrl,
+  }) {
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const MyAccountScreen()),
-      ),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MyAccountScreen()),
+          ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Column(
@@ -1524,9 +1829,10 @@ class _DashboardState extends State<Dashboard> {
               radius: 13,
               backgroundColor: _accent.withValues(alpha: 0.30),
               textStyle: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 3),
             const Text(
@@ -1576,7 +1882,6 @@ class _DashboardState extends State<Dashboard> {
       ),
     );
   }
-
 }
 
 // ── Video Thumbnail Widget ─────────────────────────────────────────────────
@@ -1584,10 +1889,7 @@ class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
   final String? thumbnailUrl; // direct image URL from backend
 
-  const _VideoThumbnailWidget({
-    required this.videoUrl,
-    this.thumbnailUrl,
-  });
+  const _VideoThumbnailWidget({required this.videoUrl, this.thumbnailUrl});
 
   @override
   State<_VideoThumbnailWidget> createState() => _VideoThumbnailWidgetState();
@@ -1605,7 +1907,8 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
   @override
   void didUpdateWidget(_VideoThumbnailWidget old) {
     super.didUpdateWidget(old);
-    if (old.videoUrl != widget.videoUrl || old.thumbnailUrl != widget.thumbnailUrl) {
+    if (old.videoUrl != widget.videoUrl ||
+        old.thumbnailUrl != widget.thumbnailUrl) {
       setState(() => _thumb = null);
       _load();
     }
@@ -1616,7 +1919,8 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
     if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty) return;
     if (widget.videoUrl.isEmpty) return;
     if (videoThumbnailCache.containsKey(widget.videoUrl)) {
-      if (mounted) setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
+      if (mounted)
+        setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
       return;
     }
     // HLS manifests (.m3u8) can't be frame-extracted by video_thumbnail —
@@ -1629,7 +1933,9 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
         maxWidth: 480,
         quality: 75,
       ).timeout(const Duration(seconds: 12));
-      debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${bytes == null ? "null (no frame extracted)" : "${bytes.length} bytes"}');
+      debugPrint(
+        '[VideoThumbnail] ${widget.videoUrl} -> ${bytes == null ? "null (no frame extracted)" : "${bytes.length} bytes"}',
+      );
       if (bytes != null) videoThumbnailCache[widget.videoUrl] = bytes;
       if (mounted) setState(() => _thumb = bytes);
     } catch (e, st) {
@@ -1662,12 +1968,15 @@ class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
   }
 
   Widget _placeholder() => Container(
-        color: const Color(0xFF0F0F1A),
-        child: const Center(
-          child: Icon(Icons.play_circle_outline_rounded,
-              color: Colors.white12, size: 40),
-        ),
-      );
+    color: const Color(0xFF0F0F1A),
+    child: const Center(
+      child: Icon(
+        Icons.play_circle_outline_rounded,
+        color: Colors.white12,
+        size: 40,
+      ),
+    ),
+  );
 }
 
 // ── Pending upload recovery banner ────────────────────────────────────────────
@@ -1692,7 +2001,11 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
 
   Future<void> _check() async {
     final p = await UploadQueueService.getPending();
-    if (mounted) setState(() { _pending = p; _checked = true; });
+    if (mounted)
+      setState(() {
+        _pending = p;
+        _checked = true;
+      });
   }
 
   Future<void> _retry() async {
@@ -1702,11 +2015,12 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PreviewScreen(
-          videoPath:      p.videoPath,
-          challengeId:    p.challengeId,
-          challengeTitle: p.challengeTitle,
-        ),
+        builder:
+            (_) => PreviewScreen(
+              videoPath: p.videoPath,
+              challengeId: p.challengeId,
+              challengeTitle: p.challengeTitle,
+            ),
       ),
     );
   }
@@ -1719,28 +2033,35 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
   Future<void> _confirmDiscard() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF15122A),
-        title: const Text('Discard this video?',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'This video hasn\'t been uploaded yet. Discarding it means it '
-          'won\'t be submitted and you won\'t earn any Aura points for it.',
-          style: TextStyle(color: AppColors.textMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep it',
-                style: TextStyle(color: AppColors.textMuted)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF15122A),
+            title: const Text(
+              'Discard this video?',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: const Text(
+              'This video hasn\'t been uploaded yet. Discarding it means it '
+              'won\'t be submitted and you won\'t earn any Aura points for it.',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Keep it',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Discard',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Discard',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
     );
     if (confirmed != true) return;
     await UploadQueueService.clear();
@@ -1749,7 +2070,8 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_checked || _pending == null || _dismissed) return const SizedBox.shrink();
+    if (!_checked || _pending == null || _dismissed)
+      return const SizedBox.shrink();
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       decoration: BoxDecoration(

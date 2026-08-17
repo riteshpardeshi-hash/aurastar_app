@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/services/brands_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -24,6 +25,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
 
   Map<String, dynamic>? _brand;
   List<Map<String, dynamic>> _challenges = [];
+  Map<String, String> _categoryNames = {};
   int _followerCount = 0;
   bool _loading = true;
 
@@ -38,15 +40,18 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
       _service.fetchBrand(widget.brandId),
       _service.fetchBrandChallenges(widget.brandId, limit: 30),
       _service.fetchBrandFollowerCount(widget.brandId),
+      ChallengesService().fetchCategoryNameMap(),
     ]);
     if (!mounted) return;
     setState(() {
       final raw = results[0] as Map<String, dynamic>?;
       _brand = raw != null ? normaliseBrand(raw) : null;
-      _challenges = (results[1] as List<Map<String, dynamic>>)
-          .map(normaliseChallenge)
-          .toList();
+      _challenges =
+          (results[1] as List<Map<String, dynamic>>)
+              .map(normaliseChallenge)
+              .toList();
       _followerCount = results[2] as int;
+      _categoryNames = results[3] as Map<String, String>;
       _loading = false;
     });
   }
@@ -60,12 +65,16 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator(color: _accent))
-            : _brand == null
+        child:
+            _loading
+                ? const Center(child: CircularProgressIndicator(color: _accent))
+                : _brand == null
                 ? const Center(
-                    child: Text('Brand not found',
-                        style: TextStyle(color: AppColors.textMuted)))
+                  child: Text(
+                    'Brand not found',
+                    style: TextStyle(color: AppColors.textMuted),
+                  ),
+                )
                 : _buildBody(context, _brand!),
       ),
     );
@@ -87,50 +96,65 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
             child: Row(
               children: [
-                _circleIconButton(Icons.arrow_back_ios_new_rounded,
-                    () => Navigator.pop(context)),
+                _circleIconButton(
+                  Icons.arrow_back_ios_new_rounded,
+                  () => Navigator.pop(context),
+                ),
                 const Spacer(),
                 _circleIconButton(
-                    Icons.ios_share_rounded, () => _share(displayName)),
+                  Icons.ios_share_rounded,
+                  () => _share(displayName),
+                ),
               ],
             ),
           ),
         ),
         SliverToBoxAdapter(
           child: _buildCard(
-              displayName, username, bio, avatar, website, isFollowing, isVerified),
+            displayName,
+            username,
+            bio,
+            avatar,
+            website,
+            isFollowing,
+            isVerified,
+          ),
         ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            child: Text('Challenges',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    fontFamily: 'ClashDisplay')),
+            child: Text(
+              'Challenges',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'ClashDisplay',
+              ),
+            ),
           ),
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-          sliver: _challenges.isEmpty
-              ? SliverToBoxAdapter(child: _emptyChallenges())
-              : SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                    childAspectRatio: 0.78,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
+          sliver:
+              _challenges.isEmpty
+                  ? SliverToBoxAdapter(child: _emptyChallenges())
+                  : SliverGrid(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.78,
+                        ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
                       final c = _challenges[index];
-                      return _ChallengeCard(challenge: c);
-                    },
-                    childCount: _challenges.length,
+                      return _ChallengeCard(
+                        challenge: c,
+                        categoryNames: _categoryNames,
+                      );
+                    }, childCount: _challenges.length),
                   ),
-                ),
         ),
       ],
     );
@@ -179,16 +203,19 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                 backgroundColor: Colors.white24,
                 backgroundImage:
                     avatar.isNotEmpty ? NetworkImage(avatar) : null,
-                child: avatar.isEmpty
-                    ? Text(
-                        displayName.isNotEmpty
-                            ? displayName[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
+                child:
+                    avatar.isEmpty
+                        ? Text(
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
-                            fontSize: 22))
-                    : null,
+                            fontSize: 22,
+                          ),
+                        )
+                        : null,
               ),
               const SizedBox(width: 18),
               Expanded(
@@ -211,31 +238,38 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                   displayName,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'ClashDisplay'),
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'ClashDisplay',
+                  ),
                 ),
               ),
               if (isVerified) ...[
                 const SizedBox(width: 6),
-                const Icon(Icons.verified_rounded,
-                    color: _accent, size: 18),
+                const Icon(Icons.verified_rounded, color: _accent, size: 18),
               ],
             ],
           ),
           if (username.isNotEmpty) ...[
             const SizedBox(height: 2),
-            Text('@$username',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
+            Text(
+              '@$username',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+            ),
           ],
           if (bio.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(bio,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
+            Text(
+              bio,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 12.5,
+                height: 1.4,
+              ),
+            ),
           ],
           if (website.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -244,10 +278,15 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                 const Icon(Icons.link_rounded, color: _accent, size: 14),
                 const SizedBox(width: 4),
                 Flexible(
-                  child: Text(website,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: _accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    website,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _accent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -266,22 +305,28 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
   }
 
   Widget _statDivider() => Container(
-        width: 1,
-        height: 28,
-        color: Colors.white.withValues(alpha: 0.12),
-      );
+    width: 1,
+    height: 28,
+    color: Colors.white.withValues(alpha: 0.12),
+  );
 
   Widget _statColumn(String value, String label) {
     return Column(
       children: [
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                fontFamily: 'SpaceGrotesk')),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            fontFamily: 'SpaceGrotesk',
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+        ),
       ],
     );
   }
@@ -294,8 +339,10 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
           children: [
             Icon(Icons.flag_outlined, color: Colors.white24, size: 40),
             SizedBox(height: 10),
-            Text('No challenges yet',
-                style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
+            Text(
+              'No challenges yet',
+              style: TextStyle(color: AppColors.textFaint, fontSize: 13),
+            ),
           ],
         ),
       ),
@@ -311,10 +358,11 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
 
 class _ChallengeCard extends StatelessWidget {
   final Map<String, dynamic> challenge;
+  final Map<String, String> categoryNames;
 
   static const _accent = Color(0xFF7B2CBF);
 
-  const _ChallengeCard({required this.challenge});
+  const _ChallengeCard({required this.challenge, required this.categoryNames});
 
   @override
   Widget build(BuildContext context) {
@@ -323,19 +371,22 @@ class _ChallengeCard extends StatelessWidget {
     final videoUrl = challenge['videoUrl'] as String;
     final instructions = challenge['instructions'] as String;
     final stars = challenge['starsCount'] as int;
+    final categoryId = challenge['category'] as String? ?? '';
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChallengeDetail(
-            title: title,
-            instructions: instructions,
-            videoUrl: videoUrl,
-            challengeId: id,
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChallengeDetail(
+                    title: title,
+                    instructions: instructions,
+                    videoUrl: videoUrl,
+                    challengeId: id,
+                  ),
+            ),
           ),
-        ),
-      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: Stack(
@@ -359,6 +410,14 @@ class _ChallengeCard extends StatelessWidget {
             ),
             Positioned(
               top: 8,
+              left: 8,
+              child: CategoryIconBadge(
+                categoryName: categoryNames[categoryId],
+                size: 24,
+              ),
+            ),
+            Positioned(
+              top: 8,
               right: 8,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -371,11 +430,14 @@ class _ChallengeCard extends StatelessWidget {
                   children: [
                     const Icon(Icons.diamond, color: Colors.white, size: 10),
                     const SizedBox(width: 3),
-                    Text('$stars',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                    Text(
+                      '$stars',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -389,9 +451,10 @@ class _ChallengeCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700),
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],

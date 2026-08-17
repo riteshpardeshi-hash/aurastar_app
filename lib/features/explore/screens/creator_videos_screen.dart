@@ -3,6 +3,7 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -16,15 +17,24 @@ class CreatorVideosScreen extends StatefulWidget {
 }
 
 class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
-  static const _bg     = Color(0xFF0D0D1A);
-  static const _card   = Color(0xFF12102A);
+  static const _bg = Color(0xFF0D0D1A);
+  static const _card = Color(0xFF12102A);
   static const _accent = Color(0xFF7B2CBF);
 
-  static const _allCategories = ['All', 'Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill'];
+  static const _allCategories = [
+    'All',
+    'Dance',
+    'Fitness',
+    'Fashion',
+    'Sports',
+    'Comedy',
+    'Skill',
+  ];
   int _activeCat = 0;
 
   String? _uid;
   List<Map<String, dynamic>>? _challenges;
+  Map<String, String> _categoryNames = {};
 
   @override
   void initState() {
@@ -33,13 +43,19 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
       if (mounted) setState(() => _uid = id);
     });
     _loadChallenges();
+    ChallengesService().fetchCategoryNameMap().then((names) {
+      if (mounted) setState(() => _categoryNames = names);
+    });
   }
 
   Future<void> _loadChallenges() async {
     setState(() => _challenges = null);
     final category = _activeCat > 0 ? _allCategories[_activeCat] : null;
-    final raw = await ChallengesService()
-        .fetchChallenges(sourceType: 'Brand', category: category, limit: 40);
+    final raw = await ChallengesService().fetchChallenges(
+      sourceType: 'Brand',
+      category: category,
+      limit: 40,
+    );
     if (!mounted) return;
     setState(() => _challenges = raw.map(normaliseChallenge).toList());
   }
@@ -89,8 +105,14 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
-              child: Text('Featured Creators',
-                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+              child: Text(
+                'Featured Creators',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             SizedBox(
               height: 96,
@@ -110,16 +132,21 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
   }
 
   Widget _creatorAvatar(Map<String, dynamic> creator) {
-    final id         = creator['id'] as String;
-    final pageName   = creator['displayName'] as String;
-    final followers  = creator['auraPoints'] as int; // no follower count on CreatorSummary
-    final imgUrl     = creator['avatar'] as String;
+    final id = creator['id'] as String;
+    final pageName = creator['displayName'] as String;
+    final followers =
+        creator['auraPoints'] as int; // no follower count on CreatorSummary
+    final imgUrl = creator['avatar'] as String;
     final isVerified = creator['isVerified'] as bool;
 
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => CreatorProfileScreen(creatorId: id),
-      )),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CreatorProfileScreen(creatorId: id),
+            ),
+          ),
       child: Container(
         width: 72,
         margin: const EdgeInsets.only(right: 12),
@@ -129,7 +156,8 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
             Stack(
               children: [
                 Container(
-                  width: 52, height: 52,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -137,29 +165,47 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    border: Border.all(color: _accent.withValues(alpha: 0.5), width: 1.5),
+                    border: Border.all(
+                      color: _accent.withValues(alpha: 0.5),
+                      width: 1.5,
+                    ),
                   ),
-                  child: imgUrl.isNotEmpty
-                      ? ClipOval(child: Image.network(imgUrl, fit: BoxFit.cover))
-                      : Center(
-                          child: Text(
-                            pageName.isNotEmpty ? pageName[0].toUpperCase() : 'C',
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                  child:
+                      imgUrl.isNotEmpty
+                          ? ClipOval(
+                            child: Image.network(imgUrl, fit: BoxFit.cover),
+                          )
+                          : Center(
+                            child: Text(
+                              pageName.isNotEmpty
+                                  ? pageName[0].toUpperCase()
+                                  : 'C',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
-                        ),
                 ),
                 // Verified badge
                 if (isVerified)
                   Positioned(
-                    bottom: 0, right: 0,
+                    bottom: 0,
+                    right: 0,
                     child: Container(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       decoration: BoxDecoration(
                         color: _accent,
                         shape: BoxShape.circle,
                         border: Border.all(color: _bg, width: 1.5),
                       ),
-                      child: const Icon(Icons.check_rounded, color: Colors.white, size: 10),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 10,
+                      ),
                     ),
                   ),
               ],
@@ -170,7 +216,11 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             if (followers > 0)
               Text(
@@ -201,17 +251,24 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: active ? _accent.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.05),
+                color:
+                    active
+                        ? _accent.withValues(alpha: 0.20)
+                        : Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: active ? _accent.withValues(alpha: 0.55) : Colors.white.withValues(alpha: 0.10),
+                  color:
+                      active
+                          ? _accent.withValues(alpha: 0.55)
+                          : Colors.white.withValues(alpha: 0.10),
                 ),
               ),
               child: Center(
                 child: Text(
                   _allCategories[i],
                   style: TextStyle(
-                    color: active ? const Color(0xFFD4A8FF) : AppColors.textFaint,
+                    color:
+                        active ? const Color(0xFFD4A8FF) : AppColors.textFaint,
                     fontSize: 12,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   ),
@@ -250,13 +307,13 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
   // ── Challenge card ────────────────────────────────────────────────────────
 
   Widget _buildChallengeCard(Map<String, dynamic> data) {
-    final id           = data['id']            as String;
-    final title        = data['title']         as String? ?? '';
-    final videoUrl     = data['videoUrl']       as String? ?? '';
-    final instructions = data['instructions']  as String? ?? '';
-    final auraPoints   = (data['starsCount']   as num?)?.toInt() ?? 0;
-    final category     = data['category']      as String? ?? '';
-    final creatorId    = data['creatorId']      as String? ?? '';
+    final id = data['id'] as String;
+    final title = data['title'] as String? ?? '';
+    final videoUrl = data['videoUrl'] as String? ?? '';
+    final instructions = data['instructions'] as String? ?? '';
+    final auraPoints = (data['starsCount'] as num?)?.toInt() ?? 0;
+    final category = data['category'] as String? ?? '';
+    final creatorId = data['creatorId'] as String? ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -272,7 +329,9 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
           GestureDetector(
             onTap: () => _openDetail(id, title, instructions, videoUrl),
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
               child: SizedBox(
                 height: 180,
                 width: double.infinity,
@@ -288,7 +347,10 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             stops: const [0.4, 1.0],
-                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.65)],
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.65),
+                            ],
                           ),
                         ),
                       ),
@@ -296,34 +358,36 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                     // Play icon
                     Center(
                       child: Container(
-                        width: 44, height: 44,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: _accent.withValues(alpha: 0.85),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
                       ),
                     ),
                     // Category badge
-                    if (category.isNotEmpty)
-                      Positioned(
-                        top: 10, left: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: Text(category,
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                        ),
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: CategoryIconBadge(
+                        categoryName: _categoryNames[category],
                       ),
+                    ),
                     // Aura badge
                     Positioned(
-                      top: 10, right: 10,
+                      top: 10,
+                      right: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: _accent.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(8),
@@ -331,10 +395,20 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.diamond, color: Colors.white, size: 10),
+                            const Icon(
+                              Icons.diamond,
+                              color: Colors.white,
+                              size: 10,
+                            ),
                             const SizedBox(width: 3),
-                            Text('$auraPoints',
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                            Text(
+                              '$auraPoints',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -356,13 +430,17 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white, fontSize: 14,
-                            fontWeight: FontWeight.w700, height: 1.3,
-                          )),
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          height: 1.3,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       if (creatorId.isNotEmpty)
                         _CreatorNameChip(creatorId: creatorId),
@@ -374,18 +452,32 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                 Column(
                   children: [
                     GestureDetector(
-                      onTap: () => _openDetail(id, title, instructions, videoUrl),
+                      onTap:
+                          () => _openDetail(id, title, instructions, videoUrl),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)]),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
+                          ),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text('Take',
-                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                        child: const Text(
+                          'Take',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
-                    if (_uid != null && creatorId.isNotEmpty && creatorId != _uid) ...[
+                    if (_uid != null &&
+                        creatorId.isNotEmpty &&
+                        creatorId != _uid) ...[
                       const SizedBox(height: 6),
                       FollowButton(targetUserId: creatorId),
                     ],
@@ -399,15 +491,24 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     );
   }
 
-  void _openDetail(String id, String title, String instructions, String videoUrl) {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ChallengeDetail(
-        title: title,
-        instructions: instructions,
-        videoUrl: videoUrl,
-        challengeId: id,
+  void _openDetail(
+    String id,
+    String title,
+    String instructions,
+    String videoUrl,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => ChallengeDetail(
+              title: title,
+              instructions: instructions,
+              videoUrl: videoUrl,
+              challengeId: id,
+            ),
       ),
-    ));
+    );
   }
 
   Widget _buildEmpty() {
@@ -418,17 +519,33 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 52),
+            const Icon(
+              Icons.videocam_off_outlined,
+              color: Colors.white24,
+              size: 52,
+            ),
             const SizedBox(height: 16),
             Text(
-              cat.isNotEmpty ? 'No $cat creator challenges yet' : 'No creator challenges yet',
+              cat.isNotEmpty
+                  ? 'No $cat creator challenges yet'
+                  : 'No creator challenges yet',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 8),
-            const Text('Check back soon — creators are always adding new challenges.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white30, fontSize: 13, height: 1.5)),
+            const Text(
+              'Check back soon — creators are always adding new challenges.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white30,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
           ],
         ),
       ),
@@ -452,19 +569,27 @@ class _CreatorNameChip extends StatelessWidget {
     return FutureBuilder<Map<String, dynamic>?>(
       future: CreatorsService().fetchCreator(creatorId),
       builder: (context, snap) {
-        final data     = snap.data != null ? normaliseCreator(snap.data!) : <String, dynamic>{};
+        final data =
+            snap.data != null
+                ? normaliseCreator(snap.data!)
+                : <String, dynamic>{};
         final pageName = data['displayName'] as String? ?? 'Creator';
-        final imgUrl   = data['avatar'] as String? ?? '';
+        final imgUrl = data['avatar'] as String? ?? '';
 
         return GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => CreatorProfileScreen(creatorId: creatorId),
-          )),
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreatorProfileScreen(creatorId: creatorId),
+                ),
+              ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
@@ -473,20 +598,39 @@ class _CreatorNameChip extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: imgUrl.isNotEmpty
-                    ? ClipOval(child: Image.network(imgUrl, fit: BoxFit.cover))
-                    : Center(
-                        child: Text(
-                          pageName.isNotEmpty ? pageName[0].toUpperCase() : 'C',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                child:
+                    imgUrl.isNotEmpty
+                        ? ClipOval(
+                          child: Image.network(imgUrl, fit: BoxFit.cover),
+                        )
+                        : Center(
+                          child: Text(
+                            pageName.isNotEmpty
+                                ? pageName[0].toUpperCase()
+                                : 'C',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                      ),
               ),
               const SizedBox(width: 6),
-              Text(pageName,
-                  style: const TextStyle(color: Color(0xFFD4A8FF), fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(
+                pageName,
+                style: const TextStyle(
+                  color: Color(0xFFD4A8FF),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(width: 4),
-              const Icon(Icons.verified_rounded, color: Color(0xFF7B2CBF), size: 12),
+              const Icon(
+                Icons.verified_rounded,
+                color: Color(0xFF7B2CBF),
+                size: 12,
+              ),
             ],
           ),
         );

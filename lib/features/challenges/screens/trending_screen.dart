@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/aura_score_badge.dart';
+import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -13,8 +15,8 @@ class TrendingScreen extends StatefulWidget {
 
 class _TrendingScreenState extends State<TrendingScreen>
     with SingleTickerProviderStateMixin {
-  static const _bg     = Color(0xFF0D0D1A);
-  static const _card   = Color(0xFF12102A);
+  static const _bg = Color(0xFF0D0D1A);
+  static const _card = Color(0xFF12102A);
   static const _accent = Color(0xFF7B2CBF);
 
   static const _tabs = ['Now', 'Today', 'Week'];
@@ -25,8 +27,10 @@ class _TrendingScreenState extends State<TrendingScreen>
   String _sort = 'joined';
 
   // Cache keyed by sort mode (tabs share same ranked list — API has no time window)
-  final Map<String, List<_TrendingItem>> _cache   = {};
-  final Map<String, bool>                _loading = {};
+  final Map<String, List<_TrendingItem>> _cache = {};
+  final Map<String, bool> _loading = {};
+
+  Map<String, String> _categoryNames = {};
 
   @override
   void initState() {
@@ -34,6 +38,9 @@ class _TrendingScreenState extends State<TrendingScreen>
     _tabCtrl = TabController(length: _tabs.length, vsync: this)
       ..addListener(_onTabChanged);
     _loadTab(0);
+    ChallengesService().fetchCategoryNameMap().then((names) {
+      if (mounted) setState(() => _categoryNames = names);
+    });
   }
 
   @override
@@ -58,13 +65,12 @@ class _TrendingScreenState extends State<TrendingScreen>
     if (_cache.containsKey(key)) return;
     setState(() => _loading[key] = true);
 
-    final items = _sort == 'liked'
-        ? await _fetchMostLiked()
-        : await _fetchMostJoined();
+    final items =
+        _sort == 'liked' ? await _fetchMostLiked() : await _fetchMostJoined();
 
     if (mounted) {
       setState(() {
-        _cache[key]   = items;
+        _cache[key] = items;
         _loading[key] = false;
       });
     }
@@ -73,16 +79,23 @@ class _TrendingScreenState extends State<TrendingScreen>
   Future<List<_TrendingItem>> _fetchMostJoined() async {
     try {
       final raw = await ChallengesService().fetchChallenges(limit: 40);
-      final normalised = raw.map(normaliseChallenge).toList()
-        ..sort((a, b) =>
-            ((b['submissionsCount'] as int?) ?? 0)
-                .compareTo((a['submissionsCount'] as int?) ?? 0));
-      return normalised.take(15).map((c) => _TrendingItem(
-            challengeId:  c['id'] as String? ?? '',
-            data:         c,
-            attemptCount: c['submissionsCount'] as int? ?? 0,
-            starsCount:   c['starsCount'] as int? ?? 0,
-          )).toList();
+      final normalised =
+          raw.map(normaliseChallenge).toList()..sort(
+            (a, b) => ((b['submissionsCount'] as int?) ?? 0).compareTo(
+              (a['submissionsCount'] as int?) ?? 0,
+            ),
+          );
+      return normalised
+          .take(15)
+          .map(
+            (c) => _TrendingItem(
+              challengeId: c['id'] as String? ?? '',
+              data: c,
+              attemptCount: c['submissionsCount'] as int? ?? 0,
+              starsCount: c['starsCount'] as int? ?? 0,
+            ),
+          )
+          .toList();
     } catch (_) {
       return [];
     }
@@ -91,16 +104,23 @@ class _TrendingScreenState extends State<TrendingScreen>
   Future<List<_TrendingItem>> _fetchMostLiked() async {
     try {
       final raw = await ChallengesService().fetchChallenges(limit: 40);
-      final normalised = raw.map(normaliseChallenge).toList()
-        ..sort((a, b) =>
-            ((b['starsCount'] as int?) ?? 0)
-                .compareTo((a['starsCount'] as int?) ?? 0));
-      return normalised.take(15).map((c) => _TrendingItem(
-            challengeId:  c['id'] as String? ?? '',
-            data:         c,
-            attemptCount: c['submissionsCount'] as int? ?? 0,
-            starsCount:   c['starsCount'] as int? ?? 0,
-          )).toList();
+      final normalised =
+          raw.map(normaliseChallenge).toList()..sort(
+            (a, b) => ((b['starsCount'] as int?) ?? 0).compareTo(
+              (a['starsCount'] as int?) ?? 0,
+            ),
+          );
+      return normalised
+          .take(15)
+          .map(
+            (c) => _TrendingItem(
+              challengeId: c['id'] as String? ?? '',
+              data: c,
+              attemptCount: c['submissionsCount'] as int? ?? 0,
+              starsCount: c['starsCount'] as int? ?? 0,
+            ),
+          )
+          .toList();
     } catch (_) {
       return [];
     }
@@ -117,8 +137,11 @@ class _TrendingScreenState extends State<TrendingScreen>
         foregroundColor: Colors.white,
         title: const Row(
           children: [
-            Icon(Icons.local_fire_department_rounded,
-                color: Color(0xFFFF6B35), size: 22),
+            Icon(
+              Icons.local_fire_department_rounded,
+              color: Color(0xFFFF6B35),
+              size: 22,
+            ),
             SizedBox(width: 8),
             Text('Trending'),
           ],
@@ -138,7 +161,9 @@ class _TrendingScreenState extends State<TrendingScreen>
                 labelColor: Colors.white,
                 unselectedLabelColor: AppColors.textFaint,
                 labelStyle: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
                 dividerColor: Colors.transparent,
                 tabs: _tabs.map((t) => Tab(text: t)).toList(),
               ),
@@ -186,12 +211,11 @@ class _TrendingScreenState extends State<TrendingScreen>
   }
 
   Widget _buildTab(int tab) {
-    final key   = _cacheKey(tab, _sort);
+    final key = _cacheKey(tab, _sort);
     final items = _cache[key];
 
     if (_loading[key] == true || items == null) {
-      return const Center(
-          child: CircularProgressIndicator(color: _accent));
+      return const Center(child: CircularProgressIndicator(color: _accent));
     }
     if (items.isEmpty) return _buildEmpty();
 
@@ -211,40 +235,47 @@ class _TrendingScreenState extends State<TrendingScreen>
   // ── Trending card ─────────────────────────────────────────────────────────
 
   Widget _buildCard(_TrendingItem item, int index) {
-    final title        = item.data['title']        as String? ?? '';
-    final videoUrl     = item.data['videoUrl']     as String? ?? '';
+    final title = item.data['title'] as String? ?? '';
+    final videoUrl = item.data['videoUrl'] as String? ?? '';
     final thumbnailUrl = item.data['thumbnailUrl'] as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
-    final isTop3       = index < 3;
+    final categoryId = item.data['category'] as String? ?? '';
+    final isTop3 = index < 3;
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChallengeDetail(
-              title: title,
-              instructions: instructions,
-              videoUrl: videoUrl,
-              challengeId: item.challengeId,
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChallengeDetail(
+                    title: title,
+                    instructions: instructions,
+                    videoUrl: videoUrl,
+                    challengeId: item.challengeId,
+                  ),
             ),
-          )),
+          ),
       child: Container(
         decoration: BoxDecoration(
           color: _card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isTop3
-                ? _accent.withValues(alpha: 0.35)
-                : Colors.white.withValues(alpha: 0.07),
+            color:
+                isTop3
+                    ? _accent.withValues(alpha: 0.35)
+                    : Colors.white.withValues(alpha: 0.07),
           ),
-          boxShadow: isTop3
-              ? [
-                  BoxShadow(
+          boxShadow:
+              isTop3
+                  ? [
+                    BoxShadow(
                       color: _accent.withValues(alpha: 0.10),
                       blurRadius: 12,
-                      offset: const Offset(0, 3))
-                ]
-              : null,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                  : null,
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -252,9 +283,10 @@ class _TrendingScreenState extends State<TrendingScreen>
             fit: StackFit.expand,
             children: [
               VideoThumbnailWidget(
-                  videoUrl: videoUrl,
-                  thumbnailUrl: thumbnailUrl,
-                  fit: BoxFit.cover),
+                videoUrl: videoUrl,
+                thumbnailUrl: thumbnailUrl,
+                fit: BoxFit.cover,
+              ),
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -277,9 +309,10 @@ class _TrendingScreenState extends State<TrendingScreen>
                   width: 26,
                   height: 26,
                   decoration: BoxDecoration(
-                    color: isTop3
-                        ? _accent.withValues(alpha: 0.90)
-                        : Colors.black54,
+                    color:
+                        isTop3
+                            ? _accent.withValues(alpha: 0.90)
+                            : Colors.black54,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
@@ -296,6 +329,14 @@ class _TrendingScreenState extends State<TrendingScreen>
                 ),
               ),
               Positioned(
+                top: 8,
+                right: 8,
+                child: CategoryIconBadge(
+                  categoryName: _categoryNames[categoryId],
+                  size: 24,
+                ),
+              ),
+              Positioned(
                 left: 10,
                 right: 10,
                 bottom: 10,
@@ -303,16 +344,23 @@ class _TrendingScreenState extends State<TrendingScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    const AuraScoreBadge(),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.star_rounded, color: _accent, size: 12),
+                        const Icon(
+                          Icons.star_rounded,
+                          color: _accent,
+                          size: 12,
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           '${item.starsCount}',
                           style: const TextStyle(
-                              color: Color(0xFFD4A8FF),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600),
+                            color: Color(0xFFD4A8FF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -320,14 +368,19 @@ class _TrendingScreenState extends State<TrendingScreen>
                         (_sort == 'liked' && item.starsCount > 0)) ...[
                       const SizedBox(height: 4),
                       _StatRow(
-                        icon: _sort == 'joined'
-                            ? Icons.people_outline_rounded
-                            : Icons.favorite_rounded,
-                        color: _sort == 'joined'
-                            ? const Color(0xFFFF6B35)
-                            : const Color(0xFFFF6B9D),
+                        icon:
+                            _sort == 'joined'
+                                ? Icons.people_outline_rounded
+                                : Icons.favorite_rounded,
+                        color:
+                            _sort == 'joined'
+                                ? const Color(0xFFFF6B35)
+                                : const Color(0xFFFF6B9D),
                         text: _fmt(
-                            _sort == 'joined' ? item.attemptCount : item.starsCount),
+                          _sort == 'joined'
+                              ? item.attemptCount
+                              : item.starsCount,
+                        ),
                       ),
                     ],
                   ],
@@ -347,14 +400,20 @@ class _TrendingScreenState extends State<TrendingScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.local_fire_department_outlined,
-              color: Colors.white24, size: 52),
+          Icon(
+            Icons.local_fire_department_outlined,
+            color: Colors.white24,
+            size: 52,
+          ),
           SizedBox(height: 16),
-          Text('Nothing trending yet',
-              style: TextStyle(
-                  color: AppColors.textFaint,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            'Nothing trending yet',
+            style: TextStyle(
+              color: AppColors.textFaint,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           SizedBox(height: 8),
           Text(
             'Check back soon — the leaderboard heats up fast.',
@@ -370,10 +429,14 @@ class _TrendingScreenState extends State<TrendingScreen>
 
   String _rankLabel(int i) {
     switch (i) {
-      case 0:  return '🥇';
-      case 1:  return '🥈';
-      case 2:  return '🥉';
-      default: return '${i + 1}';
+      case 0:
+        return '🥇';
+      case 1:
+        return '🥈';
+      case 2:
+        return '🥉';
+      default:
+        return '${i + 1}';
     }
   }
 
@@ -424,14 +487,16 @@ class _SortPill extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected
-              ? _accent.withValues(alpha: 0.20)
-              : Colors.white.withValues(alpha: 0.06),
+          color:
+              selected
+                  ? _accent.withValues(alpha: 0.20)
+                  : Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected
-                ? _accent.withValues(alpha: 0.70)
-                : Colors.white.withValues(alpha: 0.12),
+            color:
+                selected
+                    ? _accent.withValues(alpha: 0.70)
+                    : Colors.white.withValues(alpha: 0.12),
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -449,8 +514,7 @@ class _SortPill extends StatelessWidget {
               style: TextStyle(
                 color: selected ? Colors.white : AppColors.textFaint,
                 fontSize: 12,
-                fontWeight:
-                    selected ? FontWeight.w700 : FontWeight.w400,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               ),
             ),
           ],
@@ -479,7 +543,10 @@ class _StatRow extends StatelessWidget {
           child: Text(
             text,
             style: TextStyle(
-                color: color, fontSize: 11, fontWeight: FontWeight.w600),
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),

@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'auth_api_service.dart';
 
 /// Covers the singular `/creator/*` "Creator Page" + "Creator Program"
 /// endpoints — the onboarding funnel a regular user goes through to become a
@@ -42,16 +43,17 @@ class CreatorPageService {
 
   /// Does not reserve the name — call [reserveUsername] to hold it.
   Future<Map<String, dynamic>> checkUsername(String username) async {
-    final res = await _client
-        .post('/creator/check-username', {'username': username}, auth: true);
+    final res = await _client.post('/creator/check-username', {
+      'username': username,
+    }, auth: true);
     return (res['data'] as Map<String, dynamic>?) ?? {};
   }
 
   /// 15-minute hold; `POST /creator/page` must be called before it expires.
   Future<Map<String, dynamic>> reserveUsername(String username) async {
-    final res = await _client.post(
-        '/creator/reserve-username', {'username': username},
-        auth: true);
+    final res = await _client.post('/creator/reserve-username', {
+      'username': username,
+    }, auth: true);
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to reserve username';
     }
@@ -69,24 +71,35 @@ class CreatorPageService {
     String? category,
     Map<String, String>? socialLinks,
   }) async {
-    final res = await _client.post(
-      '/creator/page',
-      {
-        'displayName': displayName,
-        'username': username,
-        if (bio != null && bio.isNotEmpty) 'bio': bio,
-        if (profileImage != null && profileImage.isNotEmpty)
-          'profileImage': profileImage,
-        if (category != null && category.isNotEmpty) 'category': category,
-        if (socialLinks != null && socialLinks.isNotEmpty)
-          'socialLinks': socialLinks,
-      },
-      auth: true,
-    );
+    final res = await _client.post('/creator/page', {
+      'displayName': displayName,
+      'username': username,
+      if (bio != null && bio.isNotEmpty) 'bio': bio,
+      if (profileImage != null && profileImage.isNotEmpty)
+        'profileImage': profileImage,
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (socialLinks != null && socialLinks.isNotEmpty)
+        'socialLinks': socialLinks,
+    }, auth: true);
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create creator page';
     }
     return res['data'] as Map<String, dynamic>;
+  }
+
+  // Session-cached — used to route the center-FAB action sheet to
+  // creator vs. player options without re-hitting the network on every tap.
+  // Keyed off the user's `role` (creator/brand/admin), not whether a
+  // creator page exists — an admin can promote a user straight to the
+  // `creator` role via `POST /admin/users/{id}/role` without the self-serve
+  // `/creator/page` record ever being created, so checking page existence
+  // alone misses that account.
+  static Future<bool>? _isCreatorFuture;
+  Future<bool> isCreatorCached() {
+    return _isCreatorFuture ??= AuthApiService().getProfile().then((profile) {
+      final role = profile?['role'] as String?;
+      return role == 'creator' || role == 'brand' || role == 'admin';
+    });
   }
 
   /// Returns null if the caller has no creator page yet.
@@ -131,8 +144,11 @@ class CreatorPageService {
   /// pass `key` back as `profileImage` to [createPage]/[updatePage]. Unlike
   /// the user-avatar upload flow, this does NOT return a public URL.
   Future<Map<String, dynamic>> getProfileImageUploadUrl() async {
-    final res =
-        await _client.post('/creator/upload-profile-image', {}, auth: true);
+    final res = await _client.post(
+      '/creator/upload-profile-image',
+      {},
+      auth: true,
+    );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to get upload URL';
     }

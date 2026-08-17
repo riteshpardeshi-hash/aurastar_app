@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../../../shared/widgets/aura_score_badge.dart';
+import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../features/leaderboard/leaderboard_screen.dart';
@@ -39,6 +41,13 @@ class _AllGeneralChallengesScreenState
   List<Map<String, dynamic>> _displayedCategories = const [];
   static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
 
+  // categoryId → name, for resolving a challenge card's icon badge.
+  Map<String, String> get _categoryNameMap => {
+    for (final c in _categories)
+      if ((c['_id'] as String?)?.isNotEmpty == true)
+        c['_id'] as String: c['name'] as String? ?? '',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -73,12 +82,21 @@ class _AllGeneralChallengesScreenState
           return bT.compareTo(aT);
         });
       } else if (_filter == 'High Aura') {
-        list.sort((a, b) =>
-            (b['starsCount'] as int).compareTo(a['starsCount'] as int));
+        list.sort(
+          (a, b) => (b['starsCount'] as int).compareTo(a['starsCount'] as int),
+        );
       }
-      if (mounted) setState(() { _challenges = list; _loading = false; });
+      if (mounted)
+        setState(() {
+          _challenges = list;
+          _loading = false;
+        });
     } catch (_) {
-      if (mounted) setState(() { _challenges = []; _loading = false; });
+      if (mounted)
+        setState(() {
+          _challenges = [];
+          _loading = false;
+        });
     }
   }
 
@@ -113,11 +131,9 @@ class _AllGeneralChallengesScreenState
                     ),
                   ),
                 ),
-                SliverToBoxAdapter(
-                    child: _buildCategoriesSection(context)),
+                SliverToBoxAdapter(child: _buildCategoriesSection(context)),
                 SliverToBoxAdapter(child: _buildFilterChips()),
-                SliverToBoxAdapter(
-                    child: _buildChallengeList(context)),
+                SliverToBoxAdapter(child: _buildChallengeList(context)),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
@@ -131,30 +147,36 @@ class _AllGeneralChallengesScreenState
   // ── Search bar ─────────────────────────────────────────────────────────────
   Widget _buildSearchBar(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SearchScreen()),
-      ),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SearchScreen()),
+          ),
       child: Container(
         margin: const EdgeInsets.fromLTRB(14, 10, 14, 20),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: const Color(0xFF12122A),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(children: [
-          Icon(Icons.search_rounded,
-              color: Colors.white.withValues(alpha: 0.40), size: 20),
-          const SizedBox(width: 10),
-          Text(
-            'Search',
-            style: TextStyle(
+        child: Row(
+          children: [
+            Icon(
+              Icons.search_rounded,
+              color: Colors.white.withValues(alpha: 0.40),
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Search',
+              style: TextStyle(
                 color: AppColors.textFaint,
                 fontSize: 15,
-                fontFamily: 'SpaceGrotesk'),
-          ),
-        ]),
+                fontFamily: 'SpaceGrotesk',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -171,17 +193,22 @@ class _AllGeneralChallengesScreenState
             children: [
               const Text('Categories', style: AppTextStyles.sectionHeader),
               GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AllCategoriesScreen(categories: _categories),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder:
+                            (_) => AllCategoriesScreen(categories: _categories),
+                      ),
+                    ),
+                child: const Text(
+                  'See All >',
+                  style: TextStyle(
+                    color: Color(0xFF9B4DCA),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: const Text('See All >',
-                    style: TextStyle(
-                        color: Color(0xFF9B4DCA),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
               ),
             ],
           ),
@@ -195,12 +222,15 @@ class _AllGeneralChallengesScreenState
             crossAxisSpacing: 6,
             mainAxisSpacing: 6,
             childAspectRatio: 0.9,
-            children: _displayedCategories
-                .map((cat) => _CategoryTile(
-                      categoryId: cat['_id'] as String? ?? '',
-                      categoryName: cat['name'] as String? ?? '',
-                    ))
-                .toList(),
+            children:
+                _displayedCategories
+                    .map(
+                      (cat) => _CategoryTile(
+                        categoryId: cat['_id'] as String? ?? '',
+                        categoryName: cat['name'] as String? ?? '',
+                      ),
+                    )
+                    .toList(),
           ),
         ),
         const SizedBox(height: 20),
@@ -214,42 +244,47 @@ class _AllGeneralChallengesScreenState
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
       child: Row(
-        children: _filters.map((f) {
-          final active = f == _filter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () {
-                setState(() { _filter = f; _challenges = null; });
-                _loadChallenges();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 8),
-                decoration: BoxDecoration(
-                  color: active ? _accent : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                      color: active
-                          ? _accent
-                          : Colors.white.withValues(alpha: 0.20)),
-                ),
-                child: Text(
-                  f,
-                  style: TextStyle(
-                    color:
-                        active ? Colors.white : AppColors.textMuted,
-                    fontSize: 13,
-                    fontWeight: active
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    fontFamily: 'SpaceGrotesk',
+        children:
+            _filters.map((f) {
+              final active = f == _filter;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _filter = f;
+                      _challenges = null;
+                    });
+                    _loadChallenges();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: active ? _accent : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color:
+                            active
+                                ? _accent
+                                : Colors.white.withValues(alpha: 0.20),
+                      ),
+                    ),
+                    child: Text(
+                      f,
+                      style: TextStyle(
+                        color: active ? Colors.white : AppColors.textMuted,
+                        fontSize: 13,
+                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                        fontFamily: 'SpaceGrotesk',
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }
@@ -258,16 +293,19 @@ class _AllGeneralChallengesScreenState
   Widget _buildChallengeList(BuildContext context) {
     if (_loading) {
       return const SizedBox(
-          height: 120,
-          child: Center(child: CircularProgressIndicator(color: _accent)));
+        height: 120,
+        child: Center(child: CircularProgressIndicator(color: _accent)),
+      );
     }
     final list = _challenges ?? [];
     if (list.isEmpty) {
       return const SizedBox(
         height: 120,
         child: Center(
-          child: Text('No challenges yet',
-              style: TextStyle(color: AppColors.textFaint)),
+          child: Text(
+            'No challenges yet',
+            style: TextStyle(color: AppColors.textFaint),
+          ),
         ),
       );
     }
@@ -292,6 +330,7 @@ class _AllGeneralChallengesScreenState
             thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
             views: c['submissionsCount'] as int,
             instructions: c['instructions'] as String,
+            categoryName: _categoryNameMap[c['category'] as String? ?? ''],
           );
         },
       ),
@@ -320,12 +359,14 @@ class _AllGeneralChallengesScreenState
                     color: const Color(0xFF111111),
                     borderRadius: BorderRadius.circular(32),
                     border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08)),
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4))
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      ),
                     ],
                   ),
                   child: Row(
@@ -351,8 +392,11 @@ class _AllGeneralChallengesScreenState
                               icon: Icons.storefront_rounded,
                               label: 'Brand Challenges',
                               // Brands section isn't built yet; go back to Dashboard for now.
-                              onTap: () => Navigator.popUntil(
-                                  context, (route) => route.isFirst),
+                              onTap:
+                                  () => Navigator.popUntil(
+                                    context,
+                                    (route) => route.isFirst,
+                                  ),
                             ),
                           ],
                         ),
@@ -365,22 +409,24 @@ class _AllGeneralChallengesScreenState
                             _navItem(
                               icon: Icons.leaderboard_rounded,
                               label: 'Leaderboard',
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        const LeaderboardScreen()),
-                              ),
+                              onTap:
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LeaderboardScreen(),
+                                    ),
+                                  ),
                             ),
                             _navItem(
                               icon: Icons.person_rounded,
                               label: 'Profile',
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        const MyAccountScreen()),
-                              ),
+                              onTap:
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const MyAccountScreen(),
+                                    ),
+                                  ),
                             ),
                           ],
                         ),
@@ -400,20 +446,23 @@ class _AllGeneralChallengesScreenState
                       shape: BoxShape.circle,
                       color: const Color(0xFF0D0020),
                       border: Border.all(
-                          color: _accent.withValues(alpha: 0.7),
-                          width: 1.5),
+                        color: _accent.withValues(alpha: 0.7),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                            color: _accent.withValues(alpha: 0.5),
-                            blurRadius: 18,
-                            spreadRadius: 1)
+                          color: _accent.withValues(alpha: 0.5),
+                          blurRadius: 18,
+                          spreadRadius: 1,
+                        ),
                       ],
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(13),
                       child: Image.asset(
-                          'assets/images/Aura Arena Mono.png',
-                          fit: BoxFit.contain),
+                        'assets/images/Aura Arena Mono.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
@@ -439,16 +488,18 @@ class _AllGeneralChallengesScreenState
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                color: active ? _accent : Colors.white54, size: 22),
+            Icon(icon, color: active ? _accent : Colors.white54, size: 22),
             const SizedBox(height: 3),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: active ? _accent : AppColors.textFaint,
-                    fontSize: 9,
-                    fontFamily: 'SpaceGrotesk',
-                    height: 1.2)),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: active ? _accent : AppColors.textFaint,
+                fontSize: 9,
+                fontFamily: 'SpaceGrotesk',
+                height: 1.2,
+              ),
+            ),
           ],
         ),
       ),
@@ -471,19 +522,27 @@ class _CategoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconAsset = categoryIconAsset[categoryName];
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => CategoryChallengesScreen(
-                categoryId: categoryId, categoryName: categoryName)),
-      ),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => CategoryChallengesScreen(
+                    categoryId: categoryId,
+                    categoryName: categoryName,
+                  ),
+            ),
+          ),
       child: Container(
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
         decoration: BoxDecoration(
           color: _tileColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _tileColor.withValues(alpha: 0.25), width: 1),
+          border: Border.all(
+            color: _tileColor.withValues(alpha: 0.25),
+            width: 1,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -491,14 +550,19 @@ class _CategoryTile extends StatelessWidget {
           children: [
             iconAsset != null
                 ? SvgPicture.asset(
-                    iconAsset,
-                    width: 42,
-                    height: 42,
-                    colorFilter:
-                        const ColorFilter.mode(_tileColor, BlendMode.srcIn),
-                  )
-                : const Icon(Icons.category_rounded,
-                    color: _tileColor, size: 36),
+                  iconAsset,
+                  width: 42,
+                  height: 42,
+                  colorFilter: const ColorFilter.mode(
+                    _tileColor,
+                    BlendMode.srcIn,
+                  ),
+                )
+                : const Icon(
+                  Icons.category_rounded,
+                  color: _tileColor,
+                  size: 36,
+                ),
             const SizedBox(height: 6),
             Text(
               categoryName,
@@ -523,6 +587,7 @@ class _CategoryTile extends StatelessWidget {
 class _ChallengeCard extends StatelessWidget {
   final String challengeId, title, videoUrl, thumbnailUrl, instructions;
   final int views;
+  final String? categoryName;
 
   const _ChallengeCard({
     required this.challengeId,
@@ -531,6 +596,7 @@ class _ChallengeCard extends StatelessWidget {
     required this.thumbnailUrl,
     required this.instructions,
     required this.views,
+    this.categoryName,
   });
 
   String _fmt(int n) {
@@ -542,17 +608,19 @@ class _ChallengeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChallengeDetail(
-            title: title,
-            instructions: instructions,
-            videoUrl: videoUrl,
-            challengeId: challengeId,
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => ChallengeDetail(
+                    title: title,
+                    instructions: instructions,
+                    videoUrl: videoUrl,
+                    challengeId: challengeId,
+                  ),
+            ),
           ),
-        ),
-      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Stack(
@@ -560,10 +628,15 @@ class _ChallengeCard extends StatelessWidget {
           children: [
             // Thumbnail
             if (thumbnailUrl.isNotEmpty)
-              Image.network(thumbnailUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover))
+              Image.network(
+                thumbnailUrl,
+                fit: BoxFit.cover,
+                errorBuilder:
+                    (_, __, ___) => VideoThumbnailWidget(
+                      videoUrl: videoUrl,
+                      fit: BoxFit.cover,
+                    ),
+              )
             else
               VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
             // Bottom gradient
@@ -577,7 +650,12 @@ class _ChallengeCard extends StatelessWidget {
                 ),
               ),
             ),
-            // Bottom overlay — views only
+            Positioned(
+              top: 8,
+              left: 8,
+              child: CategoryIconBadge(categoryName: categoryName),
+            ),
+            // Bottom overlay — aura score + views
             Positioned(
               bottom: 10,
               left: 10,
@@ -585,14 +663,22 @@ class _ChallengeCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(Icons.visibility_rounded,
-                      color: Colors.white60, size: 13),
+                  const AuraScoreBadge(),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.visibility_rounded,
+                    color: Colors.white60,
+                    size: 13,
+                  ),
                   const SizedBox(width: 4),
-                  Text(_fmt(views),
-                      style: const TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 11,
-                          fontFamily: 'SpaceGrotesk')),
+                  Text(
+                    _fmt(views),
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                      fontFamily: 'SpaceGrotesk',
+                    ),
+                  ),
                 ],
               ),
             ),

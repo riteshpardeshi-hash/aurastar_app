@@ -38,10 +38,11 @@ class ChallengesService {
       final res = await _client.get('/categories');
       final data = res['data'] as Map<String, dynamic>;
       final list = (data['categories'] as List).cast<Map<String, dynamic>>();
-      final names = list
-          .map((c) => (c['name'] ?? c['_id'] ?? '') as String)
-          .where((n) => n.isNotEmpty)
-          .toList();
+      final names =
+          list
+              .map((c) => (c['name'] ?? c['_id'] ?? '') as String)
+              .where((n) => n.isNotEmpty)
+              .toList();
       if (names.isNotEmpty) return names;
     } catch (_) {}
     return const ['Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill'];
@@ -53,7 +54,8 @@ class ChallengesService {
   }) async {
     try {
       final res = await _client.get(
-          '/challenges/$challengeId/submissions?limit=$limit');
+        '/challenges/$challengeId/submissions?limit=$limit',
+      );
       final data = res['data'] as Map<String, dynamic>;
       return (data['submissions'] as List).cast<Map<String, dynamic>>();
     } catch (_) {
@@ -63,7 +65,10 @@ class ChallengesService {
 
   Future<Map<String, dynamic>> presignSubmission(String challengeId) async {
     final res = await _client.post(
-        '/challenges/$challengeId/submissions/presign', {}, auth: true);
+      '/challenges/$challengeId/submissions/presign',
+      {},
+      auth: true,
+    );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to get upload URL';
     }
@@ -82,7 +87,9 @@ class ChallengesService {
   static const _scoringTimeout = Duration(seconds: 90);
 
   Future<Map<String, dynamic>> createSubmission(
-      String challengeId, String videoId) async {
+    String challengeId,
+    String videoId,
+  ) async {
     final res = await _client.post(
       '/challenges/$challengeId/submissions',
       {'videoId': videoId},
@@ -130,11 +137,28 @@ class ChallengesService {
     }
   }
 
+  // id → name, so a challenge's `category` (an ObjectId) can be resolved to
+  // the display name categoryIconAsset is keyed by. Categories rarely change
+  // within a session, and every thumbnail grid across the app needs this
+  // same lookup, so the fetch is shared/cached here rather than repeated
+  // per-screen.
+  static Future<Map<String, String>>? _categoryNameMapFuture;
+  Future<Map<String, String>> fetchCategoryNameMap() {
+    return _categoryNameMapFuture ??= fetchCategoriesWithIds().then(
+      (cats) => {
+        for (final c in cats)
+          if ((c['_id'] as String?)?.isNotEmpty == true)
+            c['_id'] as String: c['name'] as String? ?? '',
+      },
+    );
+  }
+
   Future<Map<String, dynamic>?> fetchMySubmission(String challengeId) async {
     try {
       final res = await _client.get(
-          '/challenges/$challengeId/submissions/me',
-          auth: true);
+        '/challenges/$challengeId/submissions/me',
+        auth: true,
+      );
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
         return data['submission'] as Map<String, dynamic>?;
@@ -199,9 +223,10 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'id': c['_id'] as String? ?? '',
     'title': c['title'] as String? ?? '',
     'description': c['description'] as String? ?? '',
-    'instructions': (c['instructions'] as String?)?.isNotEmpty == true
-        ? c['instructions']
-        : c['description'] as String? ?? '',
+    'instructions':
+        (c['instructions'] as String?)?.isNotEmpty == true
+            ? c['instructions']
+            : c['description'] as String? ?? '',
     'videoUrl': c['videoUrl'] as String? ?? '',
     'thumbnailUrl': c['thumbnailUrl'] as String? ?? '',
     'category': _extractRefId(c['category']),

@@ -1,13 +1,28 @@
 import 'package:flutter/material.dart';
+import '../../core/services/creator_page_service.dart';
 import '../../features/challenges/screens/all_general_challenges_screen.dart';
 import '../../features/challenges/screens/brand_challenges_screen.dart';
 import '../../features/challenges/screens/trending_screen.dart';
 import '../../features/account/screens/saved_challenges_screen.dart';
+import '../../features/creator/screens/creator_activity_screen.dart';
 import '../theme/app_colors.dart';
 
 /// Opens the guided center-button action sheet.
-/// Call from any screen that hosts the bottom nav.
-void showAuraActionSheet(BuildContext context) {
+/// Call from any screen that hosts the bottom nav. Creators get a full-screen
+/// menu of creator actions (CreatorActivityScreen) instead of the player
+/// action sheet, since their next step is a dedicated screen, not a quick pick.
+Future<void> showAuraActionSheet(BuildContext context) async {
+  final isCreator = await CreatorPageService().isCreatorCached();
+  if (!context.mounted) return;
+
+  if (isCreator) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreatorActivityScreen()),
+    );
+    return;
+  }
+
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
@@ -20,7 +35,7 @@ class _AuraActionSheet extends StatelessWidget {
   final BuildContext parentContext;
   const _AuraActionSheet({required this.parentContext});
 
-  static const _bg     = Color(0xFF0D0D1A);
+  static const _bg = Color(0xFF0D0D1A);
   static const _accent = Color(0xFF7B2CBF);
 
   @override
@@ -39,7 +54,8 @@ class _AuraActionSheet extends StatelessWidget {
         children: [
           // Drag handle
           Container(
-            width: 36, height: 4,
+            width: 36,
+            height: 4,
             decoration: BoxDecoration(
               color: Colors.white24,
               borderRadius: BorderRadius.circular(2),
@@ -51,7 +67,8 @@ class _AuraActionSheet extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 36, height: 36,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: _accent.withValues(alpha: 0.15),
@@ -59,13 +76,20 @@ class _AuraActionSheet extends StatelessWidget {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Image.asset('assets/images/Aura Arena Mono.png', fit: BoxFit.contain),
+                  child: Image.asset(
+                    'assets/images/Aura Arena Mono.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               const Text(
                 'What do you want to do?',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -137,7 +161,8 @@ class _AuraActionSheet extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 42, height: 42,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.16),
                 shape: BoxShape.circle,
@@ -149,15 +174,30 @@ class _AuraActionSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 18),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white24,
+              size: 18,
+            ),
           ],
         ),
       ),
