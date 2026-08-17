@@ -39,8 +39,8 @@ class CategoryIconBadge extends StatelessWidget {
       ),
       child: SvgPicture.asset(
         iconAsset,
-        width: size * 0.6,
-        height: size * 0.6,
+        width: size * 0.9,
+        height: size * 0.9,
         colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
       ),
     );
