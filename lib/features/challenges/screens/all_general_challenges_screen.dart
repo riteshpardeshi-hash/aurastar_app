@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../../../shared/widgets/aura_score_badge.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../features/search/search_screen.dart';
-import '../../../features/leaderboard/leaderboard_screen.dart';
-import '../../../features/account/screens/my_account_screen.dart';
-import '../../../shared/widgets/aura_action_sheet.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
@@ -27,9 +23,17 @@ class _AllGeneralChallengesScreenState
   static const _bg = Color(0xFF080810);
   static const _accent = Color(0xFF7B2CBF);
 
-  String _filter = 'Trending';
   List<Map<String, dynamic>>? _challenges;
   bool _loading = false;
+
+  // Pagination — GET /challenges is paged server-side (`page`/`limit`); the
+  // grid fetches the next page as the user nears the bottom instead of
+  // loading everything up front.
+  static const _pageSize = 20;
+  final _scrollController = ScrollController();
+  int _page = 1;
+  bool _hasMore = true;
+  bool _loadingMore = false;
 
   // {_id, name} pairs — GET /challenges' `category` filter is the
   // category's ObjectId, not its display name.
@@ -37,22 +41,30 @@ class _AllGeneralChallengesScreenState
   // A random 6-category subset shown in this screen's grid — the full list
   // is one tap away via "See All", so this just teases a sample. Picked
   // once when categories load, not recomputed on every rebuild, so the
-  // tiles don't reshuffle when unrelated state (e.g. the filter) changes.
+  // tiles don't reshuffle on unrelated rebuilds.
   List<Map<String, dynamic>> _displayedCategories = const [];
-  static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
-
-  // categoryId → name, for resolving a challenge card's icon badge.
-  Map<String, String> get _categoryNameMap => {
-    for (final c in _categories)
-      if ((c['_id'] as String?)?.isNotEmpty == true)
-        c['_id'] as String: c['name'] as String? ?? '',
-  };
 
   @override
   void initState() {
     super.initState();
     _loadChallenges();
     _loadCategories();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 600) {
+      _loadMore();
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -67,28 +79,21 @@ class _AllGeneralChallengesScreenState
   }
 
   Future<void> _loadChallenges() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _page = 1;
+      _hasMore = true;
+    });
     try {
-      final String? difficulty = _filter == 'Easy' ? 'Easy' : null;
       final raw = await ChallengesService().fetchChallenges(
-        difficulty: difficulty,
-        limit: 20,
+        page: _page,
+        limit: _pageSize,
       );
-      var list = raw.map(normaliseChallenge).toList();
-      if (_filter == 'New') {
-        list.sort((a, b) {
-          final aT = a['createdAt'] as String? ?? '';
-          final bT = b['createdAt'] as String? ?? '';
-          return bT.compareTo(aT);
-        });
-      } else if (_filter == 'High Aura') {
-        list.sort(
-          (a, b) => (b['starsCount'] as int).compareTo(a['starsCount'] as int),
-        );
-      }
+      final list = raw.map(normaliseChallenge).toList();
       if (mounted)
         setState(() {
           _challenges = list;
+          _hasMore = list.length == _pageSize;
           _loading = false;
         });
     } catch (_) {
@@ -96,7 +101,34 @@ class _AllGeneralChallengesScreenState
         setState(() {
           _challenges = [];
           _loading = false;
+          _hasMore = false;
         });
+    }
+  }
+
+  // Once the backend runs out of pages (`_hasMore` false), the next load
+  // wraps back to page 1 instead of stopping — the grid is meant to scroll
+  // forever, cycling back through the same challenges rather than hitting a
+  // dead end.
+  Future<void> _loadMore() async {
+    if (_loadingMore || _loading) return;
+    setState(() => _loadingMore = true);
+    try {
+      final nextPage = _hasMore ? _page + 1 : 1;
+      final raw = await ChallengesService().fetchChallenges(
+        page: nextPage,
+        limit: _pageSize,
+      );
+      final list = raw.map(normaliseChallenge).toList();
+      if (!mounted) return;
+      setState(() {
+        _page = nextPage;
+        _challenges = [...?_challenges, ...list];
+        _hasMore = list.length == _pageSize;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
     }
   }
 
@@ -108,6 +140,7 @@ class _AllGeneralChallengesScreenState
         children: [
           Expanded(
             child: CustomScrollView(
+              controller: _scrollController,
               slivers: [
                 SliverToBoxAdapter(
                   child: SafeArea(
@@ -132,13 +165,24 @@ class _AllGeneralChallengesScreenState
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildCategoriesSection(context)),
-                SliverToBoxAdapter(child: _buildFilterChips()),
-                SliverToBoxAdapter(child: _buildChallengeList(context)),
+                _buildChallengeSliver(context),
+                if (_loadingMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: _accent,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                  ),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
           ),
-          _buildBottomNav(context),
+          const AppBottomNav(activeTab: AppNavTab.search),
         ],
       ),
     );
@@ -238,273 +282,53 @@ class _AllGeneralChallengesScreenState
     );
   }
 
-  // ── Filter chips ───────────────────────────────────────────────────────────
-  Widget _buildFilterChips() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
-      child: Row(
-        children:
-            _filters.map((f) {
-              final active = f == _filter;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _filter = f;
-                      _challenges = null;
-                    });
-                    _loadChallenges();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: active ? _accent : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color:
-                            active
-                                ? _accent
-                                : Colors.white.withValues(alpha: 0.20),
-                      ),
-                    ),
-                    child: Text(
-                      f,
-                      style: TextStyle(
-                        color: active ? Colors.white : AppColors.textMuted,
-                        fontSize: 13,
-                        fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                        fontFamily: 'SpaceGrotesk',
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-      ),
-    );
-  }
-
-  // ── Challenge list ─────────────────────────────────────────────────────────
-  Widget _buildChallengeList(BuildContext context) {
+  // ── Challenge grid ─────────────────────────────────────────────────────────
+  Widget _buildChallengeSliver(BuildContext context) {
     if (_loading) {
-      return const SizedBox(
-        height: 120,
-        child: Center(child: CircularProgressIndicator(color: _accent)),
+      return const SliverToBoxAdapter(
+        child: SizedBox(
+          height: 120,
+          child: Center(child: CircularProgressIndicator(color: _accent)),
+        ),
       );
     }
     final list = _challenges ?? [];
     if (list.isEmpty) {
-      return const SizedBox(
-        height: 120,
-        child: Center(
-          child: Text(
-            'No challenges yet',
-            style: TextStyle(color: AppColors.textFaint),
+      return const SliverToBoxAdapter(
+        child: SizedBox(
+          height: 120,
+          child: Center(
+            child: Text(
+              'No challenges yet',
+              style: TextStyle(color: AppColors.textFaint),
+            ),
           ),
         ),
       );
     }
-    return Padding(
+    return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: list.length,
+      sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.72,
+          crossAxisCount: 3,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 0.68,
         ),
-        itemBuilder: (context, i) {
+        delegate: SliverChildBuilderDelegate((context, i) {
           final c = list[i];
           return _ChallengeCard(
             challengeId: c['id'] as String,
             title: c['title'] as String,
             videoUrl: c['videoUrl'] as String,
             thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
-            views: c['submissionsCount'] as int,
             instructions: c['instructions'] as String,
-            categoryName: _categoryNameMap[c['category'] as String? ?? ''],
           );
-        },
+        }, childCount: list.length),
       ),
     );
   }
 
-  // ── Bottom nav ─────────────────────────────────────────────────────────────
-  Widget _buildBottomNav(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: SizedBox(
-          height: 74,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 62,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111111),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Each half is Expanded + spaceEvenly so the center
-                      // gap always lands at the row's true midpoint,
-                      // matching the FAB's independent Stack-centered
-                      // position — regardless of "Brand Challenges" being a
-                      // much wider label than "Leaderboard"/"Profile" (with
-                      // spaceAround across all 5 children, that width
-                      // difference used to drag the gap off-center).
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _navItem(
-                              icon: Icons.emoji_events_rounded,
-                              label: 'Challenges',
-                              active: true,
-                              onTap: () {},
-                            ),
-                            _navItem(
-                              icon: Icons.storefront_rounded,
-                              label: 'Brand Challenges',
-                              // Brands section isn't built yet; go back to Dashboard for now.
-                              onTap:
-                                  () => Navigator.popUntil(
-                                    context,
-                                    (route) => route.isFirst,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 58),
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _navItem(
-                              icon: Icons.leaderboard_rounded,
-                              label: 'Leaderboard',
-                              onTap:
-                                  () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const LeaderboardScreen(),
-                                    ),
-                                  ),
-                            ),
-                            _navItem(
-                              icon: Icons.person_rounded,
-                              label: 'Profile',
-                              onTap:
-                                  () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const MyAccountScreen(),
-                                    ),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                child: GestureDetector(
-                  onTap: () => showAuraActionSheet(context),
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF0D0020),
-                      border: Border.all(
-                        color: _accent.withValues(alpha: 0.7),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _accent.withValues(alpha: 0.5),
-                          blurRadius: 18,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(13),
-                      child: Image.asset(
-                        'assets/images/Aura Arena Mono.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _navItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool active = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: active ? _accent : Colors.white54, size: 22),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: active ? _accent : AppColors.textFaint,
-                fontSize: 9,
-                fontFamily: 'SpaceGrotesk',
-                height: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 // ── Category tile ──────────────────────────────────────────────────────────────
@@ -586,8 +410,6 @@ class _CategoryTile extends StatelessWidget {
 // ── Challenge card (tall, full-width) ─────────────────────────────────────────
 class _ChallengeCard extends StatelessWidget {
   final String challengeId, title, videoUrl, thumbnailUrl, instructions;
-  final int views;
-  final String? categoryName;
 
   const _ChallengeCard({
     required this.challengeId,
@@ -595,15 +417,7 @@ class _ChallengeCard extends StatelessWidget {
     required this.videoUrl,
     required this.thumbnailUrl,
     required this.instructions,
-    required this.views,
-    this.categoryName,
   });
-
-  String _fmt(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-    return '$n';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -623,12 +437,8 @@ class _ChallengeCard extends StatelessWidget {
           ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Thumbnail
-            if (thumbnailUrl.isNotEmpty)
-              Image.network(
+        child: thumbnailUrl.isNotEmpty
+            ? Image.network(
                 thumbnailUrl,
                 fit: BoxFit.cover,
                 errorBuilder:
@@ -637,53 +447,7 @@ class _ChallengeCard extends StatelessWidget {
                       fit: BoxFit.cover,
                     ),
               )
-            else
-              VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
-            // Bottom gradient
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.5, 1.0],
-                  colors: [Colors.transparent, Colors.black],
-                ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: CategoryIconBadge(categoryName: categoryName),
-            ),
-            // Bottom overlay — aura score + views
-            Positioned(
-              bottom: 10,
-              left: 10,
-              right: 10,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const AuraScoreBadge(),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.visibility_rounded,
-                    color: Colors.white60,
-                    size: 13,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _fmt(views),
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                      fontFamily: 'SpaceGrotesk',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            : VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
       ),
     );
   }

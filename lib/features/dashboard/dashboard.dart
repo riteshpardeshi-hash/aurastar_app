@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
+import '../../core/services/connectivity_probe.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
@@ -14,18 +15,14 @@ import '../../shared/widgets/video_thumbnail_widget.dart'
 import '../../shared/widgets/aura_score_badge.dart';
 import '../../shared/widgets/category_icon_badge.dart';
 import '../../shared/widgets/level_up_sheet.dart';
-import '../../shared/widgets/avatar_widget.dart';
 import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../challenges/screens/trending_screen.dart';
+import '../explore/screens/brands_list_screen.dart';
 import '../explore/screens/creator_profile_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
-import '../explore/screens/brands_list_screen.dart';
-import '../../shared/widgets/aura_action_sheet.dart';
 import '../../shared/widgets/notification_bell_button.dart';
-import '../leaderboard/leaderboard_screen.dart';
-import '../account/screens/my_account_screen.dart';
 import '../creator/screens/create_creator_profile_screen.dart';
 import '../creator/screens/become_creator_screen.dart';
 import '../admin/screens/admin_screen.dart';
@@ -33,6 +30,18 @@ import '../video/screens/preview_screen.dart';
 import '../../core/services/upload_queue_service.dart';
 import '../../shared/theme/app_text_styles.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../core/utils/error_message.dart';
+import '../../shared/widgets/app_bottom_nav.dart';
+
+// Exponential backoff for Dashboard's profile-load auto-retry: 8s, 16s,
+// 32s, 60s (capped), for attempt numbers 1, 2, 3, 4+. Extracted as a top-
+// level function so the schedule itself is directly unit-testable without
+// having to drive a full widget test through real (fake-clock) Timers and
+// a rejecting Future, which is exactly the kind of test that's fragile in
+// this codebase's Flutter-test harness.
+int profileAutoRetryDelaySeconds(int attemptNumber) {
+  return (8 * (1 << (attemptNumber - 1))).clamp(0, 60);
+}
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -64,10 +73,23 @@ class _DashboardState extends State<Dashboard> {
   Timer? _profilePollTimer;
   // Cold-start network hiccups (e.g. connectivity not fully up yet right as
   // the app launches) can make the very first profile fetch fail with no
-  // underlying persistent problem. Retry once automatically so that doesn't
-  // strand the user on an error screen — reset whenever a new user session
-  // starts so each login gets its own single free retry.
-  bool _autoRetriedProfile = false;
+  // underlying persistent problem. Retry automatically so that doesn't
+  // strand the user on an error screen.
+  //
+  // This used to be a single fixed 2s retry — fine for a one-off blip, but
+  // on a connection that's persistently bad (confirmed: users see this even
+  // on strong wifi, not just flaky mobile data) it meant the error screen
+  // flashed away and back every ~2s, on top of the unrelated 20s freshness
+  // poll below also re-triggering a fetch — making the app feel like it was
+  // "constantly popping up" this screen rather than quietly waiting out a
+  // bad stretch. Exponential backoff (8s, 16s, 32s, capped at 60s) capped at
+  // a handful of automatic attempts is far less naggy; past that, the user's
+  // own Retry tap takes over. Reset whenever a new user session starts or a
+  // load actually succeeds, so a later transient failure gets the full
+  // budget again instead of starting already-maxed-out.
+  int _autoRetryCount = 0;
+  static const _maxAutoRetries = 4;
+  Timer? _autoRetryTimer;
 
   static const _bg = Color(0xFF000000);
   static const _accent = Color(0xFF7B2CBF);
@@ -80,7 +102,10 @@ class _DashboardState extends State<Dashboard> {
     // fresh (e.g. after a challenge is scored while this screen is open).
     _profilePollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       final uid = _profileUserId;
-      if (uid != null) _loadProfile(uid);
+      // Skip while an error-driven backoff retry is already scheduled —
+      // firing both would double up two retries on the same failing
+      // request instead of the one, gentler cadence backoff is meant to be.
+      if (uid != null && _autoRetryTimer == null) _loadProfile(uid);
     });
     // Fire-and-forget: requests OS push permission and registers/refreshes
     // the device token with the backend. Dashboard is only ever reached
@@ -92,6 +117,7 @@ class _DashboardState extends State<Dashboard> {
   @override
   void dispose() {
     _profilePollTimer?.cancel();
+    _autoRetryTimer?.cancel();
     super.dispose();
   }
 
@@ -104,12 +130,33 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Future<Map<String, dynamic>> _fetchDashboardProfile(String userId) async {
+    try {
+      return await _fetchDashboardProfileOnce(userId);
+    } catch (e) {
+      // A single failed request isn't reliable evidence the backend is
+      // actually unreachable — see ConnectivityProbe's doc comment. Only
+      // commit to the "couldn't reach servers" error once repeated pings
+      // confirm it; a false alarm gets one immediate silent retry instead
+      // of ever surfacing that screen for what was really just a blip.
+      if (isNetworkError(e) && !(await ConnectivityProbe.confirmUnreachable())) {
+        return _fetchDashboardProfileOnce(userId);
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> _fetchDashboardProfileOnce(
+      String userId) async {
+    // fetchStreak() still swallows its own failures to null (streak is
+    // decorative — default to day 0 rather than fail the whole screen over
+    // it). The profile leg uses getProfileOrThrow() so a real failure
+    // reason survives to the error screen below instead of collapsing into
+    // a generic "no internet" message regardless of cause.
     final results = await Future.wait([
-      AuthApiService().getProfile(),
+      AuthApiService().getProfileOrThrow(),
       AuthApiService().fetchStreak(),
     ]);
-    final profile = results[0];
-    if (profile == null) throw Exception('Failed to load profile');
+    final profile = results[0]!;
     final streak = results[1];
     final role = profile['role'] as String?;
 
@@ -175,7 +222,9 @@ class _DashboardState extends State<Dashboard> {
           );
         }
         if (_profileUserId != userId) {
-          _autoRetriedProfile = false;
+          _autoRetryCount = 0;
+          _autoRetryTimer?.cancel();
+          _autoRetryTimer = null;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _loadProfile(userId);
           });
@@ -190,12 +239,17 @@ class _DashboardState extends State<Dashboard> {
       future: _profileFuture,
       builder: (context, snap) {
         if (snap.hasError) {
-          if (!_autoRetriedProfile) {
-            _autoRetriedProfile = true;
-            Future.delayed(const Duration(seconds: 2), () {
+          if (_autoRetryTimer == null && _autoRetryCount < _maxAutoRetries) {
+            _autoRetryCount++;
+            final delay =
+                Duration(seconds: profileAutoRetryDelaySeconds(_autoRetryCount));
+            _autoRetryTimer = Timer(delay, () {
+              _autoRetryTimer = null;
               if (mounted) _loadProfile(userId);
             });
           }
+          final error = snap.error!;
+          final networkIssue = isNetworkError(error);
           return Scaffold(
             backgroundColor: _bg,
             body: Center(
@@ -204,15 +258,25 @@ class _DashboardState extends State<Dashboard> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.wifi_off_rounded,
+                    Icon(
+                      networkIssue
+                          ? Icons.wifi_off_rounded
+                          : Icons.error_outline_rounded,
                       color: Colors.white38,
                       size: 40,
                     ),
                     const SizedBox(height: 16),
-                    const Text(
-                      'Failed to load profile.',
-                      style: TextStyle(color: AppColors.textMuted),
+                    Text(
+                      // Only the connectivity-flavored exceptions get the
+                      // generic "couldn't reach servers" copy — anything
+                      // else (a real backend error, a bad response shape,
+                      // etc.) shows its actual reason instead of being
+                      // misreported as a connection problem.
+                      networkIssue
+                          ? humanizeError(error)
+                          : 'Failed to load profile: ${humanizeError(error)}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(
@@ -232,6 +296,10 @@ class _DashboardState extends State<Dashboard> {
             body: Center(child: CircularProgressIndicator(color: _accent)),
           );
         }
+
+        // A load just succeeded — give a future transient failure the full
+        // retry budget again instead of picking up already-maxed-out.
+        _autoRetryCount = 0;
 
         final data = snap.data!;
         final points = data['points'] as int;
@@ -389,15 +457,13 @@ class _DashboardState extends State<Dashboard> {
                   SliverToBoxAdapter(child: _buildBecomeCreatorButton(context)),
                 if (isAdmin)
                   SliverToBoxAdapter(child: _buildAdminButton(context)),
+                SliverToBoxAdapter(child: _buildEndlessChallengesHeader(context)),
+                _buildEndlessChallengesGrid(context),
                 const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
           ),
-          _buildBottomNav(
-            context,
-            displayName: displayName,
-            photoUrl: photoUrl,
-          ),
+          const AppBottomNav(activeTab: AppNavTab.home),
         ],
       ),
     );
@@ -420,8 +486,8 @@ class _DashboardState extends State<Dashboard> {
         children: [
           // ── Logo text ─────────────────────────────────
           SizedBox(
-            height: 20,
-            width: 110,
+            height: 26,
+            width: 140,
             child: Image.asset(
               'assets/images/Aura arena.png',
               fit: BoxFit.contain,
@@ -490,33 +556,6 @@ class _DashboardState extends State<Dashboard> {
           ),
 
           const NotificationBellButton(),
-
-          const SizedBox(width: 2),
-
-          // ── Avatar ────────────────────────────────────
-          GestureDetector(
-            onTap:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MyAccountScreen()),
-                ),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: _accent, width: 1.5),
-              ),
-              padding: const EdgeInsets.all(1.5),
-              child: AvatarWidget(
-                photoUrl: photoUrl,
-                fallbackText:
-                    displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A',
-                radius: 17,
-                backgroundColor: const Color(0xFF7C3AED),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -876,7 +915,7 @@ class _DashboardState extends State<Dashboard> {
                     () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const AllGeneralChallengesScreen(),
+                        builder: (_) => const BrandsListScreen(),
                       ),
                     ),
                 child: const Text(
@@ -1217,6 +1256,62 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  // ── Endless challenges grid ───────────────────────────────────────────────
+  // Loops the same 20 challenges already fetched for the sections above
+  // (no extra network calls — this is not pagination) indefinitely via
+  // modulo indexing, purely so the dashboard's scroll has real depth
+  // instead of stopping dead right after Trending Videos.
+  Widget _buildEndlessChallengesHeader(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Text('More Challenges', style: AppTextStyles.sectionHeader),
+    );
+  }
+
+  Widget _buildEndlessChallengesGrid(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _challengesFuture,
+      builder: (context, snap) {
+        final docs = snap.data ?? [];
+        if (docs.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        return FutureBuilder<Map<String, String>>(
+          future: _categoryNamesFuture,
+          builder: (context, catSnap) {
+            final categoryNames = catSnap.data ?? const {};
+            return SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.75,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final data = docs[i % docs.length];
+                    return _EndlessChallengeCard(
+                      data: data,
+                      categoryName:
+                          categoryNames[data['category'] as String? ?? ''],
+                    );
+                  },
+                  // Far more than anyone will ever actually scroll through —
+                  // not truly infinite (Sliver delegates need a concrete
+                  // count), just large enough that the grid never visibly
+                  // ends.
+                  childCount: 9000,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ── Creator Videos ────────────────────────────────────────────────────────
   Widget _buildCreatorVideosSection(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -1234,7 +1329,7 @@ class _DashboardState extends State<Dashboard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Creator Videos',
+                    'Creator Profiles',
                     style: AppTextStyles.sectionHeader,
                   ),
                   GestureDetector(
@@ -1680,202 +1775,51 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Bottom Nav ─────────────────────────────────────────────────────────────
-  Widget _buildBottomNav(
-    BuildContext context, {
-    required String displayName,
-    required String photoUrl,
-  }) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: SizedBox(
-          height: 74,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              // Pill-shaped nav bar
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 62,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111111),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _navItem(
-                        icon: Icons.emoji_events_rounded,
-                        label: 'Challenges',
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => const AllGeneralChallengesScreen(),
-                              ),
-                            ),
-                      ),
-                      _navItem(
-                        icon: Icons.storefront_rounded,
-                        label: 'Brand',
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const BrandsListScreen(),
-                              ),
-                            ),
-                      ),
-                      const SizedBox(width: 58),
-                      _navItem(
-                        icon: Icons.leaderboard_rounded,
-                        label: 'Leaderboard',
-                        onTap:
-                            () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LeaderboardScreen(),
-                              ),
-                            ),
-                      ),
-                      _profileNavItem(
-                        context,
-                        displayName: displayName,
-                        photoUrl: photoUrl,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              // Floating centre button
-              Positioned(
-                top: 0,
-                child: GestureDetector(
-                  onTap: () => showAuraActionSheet(context),
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF0D0020),
-                      border: Border.all(
-                        color: _accent.withValues(alpha: 0.7),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _accent.withValues(alpha: 0.5),
-                          blurRadius: 18,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(13),
-                      child: Image.asset(
-                        'assets/images/Aura Arena Mono.png',
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+}
+
+// ── Video Thumbnail Widget ─────────────────────────────────────────────────
+// ── Endless challenges grid card ─────────────────────────────────────────────
+class _EndlessChallengeCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final String? categoryName;
+
+  const _EndlessChallengeCard({required this.data, required this.categoryName});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = data['title'] as String? ?? '';
+    final videoUrl = data['videoUrl'] as String? ?? '';
+    final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
+    final challengeId = data['id'] as String? ?? '';
+    final instructions = data['instructions'] as String? ?? '';
+
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChallengeDetail(
+            title: title,
+            instructions: instructions,
+            videoUrl: videoUrl,
+            challengeId: challengeId,
           ),
         ),
       ),
-    );
-  }
-
-  Widget _profileNavItem(
-    BuildContext context, {
-    required String displayName,
-    required String photoUrl,
-  }) {
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
-    return GestureDetector(
-      onTap:
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const MyAccountScreen()),
-          ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            AvatarWidget(
-              photoUrl: photoUrl,
-              fallbackText: initial,
-              radius: 13,
-              backgroundColor: _accent.withValues(alpha: 0.30),
-              textStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+            _VideoThumbnailWidget(videoUrl: videoUrl, thumbnailUrl: thumbnailUrl),
+            Positioned(
+              top: 6,
+              left: 6,
+              child: CategoryIconBadge(categoryName: categoryName),
             ),
-            const SizedBox(height: 3),
-            const Text(
-              'Profile',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textFaint,
-                fontSize: 9,
-                fontFamily: 'SpaceGrotesk',
-                height: 1.2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _navItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool active = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: active ? _accent : Colors.white54, size: 22),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: active ? _accent : AppColors.textFaint,
-                fontSize: 9,
-                fontFamily: 'SpaceGrotesk',
-                height: 1.2,
-              ),
+            const Positioned(
+              bottom: 6,
+              left: 6,
+              child: AuraScoreBadge(),
             ),
           ],
         ),
@@ -1884,7 +1828,6 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-// ── Video Thumbnail Widget ─────────────────────────────────────────────────
 class _VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
   final String? thumbnailUrl; // direct image URL from backend

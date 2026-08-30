@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/services/videos_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'user_video_detail_screen.dart';
 
@@ -29,7 +31,17 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
     final data = await AuthApiService().fetchMyVideos(limit: 100);
     if (mounted) {
       setState(() {
-        _videos = data.map(_normaliseSubmission).toList();
+        // /profile/videos keeps returning a video after DELETE /videos/{id}
+        // soft-deletes it — the list endpoint never drops it. Without this
+        // filter a deleted video reappears on the next refresh, and
+        // re-tapping Delete on it then 404s ("video not found") since it's
+        // already gone server-side. VideosService.isDeletedVideo also covers
+        // ids deleted this session (the server-side marker is unreliable —
+        // see that method).
+        _videos = data
+            .where((v) => !VideosService.isDeletedVideo(v))
+            .map(_normaliseSubmission)
+            .toList();
         _loading = false;
       });
     }
@@ -95,6 +107,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,

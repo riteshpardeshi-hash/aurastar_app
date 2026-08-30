@@ -29,7 +29,19 @@ class CreatorsService {
       if (res['status'] != 'success') return null;
       final data = res['data'];
       if (data is Map<String, dynamic>) {
-        return (data['creator'] as Map<String, dynamic>?) ?? data;
+        final creator = data['creator'];
+        if (creator is Map<String, dynamic>) {
+          // The API nests the profile under `data.creator` but places the
+          // viewer-scoped `isFollowing` flag as a *sibling* of it, not
+          // inside it. Lift it in so normaliseCreator (and the profile
+          // screen's Follow button) can see the real follow state instead
+          // of always defaulting to false.
+          return {
+            ...creator,
+            if (data.containsKey('isFollowing')) 'isFollowing': data['isFollowing'],
+          };
+        }
+        return data;
       }
       return null;
     } catch (_) {
@@ -132,6 +144,13 @@ Map<String, dynamic> normaliseCreatorVideo(Map<String, dynamic> v) {
     'id': v['_id'] as String? ?? '',
     'challengeId': v['challengeId'] as String? ?? '',
     'videoUrl': v['videoUrl'] as String? ?? '',
+    // GET /creators/{id}/videos has no documented per-item schema, so this
+    // is a defensive read (same "try the field, fall back gracefully"
+    // pattern as everywhere else this file guesses across key names) — if
+    // the backend doesn't actually send it, this is just always null and
+    // VideoThumbnailWidget falls back to its existing frame-extraction path
+    // exactly as before.
+    'thumbnailUrl': v['thumbnailUrl'] as String?,
     'aiScore': (v['aiScore'] as num?)?.toInt(),
     'createdAt': v['createdAt'],
   };

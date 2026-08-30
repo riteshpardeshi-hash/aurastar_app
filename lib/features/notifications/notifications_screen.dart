@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/notifications_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/app_bottom_nav.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -82,6 +83,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,

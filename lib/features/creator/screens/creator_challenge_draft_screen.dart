@@ -121,7 +121,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       ),
     );
     if (source == null) return;
-    final picked = await ImagePicker().pickVideo(source: source, maxDuration: const Duration(seconds: 60));
+    final picked = await ImagePicker().pickVideo(source: source);
     if (picked != null && mounted) {
       setState(() => _pickedVideo = File(picked.path));
     }

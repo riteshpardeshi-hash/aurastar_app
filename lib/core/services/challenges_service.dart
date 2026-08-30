@@ -161,7 +161,16 @@ class ChallengesService {
       );
       if (res['status'] == 'success') {
         final data = res['data'] as Map<String, dynamic>;
-        return data['submission'] as Map<String, dynamic>?;
+        // Per openapi.yaml this endpoint returns a `submissions` array
+        // (newest first), not a single `submission` object — reading the
+        // latter key here always came back null, which made the
+        // participation-gated "See Leaderboard" button look permanently
+        // locked even for challenges the user had already taken.
+        final submissions =
+            (data['submissions'] as List?)?.cast<Map<String, dynamic>>();
+        if (submissions != null && submissions.isNotEmpty) {
+          return submissions.first;
+        }
       }
     } catch (_) {}
     return null;
@@ -194,8 +203,17 @@ String submissionStatusFromApi(Map<String, dynamic> s) {
       return 'rejected';
     case 'failed':
       return 'ai_error';
-    default:
+    case null:
+    case 'pending':
       return 'pending';
+    default:
+      // The documented status enum is pending|scored|failed|flagged. Any
+      // other non-empty value is a server-side state the client can't
+      // interpret — treat it as an AI error (which routes to manual admin
+      // review and keeps the result UI's dismiss/exit path working) rather
+      // than a silent 'pending', which used to leave AuraSubmittedPopup
+      // polling forever and PostScoreActionScreen stuck on a blank result.
+      return 'ai_error';
   }
 }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/aura_score_badge.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
@@ -13,65 +13,36 @@ class TrendingScreen extends StatefulWidget {
   State<TrendingScreen> createState() => _TrendingScreenState();
 }
 
-class _TrendingScreenState extends State<TrendingScreen>
-    with SingleTickerProviderStateMixin {
+class _TrendingScreenState extends State<TrendingScreen> {
   static const _bg = Color(0xFF0D0D1A);
   static const _card = Color(0xFF12102A);
   static const _accent = Color(0xFF7B2CBF);
 
-  static const _tabs = ['Now', 'Today', 'Week'];
-
-  late final TabController _tabCtrl;
-
-  // Sort mode: 'joined' | 'liked'
-  String _sort = 'joined';
-
-  // Cache keyed by sort mode (tabs share same ranked list — API has no time window)
-  final Map<String, List<_TrendingItem>> _cache = {};
-  final Map<String, bool> _loading = {};
+  List<_TrendingItem>? _items;
+  bool _loading = true;
 
   Map<String, String> _categoryNames = {};
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: _tabs.length, vsync: this)
-      ..addListener(_onTabChanged);
-    _loadTab(0);
+    _load();
     ChallengesService().fetchCategoryNameMap().then((names) {
       if (mounted) setState(() => _categoryNames = names);
     });
   }
 
-  @override
-  void dispose() {
-    _tabCtrl
-      ..removeListener(_onTabChanged)
-      ..dispose();
-    super.dispose();
-  }
-
-  void _onTabChanged() {
-    if (!_tabCtrl.indexIsChanging) return;
-    _loadTab(_tabCtrl.index);
-  }
-
-  String _cacheKey(int tab, String sort) => sort;
-
   // ── Data ──────────────────────────────────────────────────────────────────
+  // Ranked by most-joined (submissionsCount) — the only ranking this screen
+  // shows now that the time-window tabs and sort toggle are gone.
 
-  Future<void> _loadTab(int tab) async {
-    final key = _cacheKey(tab, _sort);
-    if (_cache.containsKey(key)) return;
-    setState(() => _loading[key] = true);
-
-    final items =
-        _sort == 'liked' ? await _fetchMostLiked() : await _fetchMostJoined();
-
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final items = await _fetchMostJoined();
     if (mounted) {
       setState(() {
-        _cache[key] = items;
-        _loading[key] = false;
+        _items = items;
+        _loading = false;
       });
     }
   }
@@ -91,33 +62,6 @@ class _TrendingScreenState extends State<TrendingScreen>
             (c) => _TrendingItem(
               challengeId: c['id'] as String? ?? '',
               data: c,
-              attemptCount: c['submissionsCount'] as int? ?? 0,
-              starsCount: c['starsCount'] as int? ?? 0,
-            ),
-          )
-          .toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<List<_TrendingItem>> _fetchMostLiked() async {
-    try {
-      final raw = await ChallengesService().fetchChallenges(limit: 40);
-      final normalised =
-          raw.map(normaliseChallenge).toList()..sort(
-            (a, b) => ((b['starsCount'] as int?) ?? 0).compareTo(
-              (a['starsCount'] as int?) ?? 0,
-            ),
-          );
-      return normalised
-          .take(15)
-          .map(
-            (c) => _TrendingItem(
-              challengeId: c['id'] as String? ?? '',
-              data: c,
-              attemptCount: c['submissionsCount'] as int? ?? 0,
-              starsCount: c['starsCount'] as int? ?? 0,
             ),
           )
           .toList();
@@ -132,6 +76,7 @@ class _TrendingScreenState extends State<TrendingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
@@ -148,73 +93,14 @@ class _TrendingScreenState extends State<TrendingScreen>
         ),
         centerTitle: false,
         elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(94),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Time tabs ────────────────────────────────────────────────
-              TabBar(
-                controller: _tabCtrl,
-                indicatorColor: _accent,
-                indicatorSize: TabBarIndicatorSize.label,
-                labelColor: Colors.white,
-                unselectedLabelColor: AppColors.textFaint,
-                labelStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-                dividerColor: Colors.transparent,
-                tabs: _tabs.map((t) => Tab(text: t)).toList(),
-              ),
-
-              // ── Sort toggle ──────────────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                child: Row(
-                  children: [
-                    _SortPill(
-                      icon: Icons.group_rounded,
-                      label: 'Most Joined',
-                      selected: _sort == 'joined',
-                      onTap: () => _onSortChanged('joined'),
-                    ),
-                    const SizedBox(width: 10),
-                    _SortPill(
-                      icon: Icons.favorite_rounded,
-                      label: 'Most Liked',
-                      selected: _sort == 'liked',
-                      onTap: () => _onSortChanged('liked'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        physics: const NeverScrollableScrollPhysics(),
-        children: List.generate(_tabs.length, (i) => _buildTab(i)),
-      ),
+      body: _buildBody(),
     );
   }
 
-  void _onSortChanged(String sort) {
-    if (_sort == sort) return;
-    setState(() {
-      _sort = sort;
-      _cache.remove(sort);
-    });
-    _loadTab(_tabCtrl.index);
-  }
-
-  Widget _buildTab(int tab) {
-    final key = _cacheKey(tab, _sort);
-    final items = _cache[key];
-
-    if (_loading[key] == true || items == null) {
+  Widget _buildBody() {
+    final items = _items;
+    if (_loading || items == null) {
       return const Center(child: CircularProgressIndicator(color: _accent));
     }
     if (items.isEmpty) return _buildEmpty();
@@ -304,86 +190,10 @@ class _TrendingScreenState extends State<TrendingScreen>
               ),
               Positioned(
                 top: 8,
-                left: 8,
-                child: Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color:
-                        isTop3
-                            ? _accent.withValues(alpha: 0.90)
-                            : Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _rankLabel(index),
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: index < 3 ? 13 : 10,
-                        fontWeight: FontWeight.w900,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
                 right: 8,
                 child: CategoryIconBadge(
                   categoryName: _categoryNames[categoryId],
-                  size: 24,
-                ),
-              ),
-              Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const AuraScoreBadge(),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          color: _accent,
-                          size: 12,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          '${item.starsCount}',
-                          style: const TextStyle(
-                            color: Color(0xFFD4A8FF),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if ((_sort == 'joined' && item.attemptCount > 0) ||
-                        (_sort == 'liked' && item.starsCount > 0)) ...[
-                      const SizedBox(height: 4),
-                      _StatRow(
-                        icon:
-                            _sort == 'joined'
-                                ? Icons.people_outline_rounded
-                                : Icons.favorite_rounded,
-                        color:
-                            _sort == 'joined'
-                                ? const Color(0xFFFF6B35)
-                                : const Color(0xFFFF6B9D),
-                        text: _fmt(
-                          _sort == 'joined'
-                              ? item.attemptCount
-                              : item.starsCount,
-                        ),
-                      ),
-                    ],
-                  ],
+                  size: 28,
                 ),
               ),
             ],
@@ -425,25 +235,6 @@ class _TrendingScreenState extends State<TrendingScreen>
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  String _rankLabel(int i) {
-    switch (i) {
-      case 0:
-        return '🥇';
-      case 1:
-        return '🥈';
-      case 2:
-        return '🥉';
-      default:
-        return '${i + 1}';
-    }
-  }
-
-  String _fmt(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';
-    return '$n';
-  }
 }
 
 // ── Data model ────────────────────────────────────────────────────────────────
@@ -451,106 +242,7 @@ class _TrendingScreenState extends State<TrendingScreen>
 class _TrendingItem {
   final String challengeId;
   final Map<String, dynamic> data;
-  final int attemptCount;
-  final int starsCount;
 
-  const _TrendingItem({
-    required this.challengeId,
-    required this.data,
-    required this.attemptCount,
-    required this.starsCount,
-  });
+  const _TrendingItem({required this.challengeId, required this.data});
 }
 
-// ── Sort pill ─────────────────────────────────────────────────────────────────
-
-class _SortPill extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SortPill({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color:
-              selected
-                  ? _accent.withValues(alpha: 0.20)
-                  : Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color:
-                selected
-                    ? _accent.withValues(alpha: 0.70)
-                    : Colors.white.withValues(alpha: 0.12),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 13,
-              color: selected ? Colors.white : Colors.white38,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : AppColors.textFaint,
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Stat row ──────────────────────────────────────────────────────────────────
-
-class _StatRow extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String text;
-
-  const _StatRow({required this.icon, required this.color, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 12),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}

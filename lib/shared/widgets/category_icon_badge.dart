@@ -15,34 +15,18 @@ class CategoryIconBadge extends StatelessWidget {
   const CategoryIconBadge({
     super.key,
     required this.categoryName,
-    this.size = 28,
+    this.size = 32,
   });
 
   @override
   Widget build(BuildContext context) {
     final iconAsset = categoryIconAsset[categoryName];
     if (iconAsset == null) return const SizedBox.shrink();
-    return Container(
+    return SvgPicture.asset(
+      iconAsset,
       width: size,
       height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.75),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4),
-        ],
-      ),
-      child: SvgPicture.asset(
-        iconAsset,
-        width: size * 0.9,
-        height: size * 0.9,
-        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-      ),
+      colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
     );
   }
 }

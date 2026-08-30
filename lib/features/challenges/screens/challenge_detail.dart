@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,10 +7,12 @@ import '../../../core/services/api_client.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/services/video_cache_service.dart';
+import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../leaderboard/screens/challenge_leaderboard_screen.dart';
 import '../widgets/achievement_card.dart' show kChallengeBaseUrl;
 import 'camera_screen.dart';
 
@@ -35,11 +38,16 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   static const _bg = Color(0xFF0D0D1A);
   static const _accent = Color(0xFF7B2CBF);
 
-  // Video state
   VideoPlayerController? _videoController;
   bool _videoInitialized = false;
   bool _videoStarted = false; // true once user taps play
   bool _isFullscreen = false;
+  // Set while _prewarmVideo() is downloading/initializing a controller in
+  // the background, ahead of the user ever tapping play. _initAndPlayVideo()
+  // awaits this instead of doing its own initialize() — by the time the
+  // user actually taps, this has usually already resolved, so play starts
+  // with no visible load at all instead of showing the loading spinner.
+  Future<void>? _prewarmFuture;
 
   // Challenge data
   bool _isPaused = false;
@@ -61,9 +69,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   bool _detailsExpanded = false;
 
   // Submissions
-  List<Map<String, dynamic>> _submissions = [];
   Map<String, dynamic>? _mySubmission;
-  bool _submissionsLoading = true;
 
   @override
   void initState() {
@@ -74,6 +80,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     // user reads the challenge, opens the rules sheet, and taps Record,
     // CameraScreen's ghost overlay can play from disk instead of streaming.
     if (_videoUrl.isNotEmpty) VideoCacheService.ensureCached(_videoUrl);
+    // Also pre-initialize the on-screen player itself (not just the disk
+    // cache, which is skipped entirely for HLS — see _doPrewarm) so tapping
+    // play has nothing left to wait on.
+    _prewarmVideo();
   }
 
   Future<void> _fetchChallengeData() async {
@@ -118,12 +128,28 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         // URL from anywhere else was kept forever, silently breaking
         // CameraScreen's ghost overlay for any challenge still processing.
         final freshVideoUrl = c['videoUrl'] as String? ?? '';
+        final urlChanged =
+            freshVideoUrl.isNotEmpty && freshVideoUrl != _videoUrl;
         if (freshVideoUrl.isNotEmpty) _videoUrl = freshVideoUrl;
         if (_instructions.isEmpty) {
           _instructions = c['instructions'] as String? ?? '';
         }
+        // The widget-seeded URL a caller passed in may have been a stale/
+        // expired presigned one (see comment above) — if this fetch just
+        // replaced it and the user hasn't already committed to playing the
+        // old one, restart prewarming against the real URL instead of
+        // leaving a dead controller sitting there.
+        if (urlChanged && !_videoStarted) {
+          _videoController?.dispose();
+          _videoController = null;
+          _videoInitialized = false;
+          _prewarmFuture = null;
+        }
       });
-      if (_videoUrl.isNotEmpty) VideoCacheService.ensureCached(_videoUrl);
+      if (_videoUrl.isNotEmpty) {
+        VideoCacheService.ensureCached(_videoUrl);
+        if (!_videoStarted) _prewarmVideo();
+      }
     } catch (_) {
       // Same fail-closed reasoning as the data == null branch above.
       if (mounted) {
@@ -138,17 +164,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   Future<void> _fetchSubmissions() async {
     if (widget.challengeId.isEmpty) return;
     try {
-      final subs = await ChallengesService().fetchSubmissions(widget.challengeId);
       final mine = await ChallengesService().fetchMySubmission(widget.challengeId);
       if (!mounted) return;
-      setState(() {
-        _submissions = subs;
-        _mySubmission = mine;
-        _submissionsLoading = false;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _submissionsLoading = false);
-    }
+      setState(() => _mySubmission = mine);
+    } catch (_) {}
   }
 
   // Bookmark/save removed — no backend endpoint exists to persist it
@@ -183,6 +202,64 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
+  // Builds and fully initializes a controller for [url] (throws if
+  // initialize() fails — callers decide how to handle that). Prefers, in
+  // order: an already-initialized controller a *list* screen prewarmed
+  // ahead of navigation (VideoPrewarmCache — e.g. the home feed warming a
+  // card before the user even taps it), then a fully-downloaded local file
+  // if VideoCacheService managed to cache one (it can't for HLS — see that
+  // service's doc comment), then a plain network stream.
+  Future<VideoPlayerController> _buildController(String url) async {
+    final prewarmed = VideoPrewarmCache.take(url);
+    if (prewarmed != null) return prewarmed;
+
+    final cachedPath = await VideoCacheService.ensureCached(url);
+    // Without mixWithOthers, ExoPlayer/AVAudioSession request *exclusive*
+    // audio focus and their default focus-loss handling auto-pauses
+    // playback for any transient system sound (a notification tone, a
+    // keyboard click, an incoming-call banner, a Bluetooth chime,
+    // Assistant's hotword, ...) — with no plugin-level signal to auto-resume
+    // afterward, so it looks like the video "randomly pauses itself." This
+    // is a short instructional demo clip, not long-form content competing
+    // for the user's attention, so letting it mix with (rather than duck/
+    // interrupt) other audio is the right trade-off here.
+    final options = VideoPlayerOptions(mixWithOthers: true);
+    final controller = cachedPath != null
+        ? VideoPlayerController.file(File(cachedPath),
+            videoPlayerOptions: options)
+        : VideoPlayerController.networkUrl(Uri.parse(url),
+            videoPlayerOptions: options);
+    await controller.initialize();
+    return controller;
+  }
+
+  // Fire-and-forget: builds and initializes a controller for the current
+  // _videoUrl in the background, well before the user taps play. No-op if
+  // one's already in flight or done, or the URL isn't known yet.
+  void _prewarmVideo() {
+    if (_videoUrl.isEmpty || _prewarmFuture != null) return;
+    _prewarmFuture = _doPrewarm(_videoUrl);
+  }
+
+  Future<void> _doPrewarm(String url) async {
+    VideoPlayerController controller;
+    try {
+      controller = await _buildController(url);
+    } catch (_) {
+      return; // leave _videoController null — _initAndPlayVideo falls back
+    }
+    // The URL can change mid-flight (a fresher one lands from
+    // _fetchChallengeData) or the screen can be popped before this
+    // resolves — either way this controller is stale/unwanted, so just
+    // release it rather than assigning it anywhere.
+    if (!mounted || url != _videoUrl) {
+      controller.dispose();
+      return;
+    }
+    _videoController = controller;
+    if (mounted) setState(() => _videoInitialized = true);
+  }
+
   Future<void> _initAndPlayVideo() async {
     if (_videoStarted) {
       // Already loaded from a previous play — reopen fullscreen instead of
@@ -194,11 +271,26 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     setState(() => _videoStarted = true);
 
     if (_videoUrl.isEmpty) return;
-    _videoController =
-        VideoPlayerController.networkUrl(Uri.parse(_videoUrl));
-    await _videoController!.initialize();
+
+    // The common case: prewarming already finished (or is far enough along)
+    // that this resolves with no visible wait at all.
+    _prewarmVideo();
+    await _prewarmFuture;
     if (!mounted) return;
-    setState(() => _videoInitialized = true);
+
+    if (_videoController == null) {
+      // Prewarm never landed (failed, or raced a mid-flight URL change) —
+      // fall back to loading it fresh right now, same as before prewarming
+      // existed.
+      try {
+        _videoController = await _buildController(_videoUrl);
+      } catch (_) {
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _videoInitialized = true);
+    }
+
     _enterFullscreen();
     _videoController!.play();
   }
@@ -267,7 +359,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 child: VideoProgressIndicator(
                   _videoController!,
                   allowScrubbing: true,
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   colors: VideoProgressColors(
                     playedColor: _accent,
                     bufferedColor: Colors.white.withValues(alpha: 0.3),
@@ -448,8 +540,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         // Details section
                         _buildDetailsSection(),
 
-                        // Submissions section
-                        _buildSubmissionsSection(),
+                        // Leaderboard button — participation-gated
+                        _buildLeaderboardButton(),
 
                         // Space for sticky button
                         const SizedBox(height: 100),
@@ -675,53 +767,15 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       );
     }
 
-    if (_mySubmission != null) {
-      final score = (_mySubmission!['aiScore'] as num?)?.toInt() ?? 0;
-      final approved = submissionStatusFromApi(_mySubmission!) == 'approved';
-      return GestureDetector(
-        onTap: _showTakeChallengeSheet,
-        child: Container(
-          height: 58,
-          decoration: BoxDecoration(
-            color: approved
-                ? Colors.green.withValues(alpha: 0.15)
-                : Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-              color: approved
-                  ? Colors.green.withValues(alpha: 0.50)
-                  : Colors.white.withValues(alpha: 0.20),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                approved ? Icons.check_circle_rounded : Icons.replay_rounded,
-                color: approved ? Colors.greenAccent : Colors.white70,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                approved
-                    ? 'Submitted · $score pts — Try again?'
-                    : 'Try again',
-                style: TextStyle(
-                    color: approved ? Colors.greenAccent : AppColors.textMuted,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+    // Deliberately no special-case here for _mySubmission != null — the CTA
+    // stays "Take this Challenge" even after a submission exists, so users
+    // can keep retaking the challenge without the button changing style.
     return GestureDetector(
       onTap: _showTakeChallengeSheet,
       child: Container(
         height: 58,
         decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(29),
           gradient: const LinearGradient(
             colors: [Color(0xFF4C1D95), Color(0xFF2E1065)],
             begin: Alignment.topLeft,
@@ -759,142 +813,88 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
-  // ── Submissions section ────────────────────────────────────────────────────
-  Widget _buildSubmissionsSection() {
-    if (_submissionsLoading) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 28),
-        child: SizedBox(
-          height: 60,
-          child: Center(
-              child: CircularProgressIndicator(color: _accent, strokeWidth: 2)),
-        ),
-      );
-    }
-    if (_submissions.isEmpty) return const SizedBox.shrink();
-
+  // ── Leaderboard button ─────────────────────────────────────────────────────
+  // Always visible on every challenge detail page. _mySubmission only becomes
+  // non-null after a real GET /challenges/{id}/submissions/me hit in
+  // _fetchSubmissions() — used here to gate the *tap*, not the button's
+  // visibility: a viewer who hasn't taken this specific challenge yet gets a
+  // locked notice instead of opening an empty/meaningless board for a
+  // challenge they haven't scored on.
+  Widget _buildLeaderboardButton() {
+    final participated = _mySubmission != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Top Submissions',
-                style: AppTextStyles.sectionHeader.copyWith(color: _accent),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${_submissions.length}',
-                  style: const TextStyle(
-                      color: AppColors.accentLight,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
+      child: GestureDetector(
+        onTap: participated
+            ? () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChallengeLeaderboardScreen(
+                      challengeId: widget.challengeId,
+                      challengeTitle: widget.title,
+                    ),
+                  ),
+                )
+            : _showLeaderboardLockedNotice,
+        child: Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: participated ? 0.10 : 0.05),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: _accent.withValues(alpha: participated ? 0.40 : 0.18)),
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 130,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _submissions.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, i) =>
-                  _buildSubmissionTile(_submissions[i], i),
+          child: Center(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  participated
+                      ? Icons.leaderboard_rounded
+                      : Icons.lock_outline_rounded,
+                  color: participated ? _accent : Colors.white38,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'See Leaderboard',
+                  style: TextStyle(
+                    color: participated ? Colors.white : Colors.white54,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildSubmissionTile(Map<String, dynamic> sub, int rank) {
-    final videoUrl = sub['videoUrl'] as String? ?? '';
-    final score = (sub['aiScore'] as num?)?.toInt() ?? 0;
-    final approved = submissionStatusFromApi(sub) == 'approved';
-    // GET /challenges/{id}/submissions never joins a display name for the
-    // submitter — `userId` comes back as either a bare id string or a
-    // populated `{_id}` object with no name field, and there's no public
-    // endpoint that resolves a player id to a name (creators/brands lookups
-    // 404 for regular players; player profiles are otherwise private). Fall
-    // back to a rank-based label instead of a fabricated or identical name.
-    final username = 'Player ${rank + 1}';
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: 90,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            videoUrl.isNotEmpty
-                ? VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover)
-                : Container(color: const Color(0xFF1A1A2E)),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.75)
-                  ],
-                ),
-              ),
-            ),
-            if (rank < 3)
-              Positioned(
-                top: 6,
-                left: 6,
+  void _showLeaderboardLockedNotice() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: Colors.white70, size: 16),
+              SizedBox(width: 10),
+              Expanded(
                 child: Text(
-                  rank == 0 ? '🥇' : rank == 1 ? '🥈' : '🥉',
-                  style: const TextStyle(fontSize: 14),
+                  'Take this challenge at least once to see its leaderboard.',
+                  style: TextStyle(fontSize: 13),
                 ),
               ),
-            Positioned(
-              bottom: 6,
-              left: 4,
-              right: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    username,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600),
-                  ),
-                  if (approved && score > 0) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      '$score pts',
-                      style: const TextStyle(
-                          color: Color(0xFFD4A8FF),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
+          backgroundColor: const Color(0xFF1E1E2E),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 2),
         ),
-      ),
-    );
+      );
   }
 
   // ── Video section ──────────────────────────────────────────────────────────

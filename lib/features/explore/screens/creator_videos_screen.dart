@@ -310,6 +310,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     final id = data['id'] as String;
     final title = data['title'] as String? ?? '';
     final videoUrl = data['videoUrl'] as String? ?? '';
+    final thumbnailUrl = data['thumbnailUrl'] as String?;
     final instructions = data['instructions'] as String? ?? '';
     final auraPoints = (data['starsCount'] as num?)?.toInt() ?? 0;
     final category = data['category'] as String? ?? '';
@@ -338,7 +339,10 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                    VideoThumbnailWidget(
+                        videoUrl: videoUrl,
+                        thumbnailUrl: thumbnailUrl,
+                        fit: BoxFit.cover),
                     // Gradient
                     Positioned.fill(
                       child: DecoratedBox(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 
 // Archiving a submission was never wired to a real backend write — the old
 // Firestore query below (`submissions` collection) queried a collection
@@ -20,6 +21,7 @@ class ArchivedVideosScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,

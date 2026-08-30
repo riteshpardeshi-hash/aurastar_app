@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/services/creator_page_service.dart';
+import '../../../core/services/videos_service.dart';
 import '../../../core/utils/error_message.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
@@ -12,7 +14,9 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/avatar_widget.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../challenges/widgets/achievement_card.dart';
+import '../../creator/screens/creator_activity_screen.dart';
 import 'user_video_detail_screen.dart';
 import 'all_videos_screen.dart';
 import 'settings_screen.dart';
@@ -258,11 +262,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   Map<String, dynamic>? _referralStatsDetail;
   Map<String, dynamic>? _streak;
   List<Map<String, dynamic>> _rewards = [];
+  bool _isCreator = false;
 
   @override
   void initState() {
     super.initState();
     _loadAll();
+    CreatorPageService().isCreatorCached().then((v) {
+      if (mounted) setState(() => _isCreator = v);
+    });
   }
 
   Future<void> _loadAll() async {
@@ -291,7 +299,17 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
-        _videos = (results[1] as List).cast<Map<String, dynamic>>();
+        // /profile/videos keeps returning a video after DELETE /videos/{id}
+        // soft-deletes it — the list endpoint never drops it. Without this
+        // filter a deleted video reappears in the grid on the next refresh,
+        // and re-tapping Delete on it then 404s ("video not found") since
+        // it's already gone server-side. VideosService.isDeletedVideo also
+        // covers ids deleted this session, since the server-side marker has
+        // proven unreliable (see that method).
+        _videos = (results[1] as List)
+            .cast<Map<String, dynamic>>()
+            .where((v) => !VideosService.isDeletedVideo(v))
+            .toList();
         _savedChallenges = (results[2] as List)
             .cast<Map<String, dynamic>>()
             .map(normaliseChallenge)
@@ -505,6 +523,65 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 size: 32,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Creator tools ─────────────────────────────────────────────────────────────
+  // Since the center-FAB now always opens the video reels feed (for every
+  // role, players included), this is a creator/brand/admin account's only
+  // remaining path to CreatorActivityScreen (create/manage challenges,
+  // insights, settings).
+  Widget _buildCreatorToolsCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const CreatorActivityScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: _accent.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.dashboard_customize_rounded,
+                  color: _accent, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Creator Tools',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Create challenges, manage submissions, insights',
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: Colors.white24, size: 22),
           ],
         ),
       ),
@@ -1150,6 +1227,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
@@ -1188,6 +1266,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             children: [
               _buildProfileCard(context),
               const SizedBox(height: 16),
+              if (_isCreator) ...[
+                _buildCreatorToolsCard(context),
+                const SizedBox(height: 16),
+              ],
               _buildAuraPointsCard(totalRewards, level, tierName),
               _buildStreakCard(),
               _RewardsSection(rewards: _rewards, onClaimed: _reloadRewards),
@@ -1431,13 +1513,17 @@ class _SavedChallengesGrid extends StatelessWidget {
           childAspectRatio: 0.85,
           children: challenges.map((c) {
             final videoUrl = c['videoUrl'] as String? ?? '';
+            final thumbnailUrl = c['thumbnailUrl'] as String?;
             final title    = c['title']    as String? ?? '';
             return ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+                  VideoThumbnailWidget(
+                      videoUrl: videoUrl,
+                      thumbnailUrl: thumbnailUrl,
+                      fit: BoxFit.cover),
                   Positioned(
                     bottom: 0,
                     left: 0,

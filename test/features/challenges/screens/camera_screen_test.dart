@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
@@ -175,6 +176,152 @@ void main() {
             'of how the device happens to be held/rotated, otherwise the '
             'captured video is encoded sideways');
   });
+
+  // Coverage for the self-timer: selecting a delay must count down on
+  // screen and only start the actual recording once it reaches zero — not
+  // start immediately like a normal tap.
+  testWidgets(
+      'tapping record with a timer delay selected counts down before '
+      'recording actually starts', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Timer Off'), findsOneWidget);
+    await tester.tap(find.text('Timer Off'));
+    await tester.pump();
+    expect(find.text('Timer 5s'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('recordButton')));
+    await tester.pump();
+
+    expect(fakeCamera.startVideoCapturingCalls, 0,
+        reason: 'recording must not start the instant a timer delay is '
+            'selected and tapped — it should count down first');
+    expect(find.text('5'), findsOneWidget,
+        reason: 'the countdown overlay should show the selected delay');
+
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    expect(fakeCamera.startVideoCapturingCalls, 1,
+        reason: 'recording should start automatically once the countdown '
+            'reaches zero');
+  });
+
+  testWidgets(
+      'tapping record again during the countdown cancels it instead of '
+      'starting recording', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.text('Timer Off'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('recordButton')));
+    await tester.pump();
+    expect(find.text('5'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('recordButton')));
+    await tester.pump();
+
+    expect(find.text('Timer 5s'), findsOneWidget,
+        reason: 'cancelling the countdown returns to the idle state with '
+            'the chosen delay still selected');
+
+    // Let time pass to make sure a cancelled countdown never fires late.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(fakeCamera.startVideoCapturingCalls, 0,
+        reason: 'a cancelled countdown must never start recording');
+  });
+
+  // Coverage for the post-ghost auto-stop: once the reference ("ghost") clip
+  // has played through once, the take is allowed to run at most 10 more
+  // seconds and then stops itself, so a submission can't run arbitrarily
+  // longer than the reference it's being scored against. The fake video
+  // player reports the ghost clip as 5s long (see
+  // _FakeVideoPlayerPlatform.videoEventsFor), so the recording must stop at
+  // 5s + 10s = 15s elapsed, and not before.
+  testWidgets(
+      'recording auto-stops 10s after the ghost reference clip ends',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+        referenceVideoUrl: 'https://example.com/reference.m3u8',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.byKey(const Key('recordButton')));
+    await tester.pump();
+    expect(fakeCamera.startVideoCapturingCalls, 1);
+    expect(fakeCamera.stopVideoRecordingCalls, 0);
+
+    // Pump to 14s elapsed — one second short of the 5s + 10s deadline.
+    for (var i = 0; i < 14; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(fakeCamera.stopVideoRecordingCalls, 0,
+        reason: 'must not stop until the full 10s grace after the ghost ends');
+    expect(find.textContaining('Auto-stop in'), findsOneWidget,
+        reason: 'the grace countdown should be visible once the ghost ended');
+
+    // Cross the 15s mark.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(fakeCamera.stopVideoRecordingCalls, 1,
+        reason: 'recording auto-stops once the 10s post-ghost grace elapses');
+  });
+
+  testWidgets(
+      'recording never auto-stops when the challenge has no ghost reference',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+        // No referenceVideoUrl → no ghost clip → nothing to measure a grace
+        // window from, so the user is in full manual control of stopping.
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.byKey(const Key('recordButton')));
+    await tester.pump();
+    expect(fakeCamera.startVideoCapturingCalls, 1);
+
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(fakeCamera.stopVideoRecordingCalls, 0,
+        reason: 'with no ghost reference there is no auto-stop deadline');
+    expect(find.textContaining('Auto-stop in'), findsNothing);
+  });
 }
 
 class _FakeGrantedPermissionHandler extends PermissionHandlerPlatform {
@@ -200,6 +347,8 @@ class _FakeCameraPlatform extends CameraPlatform {
   // or throws against a real camera HAL.
   final Set<int> _openIds = {};
   final List<DeviceOrientation> lockedOrientations = [];
+  int startVideoCapturingCalls = 0;
+  int stopVideoRecordingCalls = 0;
 
   @override
   Future<void> lockCaptureOrientation(
@@ -245,15 +394,32 @@ class _FakeCameraPlatform extends CameraPlatform {
   Stream<DeviceOrientationChangedEvent> onDeviceOrientationChanged() =>
       const Stream.empty();
 
+  // CameraController.initialize() does `onCameraError(id).first` (unawaited,
+  // just to react to a later error if one ever arrives) — a Stream.empty()
+  // closes immediately without emitting, so `.first` throws "Bad state: No
+  // element" and fails the test even though nothing actually went wrong.
+  // A broadcast controller that's simply never closed keeps that `.first`
+  // future pending forever, same as a real error stream that hasn't fired.
+  final StreamController<CameraErrorEvent> _cameraErrorController =
+      StreamController<CameraErrorEvent>.broadcast();
+
+  @override
+  Stream<CameraErrorEvent> onCameraError(int cameraId) =>
+      _cameraErrorController.stream;
+
   @override
   Widget buildPreview(int cameraId) => const SizedBox();
 
   @override
-  Future<void> startVideoCapturing(VideoCaptureOptions options) async {}
+  Future<void> startVideoCapturing(VideoCaptureOptions options) async {
+    startVideoCapturingCalls++;
+  }
 
   @override
-  Future<XFile> stopVideoRecording(int cameraId) async =>
-      XFile('${Directory.systemTemp.path}/fake_recording.mp4');
+  Future<XFile> stopVideoRecording(int cameraId) async {
+    stopVideoRecordingCalls++;
+    return XFile('${Directory.systemTemp.path}/fake_recording.mp4');
+  }
 
   @override
   Future<void> dispose(int cameraId) async {

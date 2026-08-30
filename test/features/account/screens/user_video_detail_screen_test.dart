@@ -115,6 +115,61 @@ void main() {
     expect(deletedResultHolder.value, 'deleted');
   });
 
+  // Regression coverage: a failed delete used to show a hardcoded "Delete
+  // failed. Please try again." regardless of *why* it failed — swallowing
+  // DELETE /videos/{id}'s own documented, specific failure reasons (403
+  // "requires ownership", 400 "this is a challenge's reference video", a
+  // 404, ...). The snackbar must now surface the backend's actual message
+  // so a real failure is diagnosable instead of always looking identical.
+  testWidgets(
+      'a failed delete shows the backend\'s actual reason, not a generic '
+      'message', (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.method == 'DELETE' &&
+          request.url.path.endsWith('/videos/video-abc')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'fail',
+            'message': 'You do not have permission to delete this video.',
+          }),
+          403,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(
+      home: UserVideoDetailScreen(
+        videoNumber: 1,
+        auraPoints: 50,
+        videoUrl: 'https://example.com/video.m3u8',
+        videoId: 'video-abc',
+        status: 'rejected',
+      ),
+    ));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Delete'));
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    });
+    await tester.pump();
+
+    expect(
+        find.text('You do not have permission to delete this video.'),
+        findsOneWidget,
+        reason: 'the real backend reason must reach the user instead of '
+            'the old one-size-fits-all "Delete failed. Please try again."');
+    expect(find.text('Delete failed. Please try again.'), findsNothing);
+  });
+
   // Regression coverage: star/like used to read and write a Firestore
   // `submissions` document (`starredBy`/`starsCount` fields, plus an owner
   // `starsReceived` counter) that no longer exists post-migration — the

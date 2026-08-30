@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/brands_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import 'brand_profile_screen.dart';
 
 class BrandsListScreen extends StatefulWidget {
@@ -60,6 +61,7 @@ class _BrandsListScreenState extends State<BrandsListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       appBar: AppBar(
         backgroundColor: _bg,
         title: const Text('Brands'),

@@ -61,21 +61,28 @@ void main() {
 
     test('a missing status defaults to pending, not a crash', () {
       expect(submissionStatusFromApi({}), 'pending');
+      expect(submissionStatusFromApi({'status': null}), 'pending');
     });
 
-    test('the literal strings PASS/FAIL are never treated specially — the '
-        'API never sends them', () {
-      // Guards against reintroducing the old dead-code assumption: a
-      // 'PASS'/'FAIL' verdict with no recognised `status` must NOT be
-      // special-cased into 'approved'/'rejected'.
+    test('an unrecognised status maps to ai_error — never approved/rejected, '
+        'and never a silent pending', () {
+      // The documented enum is pending|scored|failed|flagged. Anything else
+      // is a server-side state the client can't interpret. It must not be
+      // special-cased into approved/rejected (the old dead PASS/FAIL
+      // assumption), and it must not fall through to 'pending' either — that
+      // left AuraSubmittedPopup polling forever and stranded the user on a
+      // blank PostScoreActionScreen. ai_error routes it to manual review and
+      // keeps the result UI's dismiss/exit path working.
       expect(
         submissionStatusFromApi({'status': 'PASS', 'verdict': 'PASS'}),
-        'pending',
+        'ai_error',
       );
       expect(
         submissionStatusFromApi({'status': 'FAIL', 'verdict': 'FAIL'}),
-        'pending',
+        'ai_error',
       );
+      expect(submissionStatusFromApi({'status': 'processing'}), 'ai_error');
+      expect(submissionStatusFromApi({'status': 'error'}), 'ai_error');
     });
   });
 

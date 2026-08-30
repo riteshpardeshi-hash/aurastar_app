@@ -199,24 +199,34 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
 
       if (!mounted) return;
-      if (action == 'retry') {
-        // CameraScreen pushed this screen (not a replacement), so it's
-        // still alive underneath — pop back to it for another take of the
-        // same challenge instead of pushing a fresh camera session.
-        Navigator.of(context).pop();
-        return;
+      switch (postSubmitDestination(action, submission)) {
+        case PostSubmitDestination.retake:
+          // CameraScreen pushed this screen (not a replacement), so it's
+          // still alive underneath — pop back to it for another take of the
+          // same challenge instead of pushing a fresh camera session.
+          Navigator.of(context).pop();
+          return;
+        case PostSubmitDestination.exitFlow:
+          // The AI couldn't score this attempt (status 'failed' → ai_error).
+          // There's no result to show and nothing to act on — the popup
+          // already told the user an admin will review it. Routing into
+          // PostScoreActionScreen (a results screen) would strand them there
+          // with no score card and no way back, so leave the capture flow.
+          _exitCaptureFlow();
+          return;
+        case PostSubmitDestination.showResult:
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PostScoreActionScreen(
+                submissionId: submissionId,
+                challengeTitle: widget.challengeTitle,
+                challengeId: widget.challengeId,
+                submissionData: submission,
+              ),
+            ),
+          );
       }
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PostScoreActionScreen(
-            submissionId: submissionId,
-            challengeTitle: widget.challengeTitle,
-            challengeId: widget.challengeId,
-            submissionData: submission,
-          ),
-        ),
-      );
     } catch (e, st) {
       debugPrint('[Upload] failed: $e\n$st');
       if (!mounted) return;
@@ -287,10 +297,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   // ── Build ───────────────────────────────────────────────────────────────────
 
-  void _giveUpOnScoring() {
-    // The scoring request keeps running server-side regardless — _doUpload's
-    // `if (!mounted) return;` guards make it safe to abandon here and let
-    // the result show up next time the user checks their profile.
+  // Leave the whole capture flow (this screen + the CameraScreen underneath)
+  // and land on the Dashboard. Used both when the user gives up on a slow
+  // score — the request keeps running server-side, and _doUpload's
+  // `if (!mounted) return;` guards make it safe to abandon; the result shows
+  // up next time they check their profile — and when the AI couldn't score
+  // the attempt at all (ai_error), which has no result screen to show.
+  void _exitCaptureFlow() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const Dashboard()),
       (route) => false,
@@ -302,7 +315,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     if (_uploadState == _UploadState.scoring) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: AuraSenseLoadingView(onGiveUp: _giveUpOnScoring),
+        body: AuraSenseLoadingView(onGiveUp: _exitCaptureFlow),
       );
     }
     return Scaffold(
@@ -717,3 +730,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
 }
 
 enum _UploadState { idle, uploading, scoring, failed, done }
+
+/// Where the capture flow goes once [AuraSubmittedPopup] closes.
+enum PostSubmitDestination { retake, exitFlow, showResult }
+
+/// Pure routing decision for after the result popup is dismissed.
+///
+/// - `retry` popup action → back to the camera for another take.
+/// - a submission the AI couldn't score (`status: failed` → `ai_error`, or any
+///   status outside the documented enum) → leave the flow: there's no result
+///   to show, and `PostScoreActionScreen` has no working exit for a scoreless
+///   submission (no score card, no CTA — only an easily-missed AppBar `×`).
+/// - anything else (a real `approved` / `rejected` verdict) → the result screen.
+PostSubmitDestination postSubmitDestination(
+  String? popupAction,
+  Map<String, dynamic> submission,
+) {
+  if (popupAction == 'retry') return PostSubmitDestination.retake;
+  if (submissionStatusFromApi(submission) == 'ai_error') {
+    return PostSubmitDestination.exitFlow;
+  }
+  return PostSubmitDestination.showResult;
+}

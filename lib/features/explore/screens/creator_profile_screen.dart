@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../core/services/video_prewarm_cache.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
@@ -48,6 +49,15 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       _followerCount = results[2] as int;
       _loading = false;
     });
+    // Prewarm just the first few grid videos — the ones visible without
+    // scrolling and most likely to be tapped first — not the whole list,
+    // to keep VideoPrewarmCache's small cap from thrashing. mixWithOthers
+    // defaults to false here to match VideoPlayerWidget's own default,
+    // since that's what _VideoViewerScreen plays these through.
+    for (final v in _videos.take(3)) {
+      final videoUrl = v['videoUrl'] as String? ?? '';
+      if (videoUrl.isNotEmpty) VideoPrewarmCache.prewarm(videoUrl);
+    }
   }
 
   @override
@@ -123,6 +133,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                           borderRadius: BorderRadius.circular(10),
                           child: VideoThumbnailWidget(
                             videoUrl: v['videoUrl'] as String,
+                            thumbnailUrl: v['thumbnailUrl'] as String?,
                             fit: BoxFit.cover,
                           ),
                         ),

@@ -16,6 +16,28 @@ class ApiClient {
   static const _kRefresh = 'api_refresh_token';
   static const _kUserId = 'api_user_id';
 
+  // Overridable so tests can simulate a platform channel that never
+  // responds, without waiting on a real hang.
+  @visibleForTesting
+  static Future<String?> Function(String key) secureRead =
+      (key) => _storage.read(key: key);
+
+  // Some devices' secure-storage backends (e.g. a corrupted Android
+  // Keystore entry after an OS update) have been observed to leave a read
+  // call awaiting forever with no error. isLoggedIn() is the very first
+  // thing main.dart's boot screen awaits before anything else can render,
+  // so an unbounded read there left affected users stuck there permanently
+  // with no path forward. Originally this timeout was applied only to
+  // isLoggedIn()'s own read, but the boot screen's post-login routing reads
+  // accessToken/userId again right after (via ApiClient().userId and
+  // getProfile()'s auth header) — on the same flaky device those hang too,
+  // reproducing the identical stuck-forever symptom one call later. All
+  // three getters below now share this bound so no secure-storage read in
+  // the boot path can hang indefinitely; worst case is being dropped back
+  // to the login screen (recoverable) instead of a dead app (not).
+  @visibleForTesting
+  static Duration storageTimeout = const Duration(seconds: 5);
+
   // Overridable so tests can substitute a package:http/testing.dart
   // MockClient instead of hitting the network.
   @visibleForTesting
@@ -39,9 +61,28 @@ class ApiClient {
   // the try/catch every service method already has.
   static const _timeout = Duration(seconds: 15);
 
-  Future<String?> get accessToken => _storage.read(key: _kAccess);
-  Future<String?> get refreshToken => _storage.read(key: _kRefresh);
-  Future<String?> get userId => _storage.read(key: _kUserId);
+  // A field report from a device with this exact corrupted-Keystore symptom
+  // showed the boot screen frozen on this read for 280+ seconds *with the
+  // Dart event loop provably still alive* (an unrelated on-screen ticker
+  // kept counting throughout) — proving the 5s .timeout() below never even
+  // fired. A Future.timeout() only guards against slowness; it does nothing
+  // if the underlying call throws instead of hanging, and a corrupted
+  // Android Keystore entry is documented to make FlutterSecureStorage.read()
+  // throw a PlatformException on some devices rather than hang. With no
+  // catch anywhere in the chain, that exception silently killed the boot
+  // sequence's async execution. Both failure modes (slow, and outright
+  // erroring) must be treated the same way: no token found.
+  Future<String?> _boundedRead(String key) async {
+    try {
+      return await secureRead(key).timeout(storageTimeout, onTimeout: () => null);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> get accessToken => _boundedRead(_kAccess);
+  Future<String?> get refreshToken => _boundedRead(_kRefresh);
+  Future<String?> get userId => _boundedRead(_kUserId);
 
   Future<void> saveSession({
     required String accessToken,
@@ -64,6 +105,9 @@ class ApiClient {
 
   Map<String, String> get _baseHeaders => const {
         'Content-Type': 'application/json',
+        // Bypass the ngrok free-tier interstitial HTML page so API calls
+        // get JSON back while baseUrl points at an ngrok tunnel. Ignored by
+        // any non-ngrok backend, so it's safe to leave set.
         'ngrok-skip-browser-warning': 'true',
       };
 
@@ -257,24 +301,41 @@ class ApiClient {
 
   Future<bool> _doRefresh() async {
     final rt = await refreshToken;
-    if (rt != null) {
-      try {
-        final res = await httpClient
-            .post(
-              _uri('/auth/refresh'),
-              headers: _baseHeaders,
-              body: jsonEncode({'refreshToken': rt}),
-            )
-            .timeout(_timeout);
-        if (res.statusCode == 200) {
-          final data =
-              (jsonDecode(res.body) as Map<String, dynamic>)['data'] as Map<String, dynamic>;
-          await _storage.write(key: _kAccess, value: data['accessToken'] as String);
-          await _storage.write(key: _kRefresh, value: data['refreshToken'] as String);
-          return true;
-        }
-      } catch (_) {}
+    if (rt == null) {
+      await clearSession();
+      _sessionExpired.add(null);
+      return false;
     }
+
+    http.Response res;
+    try {
+      res = await httpClient
+          .post(
+            _uri('/auth/refresh'),
+            headers: _baseHeaders,
+            body: jsonEncode({'refreshToken': rt}),
+          )
+          .timeout(_timeout);
+    } catch (_) {
+      // The refresh *request itself* failed to complete (timeout/socket
+      // error) — we never got a verdict from the backend on whether this
+      // refresh token is still valid. Treating that the same as a confirmed
+      // 401 (see below) used to wipe the session and force a logout on a
+      // plain connectivity blip. Fail this attempt only; the token is left
+      // intact so the next authed call can just try again.
+      return false;
+    }
+
+    if (res.statusCode == 200) {
+      final data =
+          (jsonDecode(res.body) as Map<String, dynamic>)['data'] as Map<String, dynamic>;
+      await _storage.write(key: _kAccess, value: data['accessToken'] as String);
+      await _storage.write(key: _kRefresh, value: data['refreshToken'] as String);
+      return true;
+    }
+
+    // The backend was actually reached and rejected the refresh token
+    // outright — this is a confirmed-dead session, not a network hiccup.
     await clearSession();
     _sessionExpired.add(null);
     return false;

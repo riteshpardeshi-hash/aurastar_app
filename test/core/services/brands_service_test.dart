@@ -52,6 +52,32 @@ void main() {
     expect(entry['displayName'], 'Acme Co');
   });
 
+  test(
+      'fetchBrand lifts the sibling isFollowing flag into the returned brand map',
+      () async {
+    // Live shape (verified 2026-08-27): the profile sits under `data.brand`
+    // and `isFollowing` is a *sibling* of it, not a field inside it.
+    // Regression: the old unwrap returned `data['brand']` verbatim, dropping
+    // the flag, so BrandProfileScreen always showed "Follow" after reload.
+    ApiClient.httpClient = MockClient((request) async {
+      return http.Response(
+        jsonEncode({
+          'status': 'success',
+          'data': {
+            'brand': {'_id': 'b1', 'displayName': 'Acme Co'},
+            'isFollowing': true,
+          },
+        }),
+        200,
+      );
+    });
+
+    final raw = await BrandsService().fetchBrand('b1');
+
+    expect(raw!['isFollowing'], isTrue);
+    expect(normaliseBrand(raw)['isFollowing'], isTrue);
+  });
+
   test('fetchBrandChallenges hits GET /brands/{id}/challenges', () async {
     String? requestedPath;
     ApiClient.httpClient = MockClient((request) async {

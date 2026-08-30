@@ -74,6 +74,52 @@ void main() {
         );
       }
       if (request.method == 'GET' &&
+          request.url.path.endsWith('/challenges/challenge-participated')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenge': {
+                '_id': 'challenge-participated',
+                'title': 'Participated Challenge',
+                'instructions': '',
+                'videoUrl': freshVideoUrl,
+                'thumbnailUrl': '',
+                'starsCount': 0,
+                'submissionsCount': 1,
+                'category': 'dance',
+                'difficulty': 'Easy',
+                'sourceType': 'Aura Original',
+                'creatorId': 'system',
+                'isActive': true,
+                'status': 'approved',
+              },
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path
+              .endsWith('/challenges/challenge-participated/submissions/me')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'submissions': [
+                {
+                  '_id': 'sub-1',
+                  'aiScore': 42,
+                  'status': 'scored',
+                  'verdict': 'GOOD',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
           request.url.path.endsWith('/challenges/challenge-pending')) {
         return http.Response(
           jsonEncode({
@@ -239,20 +285,204 @@ void main() {
 
     expect(find.text('Take this Challenge'), findsNothing);
   });
+
+  // Regression coverage: without `mixWithOthers: true`, ExoPlayer/
+  // AVAudioSession request *exclusive* audio focus, and their default
+  // focus-loss handling auto-pauses playback for any transient system sound
+  // (a notification tone, a keyboard click, an incoming-call banner, a
+  // Bluetooth chime, Assistant's hotword, ...) with no plugin-level signal
+  // to auto-resume afterward. The app never even leaves the foreground, so
+  // nothing else notices either — from the user's side, the reference video
+  // just "randomly pauses itself." This is a short instructional demo clip,
+  // not long-form content, so mixing with (rather than interrupting) other
+  // audio is the right trade-off.
+  testWidgets(
+      'the reference video player opts in to mixWithOthers so a transient '
+      'system sound cannot auto-pause it', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Test Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(fakeVideoPlayer.lastMixWithOthers, isTrue,
+        reason: 'without this, the OS is free to auto-pause the reference '
+            'video for any transient system sound, with no way for the app '
+            'to auto-resume it afterward');
+  });
+
+  // Coverage for prefetching: the reference video's player should be built
+  // and initialized in the background as soon as the screen loads, not
+  // deferred until the user taps the play button — otherwise tapping play
+  // still has to wait on the same load the prefetch was supposed to avoid.
+  testWidgets(
+      'the reference video player is created before the user ever taps '
+      'play, and tapping play reuses it instead of creating a second one',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Test Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(fakeVideoPlayer.createCount, 1,
+        reason: 'the player should already be built and initializing in '
+            'the background before the user does anything — this is the '
+            'whole point of prefetching');
+    expect(fakeVideoPlayer.lastUri, freshVideoUrl);
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(fakeVideoPlayer.createCount, 1,
+        reason: 'tapping play should reuse the prefetched player, not '
+            'build a second one from scratch');
+    expect(find.byIcon(Icons.close), findsOneWidget,
+        reason: 'fullscreen playback should have opened using the '
+            'prefetched, already-initialized player');
+  });
+
+  // Regression coverage: "See Leaderboard" is always visible on every
+  // challenge detail page, but tapping it before the viewer has actually
+  // taken *this* challenge must not open the board — _mySubmission (set from
+  // GET /challenges/{id}/submissions/me) is the only signal this screen has
+  // for that. challenge-1's /submissions/me isn't mocked here, so it falls
+  // through to the shared 500 catch-all, which fetchMySubmission swallows
+  // into null, i.e. "not participated."
+  testWidgets(
+      'the See Leaderboard button is always visible, but tapping it before '
+      'participating shows a locked notice instead of navigating',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Test Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('See Leaderboard'), findsOneWidget,
+        reason: 'the button itself is unconditional — every challenge '
+            'detail page shows it');
+
+    await tester.tap(find.text('See Leaderboard'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.text('Take this challenge at least once to see its leaderboard.'),
+      findsOneWidget,
+    );
+    expect(find.byType(AppBar), findsNothing,
+        reason: 'ChallengeDetail has no AppBar of its own — one appearing '
+            'here would mean it wrongly navigated to the leaderboard screen '
+            'despite no participation');
+  });
+
+  testWidgets(
+      'the See Leaderboard button appears once the viewer has taken the '
+      'challenge, and opens the per-challenge leaderboard on tap',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Participated Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-participated',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('See Leaderboard'), findsOneWidget);
+
+    await tester.tap(find.text('See Leaderboard'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Participated Challenge'),
+      ),
+      findsOneWidget,
+      reason: 'the leaderboard screen shows the challenge title in its '
+          'app bar (ChallengeDetail itself has no AppBar, so this can only '
+          'match the pushed ChallengeLeaderboardScreen)',
+    );
+    expect(find.text('No scores yet'), findsOneWidget,
+        reason: 'the submissions list is unmocked (500, swallowed to []) '
+            'for this challenge, so the board renders its empty state');
+  });
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   int _nextPlayerId = 0;
+  int createCount = 0;
   String? lastUri;
+  bool? lastMixWithOthers;
 
   @override
   Future<void> init() async {}
+
+  @override
+  Future<void> setMixWithOthers(bool mixWithOthers) async {
+    lastMixWithOthers = mixWithOthers;
+  }
 
   @override
   Future<void> dispose(int playerId) async {}
 
   @override
   Future<int?> createWithOptions(VideoCreationOptions options) async {
+    createCount++;
     lastUri = options.dataSource.uri;
     return _nextPlayerId++;
   }

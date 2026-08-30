@@ -29,7 +29,6 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   static const _purple = Color(0xFF7B2CBF);
-  static const _maxSeconds = 15;
 
   CameraController? _cam;
   int _camIndex = 0;
@@ -54,6 +53,26 @@ class _CameraScreenState extends State<CameraScreen>
   int _elapsed = 0; // seconds elapsed while recording
   Timer? _timer;
 
+  // Post-ghost auto-stop: once the ghost (reference) clip has played through
+  // once, the take is allowed to run at most this many more seconds before
+  // it stops itself. A submission much longer than the reference is just
+  // dead footage the scorer has to sit through.
+  static const _postGhostGraceSeconds = 10;
+  // Ghost clip length in whole seconds, captured when recording starts — and
+  // only when a ghost is actually playing this take. null ⇒ no ghost, so no
+  // auto-stop (the user stops manually, as before).
+  int? _ghostLengthSec;
+  // Non-null once the ghost has ended and the grace window is counting down;
+  // drives the "Auto-stop in Ns" hint on the recording pill.
+  int? _graceRemaining;
+
+  // Self-timer: 0 = off, else the chosen delay in seconds before recording
+  // actually starts.
+  static const _timerOptions = [0, 5, 10, 15];
+  int _timerSeconds = 0;
+  int? _countdown; // non-null while a countdown is in progress
+  Timer? _countdownTimer;
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +87,11 @@ class _CameraScreenState extends State<CameraScreen>
     if (state == AppLifecycleState.paused) {
       _timer?.cancel();
       _timer = null;
+      _ghostLengthSec = null;
+      _graceRemaining = null;
+      _countdownTimer?.cancel();
+      _countdownTimer = null;
+      _countdown = null;
       _ghostCtrl?.pause();
       // Invalidate any in-flight _initCamera call (e.g. one currently
       // awaiting the OS permission dialog, which is itself what triggers
@@ -184,7 +208,10 @@ class _CameraScreenState extends State<CameraScreen>
       return;
     }
     if (!mounted) return;
-    _ghostCtrl!.setLooping(true);
+    // Play once, not on a loop: the ghost visibly ending (frozen on its last
+    // frame) is the cue that the post-ghost grace window has started, and
+    // the auto-stop clock is measured from that single playthrough's length.
+    _ghostCtrl!.setLooping(false);
     // Muted: this is a visual overlay guide only — its audio must not bleed
     // into the mic recording of the user's own take.
     await _ghostCtrl!.setVolume(0.0);
@@ -195,9 +222,54 @@ class _CameraScreenState extends State<CameraScreen>
     if (_cam == null || !_cam!.value.isInitialized) return;
     if (_recording) {
       await _stopRecording();
+    } else if (_countdown != null) {
+      // Tapping again while the countdown is running cancels it — the
+      // record button doubles as the cancel affordance instead of adding a
+      // separate control.
+      _cancelCountdown();
+    } else if (_timerSeconds > 0) {
+      _startCountdown();
     } else {
       await _startRecording();
     }
+  }
+
+  void _cycleTimer() {
+    if (_recording || _countdown != null) return;
+    setState(() {
+      final i = _timerOptions.indexOf(_timerSeconds);
+      _timerSeconds = _timerOptions[(i + 1) % _timerOptions.length];
+    });
+  }
+
+  void _startCountdown() {
+    setState(() => _countdown = _timerSeconds);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      final next = (_countdown ?? 1) - 1;
+      if (next <= 0) {
+        t.cancel();
+        _countdownTimer = null;
+        setState(() => _countdown = null);
+        // The countdown can run for several seconds — re-check the camera
+        // is still around in case the app was backgrounded (which tears
+        // _cam down) or the screen popped mid-countdown.
+        if (mounted && _cam != null && _cam!.value.isInitialized) {
+          _startRecording();
+        }
+      } else {
+        setState(() => _countdown = next);
+      }
+    });
+  }
+
+  void _cancelCountdown() {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    setState(() => _countdown = null);
   }
 
   Future<void> _startRecording() async {
@@ -213,11 +285,20 @@ class _CameraScreenState extends State<CameraScreen>
       _ghostCtrl?.play();
     }
     _elapsed = 0;
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) async {
+    _graceRemaining = null;
+    // Arm the auto-stop only when a ghost is actually playing this take; its
+    // length is the clock the grace window is measured from. play() above
+    // rewinds a completed controller to the start, so a re-take gets the
+    // full window again.
+    final ghostLen = _ghostReady ? _ghostCtrl?.value.duration : null;
+    _ghostLengthSec = (ghostLen != null && ghostLen > Duration.zero)
+        ? (ghostLen.inMilliseconds / 1000).ceil()
+        : null;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       _elapsed++;
+      _tickAutoStop();
       setState(() {});
-      if (_elapsed >= _maxSeconds) await _stopRecording();
     });
     setState(() {
       _recording = true;
@@ -225,8 +306,27 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
+  // Runs once per second while recording. Before the ghost's length is up
+  // nothing happens; after it, we're inside the grace window and count it
+  // down; when it's exhausted the recording stops itself.
+  void _tickAutoStop() {
+    final len = _ghostLengthSec;
+    if (len == null) return;
+    final graceLeft = len + _postGhostGraceSeconds - _elapsed;
+    if (graceLeft <= 0) {
+      _graceRemaining = null;
+      _stopRecording();
+      return;
+    }
+    _graceRemaining =
+        _elapsed >= len ? graceLeft.clamp(1, _postGhostGraceSeconds) : null;
+  }
+
   Future<void> _stopRecording() async {
+    if (!_recording) return; // guard re-entry: auto-stop + a manual tap racing
     _timer?.cancel();
+    _ghostLengthSec = null;
+    _graceRemaining = null;
     _ghostCtrl?.pause();
     _ghostCtrl?.seekTo(Duration.zero);
     final file = await _cam!.stopVideoRecording();
@@ -239,7 +339,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _flipCamera() async {
-    if (cameras.length < 2 || _recording) return;
+    if (cameras.length < 2 || _recording || _countdown != null) return;
     await _initCamera(_camIndex == 0 ? 1 : 0);
   }
 
@@ -262,6 +362,7 @@ class _CameraScreenState extends State<CameraScreen>
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _timer?.cancel();
+    _countdownTimer?.cancel();
     _cam?.dispose();
     _ghostCtrl?.dispose();
     super.dispose();
@@ -270,8 +371,9 @@ class _CameraScreenState extends State<CameraScreen>
   // ── UI ──────────────────────────────────────────────────────────────────────
 
   String get _timeLabel {
-    final remaining = _maxSeconds - _elapsed;
-    return '${remaining}s';
+    final m = _elapsed ~/ 60;
+    final s = _elapsed % 60;
+    return m > 0 ? '${m}m ${s.toString().padLeft(2, '0')}s' : '${s}s';
   }
 
   @override
@@ -419,22 +521,11 @@ class _CameraScreenState extends State<CameraScreen>
               children: [
                 _iconBtn(Icons.arrow_back_rounded,
                     onTap: () => Navigator.pop(context)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    widget.challengeTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                    ),
-                  ),
-                ),
+                const Spacer(),
                 _iconBtn(Icons.flip_camera_ios_rounded,
-                    onTap: _recording ? null : _flipCamera),
+                    onTap: (_recording || _countdown != null)
+                        ? null
+                        : _flipCamera),
               ],
             ),
           ),
@@ -466,38 +557,56 @@ class _CameraScreenState extends State<CameraScreen>
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$_timeLabel left',
+                      _timeLabel,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '${_elapsed}s',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        fontSize: 13,
+                    if (_graceRemaining != null) ...[
+                      const SizedBox(width: 10),
+                      Text(
+                        'Auto-stop in ${_graceRemaining}s',
+                        style: const TextStyle(
+                          color: Color(0xFFFFB74D),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
 
-        // ── Progress bar (bottom of screen while recording) ─────────────────
-        if (_recording)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: LinearProgressIndicator(
-              value: _elapsed / _maxSeconds,
-              backgroundColor: Colors.white24,
-              valueColor: const AlwaysStoppedAnimation(_purple),
-              minHeight: 3,
+        // ── Countdown overlay ───────────────────────────────────────────────
+        // IgnorePointer lets the tap-to-cancel on the (still-visible, unchanged)
+        // record button underneath keep working during the countdown.
+        if (_countdown != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, anim) =>
+                        ScaleTransition(scale: anim, child: child),
+                    child: Text(
+                      '$_countdown',
+                      key: ValueKey(_countdown),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 110,
+                        fontWeight: FontWeight.w800,
+                        shadows: [Shadow(blurRadius: 24, color: Colors.black87)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 
@@ -508,142 +617,175 @@ class _CameraScreenState extends State<CameraScreen>
           right: 0,
           child: SafeArea(
             top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Ghost toggle
-                if (widget.referenceVideoUrl.isNotEmpty && !_recording)
-                  GestureDetector(
-                    onTap: _ghostFailed
-                        ? null
-                        : () => setState(() => _ghostOn = !_ghostOn),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 20),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: _ghostFailed
-                            ? Colors.black45
-                            : _ghostOn
-                                ? _purple.withValues(alpha: 0.30)
-                                : Colors.black45,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: _ghostFailed
-                              ? Colors.white24
-                              : _ghostOn
-                                  ? _purple
-                                  : Colors.white30,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _ghostFailed
-                                ? Icons.visibility_off_rounded
-                                : _ghostOn
-                                    ? Icons.visibility_rounded
-                                    : Icons.visibility_off_rounded,
-                            color: _ghostFailed ? Colors.white38 : Colors.white,
-                            size: 16,
+            child: SizedBox(
+              height: 76,
+              child: Stack(
+                children: [
+                  // Record button (+ Preview/Retake either side of it) is
+                  // always the one thing kept truly centered on screen —
+                  // Timer/Ghost are pinned to the edges independently below,
+                  // so neither one's width can push the record button off
+                  // center or collide with the other.
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Preview button (shown after recording)
+                        if (_videoFile != null && !_recording)
+                          _circleBtn(
+                            icon: Icons.play_arrow_rounded,
+                            size: 48,
+                            color: Colors.white24,
+                            onTap: _goToPreview,
+                            label: 'Preview',
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _ghostFailed
-                                ? 'Ghost unavailable'
-                                : 'Ghost ${_ghostOn ? 'ON' : 'OFF'}',
-                            style: TextStyle(
-                              color: _ghostFailed ? AppColors.textFaint : Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Preview button (shown after recording)
-                    if (_videoFile != null && !_recording)
-                      _circleBtn(
-                        icon: Icons.play_arrow_rounded,
-                        size: 48,
-                        color: Colors.white24,
-                        onTap: _goToPreview,
-                        label: 'Preview',
-                      ),
+                        if (_videoFile != null && !_recording)
+                          const SizedBox(width: 24),
 
-                    if (_videoFile != null && !_recording)
-                      const SizedBox(width: 24),
-
-                    // Record button
-                    GestureDetector(
-                      key: const Key('recordButton'),
-                      onTap: _toggleRecord,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 76,
-                        height: 76,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 3),
-                          color: _recording
-                              ? Colors.red
-                              : Colors.white.withValues(alpha: 0.15),
-                        ),
-                        child: Center(
+                        // Record button
+                        GestureDetector(
+                          key: const Key('recordButton'),
+                          onTap: _toggleRecord,
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            width: _recording ? 24 : 54,
-                            height: _recording ? 24 : 54,
+                            width: 76,
+                            height: 76,
                             decoration: BoxDecoration(
-                              color: _recording ? Colors.red : Colors.white,
-                              borderRadius: BorderRadius.circular(
-                                  _recording ? 6 : 54),
+                              shape: BoxShape.circle,
+                              border:
+                                  Border.all(color: Colors.white, width: 3),
+                              color: _recording
+                                  ? Colors.red
+                                  : Colors.white.withValues(alpha: 0.15),
+                            ),
+                            child: Center(
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: _recording ? 24 : 54,
+                                height: _recording ? 24 : 54,
+                                decoration: BoxDecoration(
+                                  color:
+                                      _recording ? Colors.red : Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                      _recording ? 6 : 54),
+                                ),
+                              ),
                             ),
                           ),
+                        ),
+
+                        if (_videoFile != null && !_recording)
+                          const SizedBox(width: 24),
+
+                        // Retake / placeholder
+                        if (_videoFile != null && !_recording)
+                          _circleBtn(
+                            icon: Icons.refresh_rounded,
+                            size: 48,
+                            color: Colors.white24,
+                            onTap: () => setState(() => _videoFile = null),
+                            label: 'Retake',
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Timer toggle — pinned to the left edge, independent of
+                  // the record-button row.
+                  if (!_recording && _videoFile == null)
+                    Positioned(
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _pillToggle(
+                          icon: Icons.timer_outlined,
+                          label: _timerSeconds > 0
+                              ? 'Timer ${_timerSeconds}s'
+                              : 'Timer Off',
+                          active: _timerSeconds > 0,
+                          onTap: _countdown != null ? null : _cycleTimer,
                         ),
                       ),
                     ),
 
-                    if (_videoFile != null && !_recording)
-                      const SizedBox(width: 24),
-
-                    // Retake / placeholder
-                    if (_videoFile != null && !_recording)
-                      _circleBtn(
-                        icon: Icons.refresh_rounded,
-                        size: 48,
-                        color: Colors.white24,
-                        onTap: () => setState(() => _videoFile = null),
-                        label: 'Retake',
+                  // Ghost toggle — pinned to the right edge, independent of
+                  // the record-button row.
+                  if (widget.referenceVideoUrl.isNotEmpty &&
+                      !_recording &&
+                      _videoFile == null)
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _pillToggle(
+                          icon: _ghostFailed
+                              ? Icons.visibility_off_rounded
+                              : _ghostOn
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_rounded,
+                          label: _ghostFailed
+                              ? 'Ghost unavailable'
+                              : 'Ghost ${_ghostOn ? 'ON' : 'OFF'}',
+                          active: !_ghostFailed && _ghostOn,
+                          faded: _ghostFailed,
+                          onTap: _ghostFailed
+                              ? null
+                              : () => setState(() => _ghostOn = !_ghostOn),
+                        ),
                       ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-                Text(
-                  _recording
-                      ? 'Copy the move as closely as you can'
-                      : _videoFile != null
-                          ? 'Tap Preview to review your video'
-                          : 'Hold to record • 15 seconds max',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.60),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),
       ],
     );
   }
+
+  Widget _pillToggle({
+    required IconData icon,
+    required String label,
+    required bool active,
+    required VoidCallback? onTap,
+    bool faded = false,
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: active ? _purple.withValues(alpha: 0.30) : Colors.black45,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: faded
+                  ? Colors.white24
+                  : active
+                      ? _purple
+                      : Colors.white30,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon,
+                  color: faded ? Colors.white38 : Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: faded ? AppColors.textFaint : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _iconBtn(IconData icon, {VoidCallback? onTap}) => GestureDetector(
         onTap: onTap,

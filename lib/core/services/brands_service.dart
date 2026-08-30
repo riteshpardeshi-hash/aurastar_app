@@ -29,7 +29,19 @@ class BrandsService {
       if (res['status'] != 'success') return null;
       final data = res['data'];
       if (data is Map<String, dynamic>) {
-        return (data['brand'] as Map<String, dynamic>?) ?? data;
+        final brand = data['brand'];
+        if (brand is Map<String, dynamic>) {
+          // The API nests the profile under `data.brand` but places the
+          // viewer-scoped `isFollowing` flag as a *sibling* of it, not
+          // inside it. Lift it in so normaliseBrand (and the profile
+          // screen's Follow button) can see the real follow state instead
+          // of always defaulting to false.
+          return {
+            ...brand,
+            if (data.containsKey('isFollowing')) 'isFollowing': data['isFollowing'],
+          };
+        }
+        return data;
       }
       return null;
     } catch (_) {

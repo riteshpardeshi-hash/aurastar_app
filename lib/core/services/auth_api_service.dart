@@ -67,6 +67,22 @@ class AuthApiService {
     return null;
   }
 
+  // Like [getProfile], but lets failures propagate instead of swallowing
+  // them to `null`. Most callers just want "no profile, move on" and
+  // already tolerate a null return, so this is additive rather than a
+  // change to getProfile()'s contract. Callers that need to show the user
+  // *why* the load failed (e.g. Dashboard's error screen, which used to
+  // always claim "no internet" even for unrelated backend errors) should
+  // use this and inspect the thrown error via humanizeError().
+  Future<Map<String, dynamic>> getProfileOrThrow() async {
+    final res = await _client.get('/profile', auth: true);
+    if (res['status'] == 'success') {
+      final data = res['data'] as Map<String, dynamic>;
+      return data['user'] as Map<String, dynamic>;
+    }
+    throw Exception(res['message'] as String? ?? 'Failed to load profile');
+  }
+
   Future<AuthResult> signInWithGoogle(String idToken) async {
     final res = await _client.post('/auth/google', {'idToken': idToken});
     if (res['status'] != 'success') {

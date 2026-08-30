@@ -10,39 +10,28 @@ class AuraScoreBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 1.2,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          'assets/images/homescreen/separate elements/coin icon.png',
+          height: 11,
+          fit: BoxFit.contain,
         ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 4),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(
-            'assets/images/homescreen/separate elements/coin icon.png',
-            height: 11,
-            fit: BoxFit.contain,
+        const SizedBox(width: 3),
+        Text(
+          '$score',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'SpaceGrotesk',
+            // No background pill behind this anymore — a shadow keeps the
+            // number legible over light thumbnails.
+            shadows: [Shadow(blurRadius: 6, color: Colors.black87)],
           ),
-          const SizedBox(width: 3),
-          Text(
-            '$score',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'SpaceGrotesk',
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

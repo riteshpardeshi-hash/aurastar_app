@@ -7,6 +7,7 @@ import '../explore/screens/creator_profile_screen.dart';
 import '../../../core/services/search_service.dart';
 import '../../shared/theme/app_text_styles.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/app_bottom_nav.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -265,6 +266,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

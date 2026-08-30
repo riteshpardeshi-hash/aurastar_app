@@ -7,6 +7,8 @@ import '../../core/services/challenges_service.dart';
 import '../../core/services/friends_service.dart';
 import '../../core/services/leaderboard_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/app_bottom_nav.dart';
+import '../../shared/widgets/challenge_leaderboard_row.dart';
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -38,6 +40,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.leaderboard),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
@@ -210,7 +213,7 @@ class _ApiBoardState extends State<_ApiBoard>
           children: [
             SizedBox(
               height: MediaQuery.of(context).size.height * 0.6,
-              child: _emptyState(
+              child: leaderboardEmptyState(
                 widget.emptyTitle,
                 widget.emptySubtitle,
                 action: widget.emptyAction,
@@ -259,12 +262,31 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   List<Map<String, dynamic>> _entries = [];
   bool _loadingBoard = false;
   String? _myId;
+  // GET /challenges/{id}/submissions (used below) never joins a display
+  // name for the submitter — see normaliseSubmissionEntry's doc comment —
+  // so every row falls back to "Player N". For the viewer's own row we
+  // don't need that guesswork: GET /profile already has their real name.
+  String? _myUsername;
 
   @override
   void initState() {
     super.initState();
     ApiClient().userId.then((id) {
       if (mounted) setState(() => _myId = id);
+    });
+    AuthApiService().getProfile().then((profile) {
+      if (!mounted || profile == null) return;
+      final name = (profile['displayName'] as String?)?.trim();
+      final username = (profile['username'] as String?)?.trim();
+      final profileName = (profile['profileName'] as String?)?.trim();
+      final resolved = (username?.isNotEmpty ?? false)
+          ? username
+          : (name?.isNotEmpty ?? false)
+              ? name
+              : profileName;
+      if (resolved?.isNotEmpty ?? false) {
+        setState(() => _myUsername = resolved);
+      }
     });
     _loadChallenges();
   }
@@ -359,7 +381,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
         // ── Scores for selected challenge ──────────────────────────────────────
         if (_challengeId == null)
           Expanded(
-            child: _emptyState(
+            child: leaderboardEmptyState(
               'Select a challenge',
               'Tap a chip above to see the board',
             ),
@@ -378,7 +400,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                 children: [
                   SizedBox(
                     height: MediaQuery.of(context).size.height * 0.5,
-                    child: _emptyState(
+                    child: leaderboardEmptyState(
                       'No scores yet',
                       'Be the first to attempt this challenge!',
                     ),
@@ -401,24 +423,26 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                       itemCount: _entries.length,
                       itemBuilder: (_, i) {
                         final e = _entries[i];
+                        final isMe = e['id'] == _myId;
                         final rawUsername = e['username'] as String;
                         final rawName = e['name'] as String;
                         final username =
-                            rawUsername.isNotEmpty
-                                ? rawUsername
-                                : rawName.isNotEmpty
-                                ? rawName
-                                : 'Player ${i + 1}';
-                        return _SubmissionRow(
+                            (isMe && (_myUsername?.isNotEmpty ?? false))
+                                ? _myUsername!
+                                : rawUsername.isNotEmpty
+                                    ? rawUsername
+                                    : rawName.isNotEmpty
+                                        ? rawName
+                                        : 'Player ${i + 1}';
+                        return ChallengeLeaderboardRow(
                           rank: i + 1,
                           username: username,
                           score: e['score'] as int,
                           stars: e['stars'] as int,
-                          isCurrentUser: e['id'] == _myId,
-                          onTap:
-                              e['id'] == _myId
-                                  ? null
-                                  : () => _showPrivateProfile(context),
+                          isCurrentUser: isMe,
+                          onTap: isMe
+                              ? null
+                              : () => showPrivateProfileNotice(context),
                         );
                       },
                     ),
@@ -515,7 +539,7 @@ class _EntryList extends StatelessWidget {
             onTap:
                 e['id'] == currentId
                     ? null
-                    : () => _showPrivateProfile(context),
+                    : () => showPrivateProfileNotice(context),
           );
         }
 
@@ -780,193 +804,6 @@ class _PlayerRow extends StatelessWidget {
   }
 }
 
-// ── Submission Row (Challenge board) ──────────────────────────────────────────
-
-class _SubmissionRow extends StatelessWidget {
-  final int rank;
-  final String username;
-  final int score;
-  final int stars;
-  final bool isCurrentUser;
-  final VoidCallback? onTap;
-
-  static const _accent = Color(0xFF7B2CBF);
-
-  const _SubmissionRow({
-    required this.rank,
-    required this.username,
-    required this.score,
-    required this.stars,
-    required this.isCurrentUser,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final medalColor =
-        rank == 1
-            ? const Color(0xFFFFD700)
-            : rank == 2
-            ? const Color(0xFFB8B8C8)
-            : rank == 3
-            ? const Color(0xFFCD7F32)
-            : null;
-
-    final card = Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color:
-            isCurrentUser
-                ? _accent.withValues(alpha: 0.13)
-                : const Color(0xFF0E0E1A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color:
-              isCurrentUser
-                  ? _accent.withValues(alpha: 0.50)
-                  : Colors.white.withValues(alpha: 0.07),
-          width: isCurrentUser ? 1.5 : 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          // Rank badge
-          SizedBox(
-            width: 38,
-            child:
-                rank <= 3
-                    ? Icon(
-                      Icons.emoji_events_rounded,
-                      color: medalColor,
-                      size: 24,
-                    )
-                    : Text(
-                      '$rank',
-                      style: TextStyle(
-                        color: isCurrentUser ? Colors.white : AppColors.textFaint,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                        fontFamily: 'SpaceGrotesk',
-                      ),
-                    ),
-          ),
-          // Avatar
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: _accent.withValues(alpha: 0.25),
-            child: Text(
-              username.isNotEmpty ? username[0].toUpperCase() : 'U',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Username
-          Expanded(
-            child: Text(
-              '@$username',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                fontFamily: 'SpaceGrotesk',
-              ),
-            ),
-          ),
-          // Stars
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, color: Colors.white38, size: 14),
-              const SizedBox(width: 3),
-              Text(
-                _fmt(stars),
-                style: const TextStyle(
-                  color: AppColors.textFaint,
-                  fontSize: 12,
-                  fontFamily: 'SpaceGrotesk',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 14),
-          // AI Score
-          Text(
-            '$score',
-            style: TextStyle(
-              color:
-                  medalColor ??
-                  (isCurrentUser ? const Color(0xFFD4A8FF) : Colors.white),
-              fontWeight: FontWeight.w900,
-              fontSize: 20,
-              fontFamily: 'SpaceGrotesk',
-            ),
-          ),
-          if (isCurrentUser) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'You',
-                style: TextStyle(
-                  color: Color(0xFFD4A8FF),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'SpaceGrotesk',
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-
-    if (onTap == null) return card;
-    return GestureDetector(onTap: onTap, child: card);
-  }
-
-  String _fmt(int n) {
-    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
-    return '$n';
-  }
-}
-
-// ── Shared helpers ─────────────────────────────────────────────────────────────
-
-void _showPrivateProfile(BuildContext context) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.lock_outline_rounded, color: Colors.white70, size: 16),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Player profiles are private — keep playing to climb the board!',
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E1E2E),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-}
-
 // ── Friends icon button (app bar) ────────────────────────────────────────────────
 
 class _FriendsIconButton extends StatefulWidget {
@@ -1036,41 +873,3 @@ class _FriendsIconButtonState extends State<_FriendsIconButton> {
   }
 }
 
-// ── Shared empty state ─────────────────────────────────────────────────────────
-
-Widget _emptyState(String title, String subtitle, {Widget? action}) => Center(
-  child: Column(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      const Icon(Icons.emoji_events_outlined, color: Colors.white24, size: 52),
-      const SizedBox(height: 14),
-      Text(
-        title,
-        style: const TextStyle(
-          color: AppColors.textFaint,
-          fontSize: 16,
-          fontFamily: 'SpaceGrotesk',
-        ),
-      ),
-      if (subtitle.isNotEmpty) ...[
-        const SizedBox(height: 6),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white24,
-              fontSize: 12,
-              fontFamily: 'SpaceGrotesk',
-            ),
-          ),
-        ),
-      ],
-      if (action != null) ...[
-        const SizedBox(height: 16),
-        action,
-      ],
-    ],
-  ),
-);

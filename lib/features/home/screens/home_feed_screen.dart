@@ -15,6 +15,7 @@ import '../../../features/explore/screens/explore_creators_screen.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/home_service.dart';
+import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/cdn_url.dart';
 import '../../../shared/widgets/notification_bell_button.dart';
 
@@ -139,6 +140,7 @@ Widget _challengeCard(
   String instructions,
   String videoUrl,
   int auraPoints, {
+  String? thumbnailUrl,
   String? badge,
   Color? badgeColor,
   dynamic endDate,
@@ -169,7 +171,10 @@ Widget _challengeCard(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+            VideoThumbnailWidget(
+                videoUrl: videoUrl,
+                thumbnailUrl: thumbnailUrl,
+                fit: BoxFit.cover),
             Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -281,6 +286,18 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
   Future<void> _load() async {
     final c = await HomeService().fetchFeatured();
     if (mounted) setState(() { _challenge = c; _loaded = true; });
+    // The most prominent card on the whole screen — almost certainly the
+    // first thing a user taps. Start loading its reference video now so
+    // ChallengeDetail's own player has nothing left to wait on when it
+    // opens. mixWithOthers:true matches what ChallengeDetail's player
+    // itself uses — see VideoPrewarmCache.prewarm's doc comment on why
+    // this has to match the eventual consumer.
+    final videoUrl = c != null
+        ? normaliseHomeSummary(c)['videoUrl'] as String? ?? ''
+        : '';
+    if (videoUrl.isNotEmpty) {
+      VideoPrewarmCache.prewarm(videoUrl, mixWithOthers: true);
+    }
   }
 
   @override
@@ -314,7 +331,9 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
             fit: StackFit.expand,
             children: [
               VideoThumbnailWidget(
-                  videoUrl: c['videoUrl'] as String, fit: BoxFit.cover),
+                  videoUrl: c['videoUrl'] as String,
+                  thumbnailUrl: c['thumbnailUrl'] as String?,
+                  fit: BoxFit.cover),
               Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -564,6 +583,15 @@ class _BrandChallengesShelfState extends State<_BrandChallengesShelf> {
       final docs = await HomeService().fetchBrandChallenges(limit: 10);
       final items = docs.map(normaliseHomeSummary).toList();
       if (mounted) setState(() => _items = items);
+      // Only the first card of this horizontal shelf — prewarming every
+      // card in every shelf would just thrash VideoPrewarmCache's small
+      // cap for videos the user hasn't scrolled to yet.
+      if (items.isNotEmpty) {
+        final videoUrl = items.first['videoUrl'] as String? ?? '';
+        if (videoUrl.isNotEmpty) {
+          VideoPrewarmCache.prewarm(videoUrl, mixWithOthers: true);
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _items = []);
     }
@@ -594,6 +622,7 @@ class _BrandChallengesShelfState extends State<_BrandChallengesShelf> {
               c['instructions'] as String,
               c['videoUrl'] as String,
               c['starsCount'] as int,
+              thumbnailUrl: c['thumbnailUrl'] as String?,
               badge: 'BRAND',
               badgeColor: const Color(0xFFE040FB),
             )).toList(),
@@ -846,6 +875,13 @@ class _TrendingShelfState extends State<_TrendingShelf> {
               ))
           .toList();
       if (mounted) setState(() => _items = items);
+      // Only the first card — see the same note on _BrandChallengesShelf.
+      if (items.isNotEmpty) {
+        final videoUrl = items.first.data['videoUrl'] as String? ?? '';
+        if (videoUrl.isNotEmpty) {
+          VideoPrewarmCache.prewarm(videoUrl, mixWithOthers: true);
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _items = []);
     }
@@ -878,6 +914,7 @@ class _TrendingShelfState extends State<_TrendingShelf> {
                 d['instructions'] as String? ?? '',
                 d['videoUrl'] as String? ?? '',
                 (d['starsCount'] as int?) ?? 0,
+                thumbnailUrl: d['thumbnailUrl'] as String?,
                 badge: item.count > 0 ? '${_fmt(item.count)} plays' : null,
                 badgeColor: const Color(0xFFFF6B35),
               );

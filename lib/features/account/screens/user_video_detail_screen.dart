@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/videos_service.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../video/widgets/video_player_widget.dart';
 
@@ -87,18 +88,30 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Video'),
+        backgroundColor: const Color(0xFF12102A),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Delete Video',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         // Any Aura-point reversal for a deleted video is computed and
         // applied server-side — the client doesn't assert a specific
         // amount here since it can't verify what the backend will do.
         content: const Text(
           'This will permanently remove your video. This action cannot be undone.',
+          style: TextStyle(color: AppColors.textMuted),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -109,11 +122,15 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     try {
       await VideosService().deleteVideo(widget.videoId);
       if (mounted) Navigator.pop(context, 'deleted');
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _deleting = false);
+      // DELETE /videos/{id}'s documented failure modes are all specific
+      // (403 "requires ownership", 400 "this is a challenge's reference
+      // video", 404) — surface the backend's actual reason instead of a
+      // generic "try again" that hides which one actually happened.
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Delete failed. Please try again.')),
+        SnackBar(content: Text(humanizeError(e))),
       );
     }
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 
@@ -22,6 +23,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   void initState() {
     super.initState();
+    // A caller that already knew this video was likely to be opened next
+    // (a list screen calling VideoPrewarmCache.prewarm ahead of the tap
+    // that lands here) may have already built and initialized this exact
+    // controller in the background — reuse it instead of starting a cold
+    // load, so playback can begin immediately.
+    final prewarmed = VideoPrewarmCache.take(widget.url);
+    if (prewarmed != null) {
+      _ctrl = prewarmed;
+      _ready = true;
+      _ctrl.play();
+      return;
+    }
     _ctrl = VideoPlayerController.networkUrl(
       Uri.parse(widget.url),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),

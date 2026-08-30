@@ -4,7 +4,7 @@ import '../../../core/services/auth_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import 'notification_preferences_screen.dart';
-import '../../splash/screens/splash_screen.dart';
+import '../../auth/screens/phone_auth_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
@@ -218,7 +218,7 @@ class SettingsScreen extends StatelessWidget {
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
       (route) => false,
     );
   }
@@ -259,7 +259,7 @@ class SettingsScreen extends StatelessWidget {
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const SplashScreen()),
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
       (route) => false,
     );
   }

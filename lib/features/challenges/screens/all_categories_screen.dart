@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_text_styles.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import 'category_challenges_screen.dart';
 
 const _categoryTileColor = Color(0xFF7B2CBF);
@@ -70,6 +71,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

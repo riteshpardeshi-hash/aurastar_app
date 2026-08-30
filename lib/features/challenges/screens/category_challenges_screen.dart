@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/aura_score_badge.dart';
 import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
@@ -117,6 +118,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(),
       body: Column(
         children: [
           _buildHeader(),
@@ -258,9 +260,6 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
     final videoUrl = c['videoUrl'] as String? ?? '';
     final thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
     final instructions = c['instructions'] as String? ?? '';
-    final starsCount = c['starsCount'] as int? ?? 0;
-    final difficulty = c['difficulty'] as String? ?? '';
-    final isSystem = (c['creatorId'] as String? ?? '') == 'system';
     final challengeId = c['id'] as String? ?? '';
 
     return GestureDetector(
@@ -315,56 +314,6 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                         ),
                       ),
                     ),
-                    // Source badge top-left
-                    Positioned(
-                      top: 7,
-                      left: 7,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: (isSystem ? _accent : const Color(0xFF4B6EF6))
-                              .withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          isSystem ? 'Original' : 'Brand',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Difficulty badge top-right
-                    if (difficulty.isNotEmpty)
-                      Positioned(
-                        top: 7,
-                        right: 7,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _difficultyColor(
-                              difficulty,
-                            ).withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            difficulty,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
                     // Category badge bottom-right (every card here shares
                     // this screen's single category, but we still surface
                     // it so this grid matches the other browse screens)
@@ -373,7 +322,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                       right: 7,
                       child: CategoryIconBadge(
                         categoryName: widget.categoryName,
-                        size: 24,
+                        size: 28,
                       ),
                     ),
                     const Positioned(
@@ -383,63 +332,6 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                     ),
                   ],
                 ),
-              ),
-            ),
-
-            // Info + CTA
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded, color: _accent, size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        '$starsCount',
-                        style: const TextStyle(
-                          color: Color(0xFFD4A8FF),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6B21E8), Color(0xFF7B2CBF)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'Try',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ),
             ),
           ],
@@ -494,21 +386,6 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  Color _difficultyColor(String d) {
-    switch (d.toLowerCase()) {
-      case 'easy':
-        return Colors.green;
-      case 'medium':
-        return Colors.orange;
-      case 'hard':
-        return Colors.deepOrange;
-      case 'pro':
-        return Colors.red;
-      default:
-        return Colors.white54;
-    }
-  }
 
   String _fmt(int n) {
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(n >= 10000 ? 0 : 1)}K';

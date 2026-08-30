@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -126,6 +128,44 @@ void main() {
     await sub.cancel();
   });
 
+  test(
+      'a network/timeout failure while calling /auth/refresh does not clear '
+      'the session or signal onSessionExpired', () async {
+    var sessionExpiredEvents = 0;
+    final sub = ApiClient.onSessionExpired.listen((_) {
+      sessionExpiredEvents++;
+    });
+
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/auth/refresh')) {
+        throw const SocketException('Network is unreachable');
+      }
+      return _unauthorized();
+    });
+
+    final client = ApiClient();
+    final result = await client.get('/profile', auth: true);
+
+    expect(result['status'], 'fail',
+        reason: 'the original 401 response is returned unchanged since the '
+            'refresh attempt itself never completed');
+
+    // The refresh token's validity was never actually determined — a
+    // connectivity blip during the refresh call must not be conflated with
+    // the backend confirming the token is dead.
+    expect(await client.accessToken, 'expired-access-token',
+        reason: 'session must survive a network blip during refresh — only '
+            'a confirmed 401 from the backend should clear it');
+    expect(await client.refreshToken, 'valid-refresh-token');
+
+    await Future<void>.delayed(Duration.zero);
+    expect(sessionExpiredEvents, 0,
+        reason: 'onSessionExpired must only fire when the backend actually '
+            'confirms the refresh token is dead, never on a network failure');
+
+    await sub.cancel();
+  });
+
   // Regression coverage: POST /challenges/{id}/submissions runs a
   // synchronous, multi-step AI pipeline server-side (content moderation +
   // face verification + rubric scoring, each its own Gemini call — see
@@ -172,5 +212,99 @@ void main() {
         reason: 'a response slower than the 15s default would still be '
             'legitimate under a longer per-call timeout, and must not be '
             'misreported as a network failure');
+  });
+
+  // Regression coverage: on some devices (e.g. a corrupted Android Keystore
+  // entry after an OS update), FlutterSecureStorage.read() has been
+  // observed to never resolve — no exception, it just never completes.
+  // main.dart's boot screen gates its very first render on isLoggedIn(), so
+  // an unbounded read there left affected users stuck there permanently
+  // with no way forward. isLoggedIn() must now time out and report "not
+  // logged in" (recoverable — the user just sees the login screen) instead
+  // of hanging forever (not recoverable).
+  //
+  // This used to be scoped to just isLoggedIn()'s own read, but the boot
+  // screen's post-login routing reads accessToken/userId again right after
+  // (ApiClient().userId, and getProfile()'s auth header) — on the same
+  // flaky device those hung too, reproducing the identical stuck-forever
+  // symptom one call later. accessToken/refreshToken/userId now share the
+  // same bound.
+  group('secure storage read timeout', () {
+    tearDown(() {
+      ApiClient.secureRead = (key) => const FlutterSecureStorage().read(key: key);
+      ApiClient.storageTimeout = const Duration(seconds: 5);
+    });
+
+    test(
+        'isLoggedIn() reports false instead of hanging when the secure '
+        'storage read never completes', () async {
+      ApiClient.secureRead = (_) => Completer<String?>().future; // never completes
+      ApiClient.storageTimeout = const Duration(milliseconds: 50);
+
+      final client = ApiClient();
+      await expectLater(
+        client.isLoggedIn().timeout(const Duration(seconds: 2)),
+        completion(isFalse),
+        reason: 'a 50ms storage timeout should resolve to false well before '
+            'the 2s test-level safety timeout, proving the read is actually '
+            'bounded rather than hanging',
+      );
+    });
+
+    test(
+        'accessToken/refreshToken/userId getters also time out instead of '
+        'hanging', () async {
+      ApiClient.secureRead = (_) => Completer<String?>().future; // never completes
+      ApiClient.storageTimeout = const Duration(milliseconds: 50);
+
+      final client = ApiClient();
+      await expectLater(
+        client.accessToken.timeout(const Duration(seconds: 2)),
+        completion(isNull),
+        reason: 'accessToken must be bounded too — it is read again right '
+            'after isLoggedIn() succeeds (e.g. inside getProfile()) on the '
+            'same device where the earlier read happened to succeed',
+      );
+      await expectLater(
+        client.refreshToken.timeout(const Duration(seconds: 2)),
+        completion(isNull),
+      );
+      await expectLater(
+        client.userId.timeout(const Duration(seconds: 2)),
+        completion(isNull),
+        reason: 'userId is read directly by the boot screen right after '
+            'isLoggedIn() to check the local setup-complete flag',
+      );
+    });
+
+    // Regression coverage: a field report from a device with a corrupted
+    // Android Keystore entry showed the boot screen frozen on this exact
+    // read for 280+ seconds — with an unrelated on-screen ticker proving the
+    // Dart event loop was alive the whole time, meaning the 5s .timeout()
+    // above never even fired. A Future.timeout() only guards against
+    // slowness; it does nothing if the call throws instead of hanging, and
+    // FlutterSecureStorage.read() is documented to throw a PlatformException
+    // (not hang) for a corrupted Keystore entry on some devices. With no
+    // catch anywhere in the chain, that silently killed main.dart's boot
+    // sequence. Both failure modes must resolve to "no token found".
+    test(
+        'accessToken/isLoggedIn() report no token instead of throwing when '
+        'the secure storage read errors outright', () async {
+      ApiClient.secureRead =
+          (_) => throw PlatformException(code: 'KeyStoreException');
+
+      final client = ApiClient();
+      await expectLater(
+        client.accessToken.timeout(const Duration(seconds: 2)),
+        completion(isNull),
+        reason: 'a thrown PlatformException must be swallowed to null, not '
+            'propagated — otherwise it kills the caller\'s async chain '
+            'silently, exactly like the field-reported stuck boot screen',
+      );
+      await expectLater(
+        client.isLoggedIn().timeout(const Duration(seconds: 2)),
+        completion(isFalse),
+      );
+    });
   });
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
@@ -24,7 +23,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   bool _otpSent      = false;
   bool _isLoading    = false;
-  String? _socialLoading;
 
   static const _accent = Color(0xFF9B30FF);
 
@@ -99,35 +97,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   void _onMainButton() {
-    if (_isLoading || _socialLoading != null) return;
+    if (_isLoading) return;
     _otpSent ? _verifyOtp() : _sendOtp();
-  }
-
-  // ── Google auth ──────────────────────────────────────────────────────────────
-
-  Future<void> _signInWithGoogle() async {
-    if (_socialLoading != null || _isLoading) return;
-    setState(() => _socialLoading = 'google');
-    try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) { setState(() => _socialLoading = null); return; }
-      final googleAuth = await googleUser.authentication;
-      final idToken = googleAuth.idToken;
-      if (idToken == null) throw Exception('No ID token');
-      final result = await _authService.signInWithGoogle(idToken);
-      if (!mounted) return;
-      _navigateAfterSocial(result.isNewUser, result.user);
-    } catch (_) {
-      if (mounted) {
-        setState(() => _socialLoading = null);
-        _snack('Google sign-in failed. Please try again.');
-      }
-    }
-  }
-
-  void _navigateAfterSocial(bool isNewUser, Map<String, dynamic> user) {
-    final isComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
-    _navigateTo(isComplete ? const Dashboard() : const ProfileSetupScreen());
   }
 
   void _navigateTo(Widget screen) {
@@ -148,7 +119,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final busy = _isLoading || _socialLoading != null;
+    final busy = _isLoading;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
@@ -273,63 +244,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                     SizedBox(height: size.height * 0.055),
 
-                    // ── Sign in with divider ───────────────────────────────────
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(
-                            color: _accent.withValues(alpha: 0.55),
-                            thickness: 1,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Text(
-                            'Sign in with',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.85),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Divider(
-                            color: _accent.withValues(alpha: 0.55),
-                            thickness: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // ── Social buttons ─────────────────────────────────────────
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _SocialImageButton(
-                          asset: 'assets/images/sign in/Asset 69.png',
-                          onTap: busy
-                              ? null
-                              : () => _snack('Facebook sign-in coming soon'),
-                        ),
-                        const SizedBox(width: 20),
-                        _SocialImageButton(
-                          asset: 'assets/images/sign in/Asset 70.png',
-                          onTap: busy
-                              ? null
-                              : () => _snack('Twitter sign-in coming soon'),
-                        ),
-                        const SizedBox(width: 20),
-                        _SocialImageButton(
-                          asset: 'assets/images/sign in/Asset 71.png',
-                          loading: _socialLoading == 'google',
-                          onTap: busy ? null : _signInWithGoogle,
-                        ),
-                      ],
-                    ),
-
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -390,49 +304,6 @@ class _SignInField extends StatelessWidget {
           border: InputBorder.none,
           contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
-      ),
-    );
-  }
-}
-
-// ── Social icon button ─────────────────────────────────────────────────────────
-
-class _SocialImageButton extends StatelessWidget {
-  final String asset;
-  final VoidCallback? onTap;
-  final bool loading;
-
-  const _SocialImageButton({
-    required this.asset,
-    this.onTap,
-    this.loading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 62,
-        height: 62,
-        child: loading
-            ? Container(
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF3D0080),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.2,
-                    ),
-                  ),
-                ),
-              )
-            : Image.asset(asset),
       ),
     );
   }

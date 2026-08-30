@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
 
@@ -40,6 +41,7 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,

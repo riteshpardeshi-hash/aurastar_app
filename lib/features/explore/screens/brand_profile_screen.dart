@@ -369,6 +369,7 @@ class _ChallengeCard extends StatelessWidget {
     final id = challenge['id'] as String;
     final title = challenge['title'] as String;
     final videoUrl = challenge['videoUrl'] as String;
+    final thumbnailUrl = challenge['thumbnailUrl'] as String?;
     final instructions = challenge['instructions'] as String;
     final stars = challenge['starsCount'] as int;
     final categoryId = challenge['category'] as String? ?? '';
@@ -392,7 +393,10 @@ class _ChallengeCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            VideoThumbnailWidget(videoUrl: videoUrl, fit: BoxFit.cover),
+            VideoThumbnailWidget(
+                videoUrl: videoUrl,
+                thumbnailUrl: thumbnailUrl,
+                fit: BoxFit.cover),
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -413,7 +417,7 @@ class _ChallengeCard extends StatelessWidget {
               left: 8,
               child: CategoryIconBadge(
                 categoryName: categoryNames[categoryId],
-                size: 24,
+                size: 28,
               ),
             ),
             Positioned(
