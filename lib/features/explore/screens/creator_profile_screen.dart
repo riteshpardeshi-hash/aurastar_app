@@ -206,12 +206,6 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                     _statColumn('${_videos.length}', 'Challenges'),
                     _statDivider(),
                     _statColumn(_formatCount(_followerCount), 'Followers'),
-                    _statDivider(),
-                    // No public "following count" endpoint exists yet for
-                    // another creator's profile (only the self-scoped
-                    // /creator/following) — placeholder until the backend
-                    // adds one.
-                    _statColumn('0', 'Following'),
                   ],
                 ),
               ),

@@ -90,15 +90,18 @@ class BrandsService {
 
   Future<bool> unfollowBrand(String id) => _setFollow(id, follow: false);
 
+  // See CreatorsService._setFollow — same fix, same reason: a swallowed
+  // failure here left FollowButton with no way to tell the user a follow
+  // didn't actually go through.
   Future<bool> _setFollow(String id, {required bool follow}) async {
-    try {
-      final res = follow
-          ? await _client.post('/brands/$id/follow', {}, auth: true)
-          : await _client.delete('/brands/$id/follow', auth: true);
-      return res['status'] == 'success';
-    } catch (_) {
-      return false;
+    final res = follow
+        ? await _client.post('/brands/$id/follow', {}, auth: true)
+        : await _client.delete('/brands/$id/follow', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ??
+          'Failed to ${follow ? 'follow' : 'unfollow'} brand');
     }
+    return true;
   }
 
   List<Map<String, dynamic>> _extractList(dynamic data) {

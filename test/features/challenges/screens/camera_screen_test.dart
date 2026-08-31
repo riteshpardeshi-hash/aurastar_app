@@ -86,6 +86,76 @@ void main() {
             'preceding play(), so nothing can slip in between them');
   });
 
+  // Regression coverage for "the reference video stops rendering frames and
+  // freezes": the ghost controller was built without mixWithOthers, so it
+  // requested *exclusive* audio focus. _startRecording() immediately calls
+  // CameraController.startVideoRecording (enableAudio: true), activating
+  // the mic's own audio session — exactly the kind of focus-taking event
+  // that silently auto-pauses an exclusive-focus player with no signal to
+  // ever resume it, which is what made the ghost overlay freeze right after
+  // recording started.
+  testWidgets(
+      'the ghost overlay controller requests mixWithOthers, so starting the '
+      'recording\'s own audio session cannot silently pause it',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+        referenceVideoUrl: 'https://example.com/reference.m3u8',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(fakeVideoPlayer.mixWithOthersCalls, contains(true),
+        reason: 'without mixWithOthers, starting the camera\'s own audio '
+            'session for recording can steal exclusive audio focus from '
+            'the ghost player and pause it with no way to auto-resume');
+  });
+
+  // Regression coverage: the ghost overlay's reference clip streams over the
+  // network (HLS can't be pre-cached locally — see VideoCacheService), so a
+  // slow connection can stall mid-playback. VideoPlayer itself gives no
+  // visual cue of that — it just silently holds the last decoded frame,
+  // which reads as "frozen/broken" rather than "buffering, will resume."
+  testWidgets(
+      'shows a buffering indicator over the ghost overlay while its stream stalls',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+        referenceVideoUrl: 'https://example.com/reference.m3u8',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    // Only one CircularProgressIndicator at this point: the "ghost not
+    // ready yet" spinner should already be gone once initialization settled.
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    fakeVideoPlayer.setBuffering(true);
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget,
+        reason: 'a mid-playback stall must show a buffering indicator, not '
+            'silently hold the last frame with no explanation');
+
+    fakeVideoPlayer.setBuffering(false);
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(find.byType(CircularProgressIndicator), findsNothing,
+        reason: 'the indicator must disappear again once buffering ends');
+  });
+
   // Regression coverage: _initCamera used to fire the old CameraController's
   // dispose() without awaiting it before constructing/initializing the new
   // one for the flipped lens. dispose() is an async native call that frees
@@ -295,6 +365,85 @@ void main() {
         reason: 'recording auto-stops once the 10s post-ghost grace elapses');
   });
 
+  // Regression coverage: when camera/mic permission is permanently denied,
+  // CameraScreen showed a dead-end "Camera access needed" screen with no
+  // back button anywhere on it (unlike the ready-camera view, which has its
+  // own top-bar back arrow) — the only way out was killing the app. The fix
+  // overlays a back button on the error/loading states too.
+  testWidgets(
+      'the permission-denied error screen has a working back button',
+      (tester) async {
+    PermissionHandlerPlatform.instance =
+        _FakePermanentlyDeniedPermissionHandler();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: ElevatedButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CameraScreen(
+                    challengeTitle: 'Test Challenge',
+                    challengeId: 'challenge-1',
+                  ),
+                ),
+              ),
+              child: const Text('Open camera'),
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Open camera'));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.text('Camera access needed'), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget,
+        reason: 'the permission-denied screen must offer a way back — '
+            'previously there was none, trapping the user');
+
+    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Camera access needed'), findsNothing,
+        reason: 'tapping back must actually pop the camera screen');
+    expect(find.text('Open camera'), findsOneWidget,
+        reason: 'should have returned to the screen that opened the camera');
+  });
+
+  testWidgets('the "Open Settings" button text is readable against its background',
+      (tester) async {
+    PermissionHandlerPlatform.instance =
+        _FakePermanentlyDeniedPermissionHandler();
+
+    await tester.pumpWidget(const MaterialApp(
+      home: CameraScreen(
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    final button = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Open Settings'));
+    final resolvedColor =
+        button.style?.foregroundColor?.resolve(<WidgetState>{});
+
+    expect(resolvedColor, Colors.white,
+        reason: 'the previous style left foregroundColor unset, so the '
+            'button text fell back to a near-invisible dark color on the '
+            'purple background');
+  });
+
   testWidgets(
       'recording never auto-stops when the challenge has no ghost reference',
       (tester) async {
@@ -329,6 +478,21 @@ class _FakeGrantedPermissionHandler extends PermissionHandlerPlatform {
   Future<Map<Permission, PermissionStatus>> requestPermissions(
       List<Permission> permissions) async {
     return {for (final p in permissions) p: PermissionStatus.granted};
+  }
+}
+
+class _FakePermanentlyDeniedPermissionHandler extends PermissionHandlerPlatform {
+  @override
+  Future<Map<Permission, PermissionStatus>> requestPermissions(
+      List<Permission> permissions) async {
+    return {
+      for (final p in permissions) p: PermissionStatus.permanentlyDenied
+    };
+  }
+
+  @override
+  Future<PermissionStatus> checkPermissionStatus(Permission permission) async {
+    return PermissionStatus.permanentlyDenied;
   }
 }
 
@@ -430,6 +594,13 @@ class _FakeCameraPlatform extends CameraPlatform {
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   int _nextPlayerId = 0;
   final List<String> callLog = [];
+  final List<bool> mixWithOthersCalls = [];
+  // Kept open (unlike the old Stream.value, which closed after one event)
+  // so a test can push further events — e.g. bufferingStart/bufferingEnd —
+  // at will after initialization. The "initialized" event added in
+  // createWithOptions is queued by the controller until videoEventsFor's
+  // caller subscribes, same as a real platform's event channel.
+  final Map<int, StreamController<VideoEvent>> _eventControllers = {};
 
   @override
   Future<void> init() async {}
@@ -439,16 +610,37 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
 
   @override
   Future<int?> createWithOptions(VideoCreationOptions options) async {
-    return _nextPlayerId++;
-  }
-
-  @override
-  Stream<VideoEvent> videoEventsFor(int playerId) {
-    return Stream.value(VideoEvent(
+    final id = _nextPlayerId++;
+    final controller = StreamController<VideoEvent>();
+    _eventControllers[id] = controller;
+    controller.add(VideoEvent(
       eventType: VideoEventType.initialized,
       duration: const Duration(seconds: 5),
       size: const Size(1080, 1920),
     ));
+    return id;
+  }
+
+  @override
+  Stream<VideoEvent> videoEventsFor(int playerId) {
+    return _eventControllers[playerId]!.stream;
+  }
+
+  /// Simulates the reference clip's network stream stalling (or resuming) —
+  /// pushes a bufferingStart/bufferingEnd event for the most recently
+  /// created player, which is always the ghost overlay's controller in
+  /// these tests (the only VideoPlayerController CameraScreen ever builds).
+  void setBuffering(bool buffering) {
+    final id = _nextPlayerId - 1;
+    _eventControllers[id]?.add(VideoEvent(
+      eventType:
+          buffering ? VideoEventType.bufferingStart : VideoEventType.bufferingEnd,
+    ));
+  }
+
+  @override
+  Future<void> setMixWithOthers(bool mixWithOthers) async {
+    mixWithOthersCalls.add(mixWithOthers);
   }
 
   @override

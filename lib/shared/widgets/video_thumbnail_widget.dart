@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -5,6 +6,36 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 /// Shared in-memory cache — keyed by video URL, value is extracted JPEG bytes.
 /// Accessible by dashboard's private widget so the two never re-extract the same video.
 final Map<String, Uint8List> videoThumbnailCache = {};
+
+/// `video_thumbnail` has no partial/byte-range fetch — extracting a frame
+/// always downloads the whole clip first. A screen with several thumbnails
+/// in view (e.g. Home's hero + brand videos + trending rows) used to fire
+/// all of those full-video downloads at once, so on a slow/throttled
+/// connection every single thumbnail crawled together instead of the
+/// visible ones finishing quickly one after another. Capping how many can
+/// run at once lets the front of the queue actually complete.
+class _ThumbnailExtractionGate {
+  _ThumbnailExtractionGate._();
+
+  static const _maxConcurrent = 3;
+  static int _active = 0;
+  static final List<Completer<void>> _waiting = [];
+
+  static Future<T> run<T>(Future<T> Function() task) async {
+    if (_active >= _maxConcurrent) {
+      final turn = Completer<void>();
+      _waiting.add(turn);
+      await turn.future;
+    }
+    _active++;
+    try {
+      return await task();
+    } finally {
+      _active--;
+      if (_waiting.isNotEmpty) _waiting.removeAt(0).complete();
+    }
+  }
+}
 
 class VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
@@ -96,21 +127,41 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
     // for a several-MB submission on a real mobile connection and was the
     // main cause of thumbnails silently falling back to the placeholder.
     try {
-      final data = await VideoThumbnail.thumbnailData(
-        video: widget.videoUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 480,
-        quality: 75,
-        timeMs: 500,
-      ).timeout(const Duration(seconds: 30));
-      debugPrint('[VideoThumbnail] ${widget.videoUrl} -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
-      if (data != null) videoThumbnailCache[widget.videoUrl] = data;
+      final data = await _extract(widget.videoUrl);
       if (mounted) setState(() { _bytes = data; _loading = false; });
     } catch (e, st) {
       debugPrint('[VideoThumbnail] FAILED for ${widget.videoUrl}: $e');
       debugPrint('$st');
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // A grid that repeats a small pool of videos (e.g. Dashboard's endless
+  // "More Challenges" grid, which cycles the same ~20 docs) can mount many
+  // widget instances for the exact same URL before any of them finishes —
+  // sharing one in-flight extraction keeps that from downloading the same
+  // clip N times over and eating N of the gate's limited concurrent slots.
+  static final Map<String, Future<Uint8List?>> _inFlight = {};
+
+  static Future<Uint8List?> _extract(String url) {
+    return _inFlight.putIfAbsent(url, () async {
+      try {
+        final data = await _ThumbnailExtractionGate.run(
+          () => VideoThumbnail.thumbnailData(
+            video: url,
+            imageFormat: ImageFormat.JPEG,
+            maxWidth: 480,
+            quality: 75,
+            timeMs: 500,
+          ).timeout(const Duration(seconds: 30)),
+        );
+        debugPrint('[VideoThumbnail] $url -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
+        if (data != null) videoThumbnailCache[url] = data;
+        return data;
+      } finally {
+        _inFlight.remove(url);
+      }
+    });
   }
 
   @override

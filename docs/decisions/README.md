@@ -28,3 +28,4 @@ because it's three pages long isn't documented, it's buried.
 | 001 | [Deduped concurrent token-refresh + global session-expiry redirect](001-auth-session-failure-handling.md) | Accepted |
 | 002 | [Upgrade `camera` to the CameraX Android backend to fix sideways recordings](002-android-portrait-video-recorded-sideways.md) | Accepted |
 | 003 | [Auto-stop a challenge recording 10s after the ghost clip ends](003-post-ghost-recording-auto-stop.md) | Accepted |
+| 004 | [Auto-read the login OTP from SMS (Message Central), drop the response echo](004-otp-sms-autofill-message-central.md) | Accepted |

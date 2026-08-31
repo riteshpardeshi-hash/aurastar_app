@@ -90,15 +90,21 @@ class CreatorsService {
 
   Future<bool> unfollowCreator(String id) => _setFollow(id, follow: false);
 
+  // Used to silently swallow every failure (network error, 409 "already
+  // following", auth issue) into `false` with no message, so FollowButton
+  // had nothing to show the user and a failed follow looked identical to a
+  // successful one from the UI. Throwing here (matching the rest of this
+  // file's create/delete calls, e.g. CreatorPageService.createPage) lets
+  // FollowButton surface the real reason instead.
   Future<bool> _setFollow(String id, {required bool follow}) async {
-    try {
-      final res = follow
-          ? await _client.post('/creators/$id/follow', {}, auth: true)
-          : await _client.delete('/creators/$id/follow', auth: true);
-      return res['status'] == 'success';
-    } catch (_) {
-      return false;
+    final res = follow
+        ? await _client.post('/creators/$id/follow', {}, auth: true)
+        : await _client.delete('/creators/$id/follow', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ??
+          'Failed to ${follow ? 'follow' : 'unfollow'} creator');
     }
+    return true;
   }
 
   List<Map<String, dynamic>> _extractList(dynamic data) {

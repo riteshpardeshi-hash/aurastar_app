@@ -17,6 +17,8 @@ import '../../../shared/widgets/avatar_widget.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import '../../creator/screens/creator_activity_screen.dart';
+import '../../creator/screens/become_creator_screen.dart';
+import '../../creator/screens/create_creator_profile_screen.dart';
 import 'user_video_detail_screen.dart';
 import 'all_videos_screen.dart';
 import 'settings_screen.dart';
@@ -585,6 +587,256 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // ── Become Creator banner (regular users only) ─────────────────────────────
+  Widget _buildBecomeCreatorBanner(BuildContext context, int points) {
+    return GestureDetector(
+      onTap: () {
+        if (points < 500) {
+          _showCreatorGateSheet(context, points);
+          return;
+        }
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1A0A30), Color(0xFF0A1630)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: _accent.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.star_rounded,
+                color: Color(0xFFD4A8FF),
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Become a Creator',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'ClashDisplay',
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    points >= 500
+                        ? 'You qualify! Launch challenges & grow your brand'
+                        : '${500 - points} Aura to unlock — keep playing!',
+                    style: TextStyle(
+                      color:
+                          points >= 500
+                              ? const Color(0xFFD4A8FF)
+                              : AppColors.textFaint,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              points >= 500
+                  ? Icons.arrow_forward_ios_rounded
+                  : Icons.lock_outline_rounded,
+              color: points >= 500 ? Colors.white54 : Colors.white24,
+              size: 15,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Become Creator button (standalone entry point) ─────────────────────────
+  Widget _buildBecomeCreatorButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: OutlinedButton.icon(
+          onPressed:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
+              ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: BorderSide(color: _accent.withValues(alpha: 0.5)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          icon: const Icon(
+            Icons.diamond_rounded,
+            color: Color(0xFFD4A8FF),
+            size: 18,
+          ),
+          label: const Text(
+            'Become a Creator',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'SpaceGrotesk',
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Creator gate modal ─────────────────────────────────────────────────────
+  void _showCreatorGateSheet(BuildContext context, int currentPoints) {
+    const required = 500;
+    final progress = (currentPoints / required).clamp(0.0, 1.0);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF100A20),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder:
+          (ctx) => Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 5,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _accent.withValues(alpha: 0.40),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.lock_outline_rounded,
+                    color: _accent,
+                    size: 30,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  '500 Aura Required',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'ClashDisplay',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 14,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Progress bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '$currentPoints Aura',
+                      style: const TextStyle(
+                        color: Color(0xFFD4A8FF),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      '${required - currentPoints.clamp(0, required)} to go',
+                      style: const TextStyle(
+                        color: AppColors.textFaint,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: progress),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder:
+                      (_, v, __) => ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: v,
+                          minHeight: 10,
+                          backgroundColor: Colors.white.withValues(alpha: 0.08),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF7B2CBF),
+                          ),
+                        ),
+                      ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: const Text('Keep Playing'),
+                  ),
+                ),
+              ],
+            ),
+          ),
     );
   }
 
@@ -1269,6 +1521,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               if (_isCreator) ...[
                 _buildCreatorToolsCard(context),
                 const SizedBox(height: 16),
+              ] else ...[
+                _buildBecomeCreatorBanner(context, totalRewards),
+                _buildBecomeCreatorButton(context),
               ],
               _buildAuraPointsCard(totalRewards, level, tierName),
               _buildStreakCard(),

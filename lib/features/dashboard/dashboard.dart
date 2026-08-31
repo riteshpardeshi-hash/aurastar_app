@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
@@ -7,12 +6,9 @@ import '../../core/services/connectivity_probe.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
-import '../../shared/widgets/video_thumbnail_widget.dart'
-    show videoThumbnailCache;
-import '../../shared/widgets/aura_score_badge.dart';
+import '../../shared/widgets/video_thumbnail_widget.dart';
 import '../../shared/widgets/category_icon_badge.dart';
 import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/wallet_screen.dart';
@@ -23,8 +19,6 @@ import '../explore/screens/brands_list_screen.dart';
 import '../explore/screens/creator_profile_screen.dart';
 import '../explore/screens/creator_videos_screen.dart';
 import '../../shared/widgets/notification_bell_button.dart';
-import '../creator/screens/create_creator_profile_screen.dart';
-import '../creator/screens/become_creator_screen.dart';
 import '../admin/screens/admin_screen.dart';
 import '../video/screens/preview_screen.dart';
 import '../../core/services/upload_queue_service.dart';
@@ -449,12 +443,6 @@ class _DashboardState extends State<Dashboard> {
                 SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                 SliverToBoxAdapter(child: _buildBannersSection(context)),
                 SliverToBoxAdapter(child: _buildTrendingSection(context)),
-                if (!isCreator && !isBrand && !isAdmin)
-                  SliverToBoxAdapter(
-                    child: _buildBecomeCreatorBanner(context, userId, points),
-                  ),
-                if (!isCreator && !isBrand && !isAdmin)
-                  SliverToBoxAdapter(child: _buildBecomeCreatorButton(context)),
                 if (isAdmin)
                   SliverToBoxAdapter(child: _buildAdminButton(context)),
                 SliverToBoxAdapter(child: _buildEndlessChallengesHeader(context)),
@@ -792,7 +780,7 @@ class _DashboardState extends State<Dashboard> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    _VideoThumbnailWidget(
+                    VideoThumbnailWidget(
                       videoUrl: videoUrl,
                       thumbnailUrl: thumbnailUrl,
                     ),
@@ -857,36 +845,6 @@ class _DashboardState extends State<Dashboard> {
                             categoryName: categoryNames[categoryId],
                           );
                         },
-                      ),
-                    ),
-                    // Content — bottom-left
-                    Positioned(
-                      left: 16,
-                      bottom: 16,
-                      right: 16,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Diamond pagination indicators
-                          Row(
-                            children: const [
-                              Icon(
-                                Icons.diamond_outlined,
-                                color: Colors.white54,
-                                size: 14,
-                              ),
-                              SizedBox(width: 6),
-                              Icon(
-                                Icons.diamond_outlined,
-                                color: Colors.white54,
-                                size: 14,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          const AuraScoreBadge(),
-                        ],
                       ),
                     ),
                   ],
@@ -983,7 +941,7 @@ class _DashboardState extends State<Dashboard> {
                                     child: Stack(
                                       fit: StackFit.expand,
                                       children: [
-                                        _VideoThumbnailWidget(
+                                        VideoThumbnailWidget(
                                           videoUrl: videoUrl,
                                           thumbnailUrl: thumbnailUrl,
                                         ),
@@ -994,11 +952,6 @@ class _DashboardState extends State<Dashboard> {
                                             categoryName:
                                                 categoryNames[categoryId],
                                           ),
-                                        ),
-                                        const Positioned(
-                                          bottom: 6,
-                                          left: 6,
-                                          child: AuraScoreBadge(),
                                         ),
                                         if (brandLogoUrl.isNotEmpty)
                                           Positioned(
@@ -1071,7 +1024,7 @@ class _DashboardState extends State<Dashboard> {
                                         child: Stack(
                                           fit: StackFit.expand,
                                           children: [
-                                            _VideoThumbnailWidget(
+                                            VideoThumbnailWidget(
                                               videoUrl: videoUrl,
                                               thumbnailUrl: thumbnailUrl,
                                             ),
@@ -1087,11 +1040,6 @@ class _DashboardState extends State<Dashboard> {
                                                 categoryName:
                                                     categoryNames[categoryId],
                                               ),
-                                            ),
-                                            const Positioned(
-                                              bottom: 8,
-                                              left: 8,
-                                              child: AuraScoreBadge(),
                                             ),
                                             if (brandLogoUrl.isNotEmpty)
                                               Positioned(
@@ -1208,7 +1156,7 @@ class _DashboardState extends State<Dashboard> {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
-                                    _VideoThumbnailWidget(
+                                    VideoThumbnailWidget(
                                       videoUrl: videoUrl,
                                       thumbnailUrl: thumbnailUrl,
                                     ),
@@ -1218,11 +1166,6 @@ class _DashboardState extends State<Dashboard> {
                                       child: CategoryIconBadge(
                                         categoryName: categoryNames[categoryId],
                                       ),
-                                    ),
-                                    const Positioned(
-                                      bottom: 6,
-                                      left: 6,
-                                      child: AuraScoreBadge(),
                                     ),
                                     if (brandLogoUrl.isNotEmpty)
                                       Positioned(
@@ -1482,260 +1425,6 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Become Creator banner (regular users only) ─────────────────────────────
-  Widget _buildBecomeCreatorBanner(
-    BuildContext context,
-    String userId,
-    int points,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        if (points < 500) {
-          _showCreatorGateSheet(context, points);
-          return;
-        }
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1A0A30), Color(0xFF0A1630)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.star_rounded,
-                color: Color(0xFFD4A8FF),
-                size: 26,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Become a Creator',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'ClashDisplay',
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    points >= 500
-                        ? 'You qualify! Launch challenges & grow your brand'
-                        : '${500 - points} Aura to unlock — keep playing!',
-                    style: TextStyle(
-                      color:
-                          points >= 500
-                              ? const Color(0xFFD4A8FF)
-                              : AppColors.textFaint,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              points >= 500
-                  ? Icons.arrow_forward_ios_rounded
-                  : Icons.lock_outline_rounded,
-              color: points >= 500 ? Colors.white54 : Colors.white24,
-              size: 15,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Become Creator button (standalone entry point) ─────────────────────────
-  Widget _buildBecomeCreatorButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed:
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
-              ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: BorderSide(color: _accent.withValues(alpha: 0.5)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          icon: const Icon(
-            Icons.diamond_rounded,
-            color: Color(0xFFD4A8FF),
-            size: 18,
-          ),
-          label: const Text(
-            'Become a Creator',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'SpaceGrotesk',
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Creator gate modal ─────────────────────────────────────────────────────
-  void _showCreatorGateSheet(BuildContext context, int currentPoints) {
-    const required = 500;
-    final progress = (currentPoints / required).clamp(0.0, 1.0);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF100A20),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (ctx) => Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _accent.withValues(alpha: 0.40),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.lock_outline_rounded,
-                    color: _accent,
-                    size: 30,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  '500 Aura Required',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Progress bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '$currentPoints Aura',
-                      style: const TextStyle(
-                        color: Color(0xFFD4A8FF),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      '${required - currentPoints.clamp(0, required)} to go',
-                      style: const TextStyle(
-                        color: AppColors.textFaint,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: progress),
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeOutCubic,
-                  builder:
-                      (_, v, __) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: v,
-                          minHeight: 10,
-                          backgroundColor: Colors.white.withValues(alpha: 0.08),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF7B2CBF),
-                          ),
-                        ),
-                      ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: const Text('Keep Playing'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-    );
-  }
-
   Widget _buildAdminButton(BuildContext context) {
     return GestureDetector(
       onTap:
@@ -1810,116 +1499,17 @@ class _EndlessChallengeCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _VideoThumbnailWidget(videoUrl: videoUrl, thumbnailUrl: thumbnailUrl),
+            VideoThumbnailWidget(videoUrl: videoUrl, thumbnailUrl: thumbnailUrl),
             Positioned(
               top: 6,
               left: 6,
               child: CategoryIconBadge(categoryName: categoryName),
-            ),
-            const Positioned(
-              bottom: 6,
-              left: 6,
-              child: AuraScoreBadge(),
             ),
           ],
         ),
       ),
     );
   }
-}
-
-class _VideoThumbnailWidget extends StatefulWidget {
-  final String videoUrl;
-  final String? thumbnailUrl; // direct image URL from backend
-
-  const _VideoThumbnailWidget({required this.videoUrl, this.thumbnailUrl});
-
-  @override
-  State<_VideoThumbnailWidget> createState() => _VideoThumbnailWidgetState();
-}
-
-class _VideoThumbnailWidgetState extends State<_VideoThumbnailWidget> {
-  Uint8List? _thumb;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void didUpdateWidget(_VideoThumbnailWidget old) {
-    super.didUpdateWidget(old);
-    if (old.videoUrl != widget.videoUrl ||
-        old.thumbnailUrl != widget.thumbnailUrl) {
-      setState(() => _thumb = null);
-      _load();
-    }
-  }
-
-  Future<void> _load() async {
-    // If backend provides a direct image URL, no video decode needed
-    if (widget.thumbnailUrl != null && widget.thumbnailUrl!.isNotEmpty) return;
-    if (widget.videoUrl.isEmpty) return;
-    if (videoThumbnailCache.containsKey(widget.videoUrl)) {
-      if (mounted)
-        setState(() => _thumb = videoThumbnailCache[widget.videoUrl]);
-      return;
-    }
-    // HLS manifests (.m3u8) can't be frame-extracted by video_thumbnail —
-    // skip straight to the placeholder instead of a wasted 12s timeout.
-    if (widget.videoUrl.toLowerCase().contains('.m3u8')) return;
-    try {
-      final bytes = await VideoThumbnail.thumbnailData(
-        video: widget.videoUrl,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 480,
-        quality: 75,
-      ).timeout(const Duration(seconds: 12));
-      debugPrint(
-        '[VideoThumbnail] ${widget.videoUrl} -> ${bytes == null ? "null (no frame extracted)" : "${bytes.length} bytes"}',
-      );
-      if (bytes != null) videoThumbnailCache[widget.videoUrl] = bytes;
-      if (mounted) setState(() => _thumb = bytes);
-    } catch (e, st) {
-      debugPrint('[VideoThumbnail] FAILED for ${widget.videoUrl}: $e');
-      debugPrint('$st');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final thumbUrl = widget.thumbnailUrl;
-    if (thumbUrl != null && thumbUrl.isNotEmpty) {
-      return Image.network(
-        thumbUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (_, __, ___) => _placeholder(),
-      );
-    }
-    if (_thumb != null) {
-      return Image.memory(
-        _thumb!,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-      );
-    }
-    return _placeholder();
-  }
-
-  Widget _placeholder() => Container(
-    color: const Color(0xFF0F0F1A),
-    child: const Center(
-      child: Icon(
-        Icons.play_circle_outline_rounded,
-        color: Colors.white12,
-        size: 40,
-      ),
-    ),
-  );
 }
 
 // ── Pending upload recovery banner ────────────────────────────────────────────

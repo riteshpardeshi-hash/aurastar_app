@@ -30,6 +30,9 @@ dependencies:
   http: ^1.2.0
   flutter_secure_storage: ^9.2.4
   permission_handler: ^11.3.1
+  # Android SMS Retriever + User Consent APIs — auto-reads the login OTP from
+  # the Message Central SMS (see docs/decisions/004). Android-only; no-ops on iOS.
+  smart_auth: ^3.2.0
   path_provider: ^2.1.5
   flutter_svg: ^2.0.10+1
 

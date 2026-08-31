@@ -197,9 +197,19 @@ class _CameraScreenState extends State<CameraScreen>
     // playback starts instantly instead of waiting on a network stream.
     final cachedPath = await VideoCacheService.ensureCached(widget.referenceVideoUrl);
     if (!mounted) return;
+    // mixWithOthers matters even more here than for ChallengeDetail's own
+    // preview player (see that screen's _buildController comment): without
+    // it, ExoPlayer/AVAudioSession request *exclusive* audio focus, and
+    // _startRecording() is about to call CameraController.startVideoRecording
+    // (enableAudio: true) — activating the mic's own audio session, which is
+    // exactly the kind of focus-taking event that silently auto-pauses an
+    // exclusive-focus player with no signal to resume it. That's what made
+    // the ghost overlay "freeze" almost immediately after recording started.
+    final options = VideoPlayerOptions(mixWithOthers: true);
     _ghostCtrl = cachedPath != null
-        ? VideoPlayerController.file(File(cachedPath))
-        : VideoPlayerController.networkUrl(Uri.parse(widget.referenceVideoUrl));
+        ? VideoPlayerController.file(File(cachedPath), videoPlayerOptions: options)
+        : VideoPlayerController.networkUrl(Uri.parse(widget.referenceVideoUrl),
+            videoPlayerOptions: options);
     try {
       await _ghostCtrl!.initialize();
     } catch (e) {
@@ -382,11 +392,32 @@ class _CameraScreenState extends State<CameraScreen>
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _cameraError
-          ? _buildCameraError()
-          : ready
-              ? _buildCamera()
-              : _buildLoading(),
+      body: Stack(
+        children: [
+          _cameraError
+              ? _buildCameraError()
+              : ready
+                  ? _buildCamera()
+                  : _buildLoading(),
+          // _buildCamera() has its own top bar (with a back button) once the
+          // camera is ready. Neither the error state (e.g. permission denied)
+          // nor the loading state has any way back otherwise, trapping the
+          // user on this screen — most visibly when permission is denied,
+          // since that state never resolves on its own.
+          if (!ready)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: _iconBtn(Icons.arrow_back_rounded,
+                      onTap: () => Navigator.pop(context)),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -431,7 +462,10 @@ class _CameraScreenState extends State<CameraScreen>
             if (_permissionPermanentlyDenied)
               ElevatedButton(
                 onPressed: openAppSettings,
-                style: ElevatedButton.styleFrom(backgroundColor: _purple),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                ),
                 child: const Text('Open Settings'),
               )
             else
@@ -493,13 +527,45 @@ class _CameraScreenState extends State<CameraScreen>
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: _ghostReady && _ghostCtrl != null
-                    ? FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: _ghostCtrl!.value.size.width,
-                          height: _ghostCtrl!.value.size.height,
-                          child: VideoPlayer(_ghostCtrl!),
-                        ),
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.cover,
+                            child: SizedBox(
+                              width: _ghostCtrl!.value.size.width,
+                              height: _ghostCtrl!.value.size.height,
+                              child: VideoPlayer(_ghostCtrl!),
+                            ),
+                          ),
+                          // The reference clip streams over the network —
+                          // HLS can't be pre-cached locally (see
+                          // VideoCacheService.ensureCached), so a slow
+                          // connection can stall mid-playback. VideoPlayer
+                          // gives no cue of that on its own; it just holds
+                          // the last decoded frame, which reads as "frozen/
+                          // broken" rather than "buffering, will resume."
+                          // Surfacing isBuffering makes clear which one it
+                          // actually is.
+                          ValueListenableBuilder<VideoPlayerValue>(
+                            valueListenable: _ghostCtrl!,
+                            builder: (_, value, __) => value.isBuffering
+                                ? Container(
+                                    color: Colors.black38,
+                                    child: const Center(
+                                      child: SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          color: _purple,
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
                       )
                     : const Center(
                         child: SizedBox(

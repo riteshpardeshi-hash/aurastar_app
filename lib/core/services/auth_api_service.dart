@@ -8,12 +8,29 @@ typedef AuthResult = ({
   bool isNewUser,
 });
 
+/// Outcome of a successful `/auth/otp/request`. The raw OTP is deliberately
+/// absent — as of ADR 079/081 the backend never returns it in any environment;
+/// Message Central delivers it by SMS and the client reads it via
+/// [SmsOtpAutofill] or the user types it.
+typedef OtpRequest = ({
+  /// Lifetime of the code in seconds (`otp.validity_seconds`, admin-tunable,
+  /// default 180). Used to bound the SMS-autofill wait / show an expiry hint.
+  int validitySeconds,
+
+  /// When the code stops being accepted, if the backend supplied it.
+  DateTime? expiresAt,
+});
+
 class AuthApiService {
   final _client = ApiClient();
 
-  /// Returns the OTP string when the backend sends it in the response (dev mode).
-  /// Returns null in production when OTP is delivered via SMS.
-  Future<String?> requestOtp({
+  /// Asks the backend to SMS a 6-digit OTP to [phone].
+  ///
+  /// Throws the backend's message on failure — notably a `429` when the resend
+  /// cooldown (`otp.resend_cooldown_seconds`, default 60s) or the sliding
+  /// request cap is hit; that message already reads as user-facing copy
+  /// ("Please wait 58 seconds before requesting another OTP.").
+  Future<OtpRequest> requestOtp({
     required String phone,
     required String countryCode,
   }) async {
@@ -24,8 +41,12 @@ class AuthApiService {
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to send OTP';
     }
-    final data = res['data'] as Map<String, dynamic>?;
-    return data?['otp'] as String?;
+    final data = res['data'] as Map<String, dynamic>? ?? const {};
+    final expiresRaw = data['expiresAt'] as String?;
+    return (
+      validitySeconds: (data['validitySeconds'] as num?)?.toInt() ?? 180,
+      expiresAt: expiresRaw == null ? null : DateTime.tryParse(expiresRaw),
+    );
   }
 
   Future<AuthResult> verifyOtp({

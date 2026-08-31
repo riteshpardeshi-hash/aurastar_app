@@ -656,7 +656,23 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                         AnimatedBuilder(
                           animation: _videoController!,
                           builder: (context, _) {
-                            if (_videoController!.value.isPlaying) {
+                            final value = _videoController!.value;
+                            // The reference clip streams over the network, so
+                            // a slow connection can stall mid-playback. Left
+                            // unhandled, VideoPlayer just silently holds the
+                            // last decoded frame — indistinguishable from a
+                            // genuine freeze — instead of showing anything
+                            // that tells the user it's still alive and will
+                            // resume once more data arrives.
+                            if (value.isBuffering) {
+                              return const Center(
+                                child: IgnorePointer(
+                                  child: CircularProgressIndicator(
+                                      color: _accent),
+                                ),
+                              );
+                            }
+                            if (value.isPlaying) {
                               return const SizedBox.shrink();
                             }
                             return Center(

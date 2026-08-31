@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -328,6 +329,58 @@ void main() {
             'to auto-resume it afterward');
   });
 
+  // Regression coverage for "video playback gets stuck with a loading
+  // spinner and does not play smoothly": the reference clip streams over the
+  // network (HLS can't be pre-cached locally), so a slow connection can
+  // stall mid-playback. VideoPlayer itself gives no visual cue of that on
+  // its own — it just silently holds the last decoded frame, which reads as
+  // frozen/broken rather than "buffering, will resume."
+  testWidgets(
+      'shows a buffering indicator over the fullscreen player while its '
+      'stream stalls, and hides it once buffering ends', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Test Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-1',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byType(CircularProgressIndicator), findsNothing,
+        reason: 'playback just started cleanly, nothing should be buffering '
+            'yet');
+
+    fakeVideoPlayer.setBuffering(true);
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget,
+        reason: 'a mid-playback stall must show a buffering indicator, not '
+            'silently hold the last frame with no explanation');
+
+    fakeVideoPlayer.setBuffering(false);
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(find.byType(CircularProgressIndicator), findsNothing,
+        reason: 'the indicator must disappear again once buffering ends');
+  });
+
   // Coverage for prefetching: the reference video's player should be built
   // and initialized in the background as soon as the screen loads, not
   // deferred until the user taps the play button — otherwise tapping play
@@ -468,6 +521,9 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   int createCount = 0;
   String? lastUri;
   bool? lastMixWithOthers;
+  // Kept open (unlike a one-shot Stream.value) so a test can push further
+  // events — e.g. bufferingStart/bufferingEnd — after initialization.
+  final Map<int, StreamController<VideoEvent>> _eventControllers = {};
 
   @override
   Future<void> init() async {}
@@ -484,15 +540,30 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   Future<int?> createWithOptions(VideoCreationOptions options) async {
     createCount++;
     lastUri = options.dataSource.uri;
-    return _nextPlayerId++;
+    final id = _nextPlayerId++;
+    final controller = StreamController<VideoEvent>();
+    _eventControllers[id] = controller;
+    controller.add(VideoEvent(
+      eventType: VideoEventType.initialized,
+      duration: const Duration(seconds: 5),
+      size: const Size(1080, 1920),
+    ));
+    return id;
   }
 
   @override
   Stream<VideoEvent> videoEventsFor(int playerId) {
-    return Stream.value(VideoEvent(
-      eventType: VideoEventType.initialized,
-      duration: const Duration(seconds: 5),
-      size: const Size(1080, 1920),
+    return _eventControllers[playerId]!.stream;
+  }
+
+  /// Simulates the reference clip's network stream stalling (or resuming)
+  /// for the most recently created player.
+  void setBuffering(bool buffering) {
+    final id = _nextPlayerId - 1;
+    _eventControllers[id]?.add(VideoEvent(
+      eventType: buffering
+          ? VideoEventType.bufferingStart
+          : VideoEventType.bufferingEnd,
     ));
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/creators_service.dart';
+import '../../core/utils/error_message.dart';
 import '../theme/app_colors.dart';
 
 class FollowButton extends StatefulWidget {
@@ -66,14 +67,21 @@ class _FollowButtonState extends State<FollowButton> {
     final wasFollowing = _following;
     final follow = widget.followFn ?? _service.followCreator;
     final unfollow = widget.unfollowFn ?? _service.unfollowCreator;
-    final ok = wasFollowing
-        ? await unfollow(widget.targetUserId)
-        : await follow(widget.targetUserId);
-    if (mounted) {
-      setState(() {
-        if (ok) _following = !wasFollowing;
-        _actioning = false;
-      });
+    try {
+      await (wasFollowing
+          ? unfollow(widget.targetUserId)
+          : follow(widget.targetUserId));
+      if (mounted) setState(() => _following = !wasFollowing);
+    } catch (e) {
+      // Previously this failure was swallowed entirely (the button just
+      // silently stayed on "Follow"), so a failed follow was indistinguishable
+      // from a successful one from the UI — surface the real reason instead.
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(humanizeError(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _actioning = false);
     }
   }
 
