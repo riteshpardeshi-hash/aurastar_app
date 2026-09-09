@@ -171,6 +171,26 @@ void main() {
       expect((jsonDecode(sent.single.body) as Map)['platform'],
           'instagram_story');
     });
+
+    // The share endpoint is live (backend ADR 086/089); the no-platform path
+    // is the common one (a plain OS share sheet) and must still POST.
+    test('POSTs even without a platform, and omits the platform key', () async {
+      ChallengeAnalyticsService().recordShare('chal-1');
+      await settle();
+
+      expect(sent, hasLength(1));
+      expect(sent.single.method, 'POST');
+      expect(sent.single.url.path, endsWith('/challenges/chal-1/share'));
+      expect(sent.single.headers['Authorization'], 'Bearer token');
+      expect((jsonDecode(sent.single.body) as Map).containsKey('platform'),
+          isFalse);
+    });
+
+    test('an empty challenge id sends nothing', () async {
+      ChallengeAnalyticsService().recordShare('');
+      await settle();
+      expect(sent, isEmpty);
+    });
   });
 
   group('failures never surface', () {

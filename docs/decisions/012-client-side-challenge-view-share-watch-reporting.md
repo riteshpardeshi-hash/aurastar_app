@@ -2,6 +2,16 @@
 
 Status: Accepted
 
+> **Update (2026-09-09).** The backend has since closed all three gaps this
+> ADR worked around (`docs/backend-issues/004` → RESOLVED). `POST
+> /challenges/{id}/share` is **live** (backend ADR 086) and writes both the
+> lifetime and daily share counters (backend ADR 089) — it is no longer a
+> deliberate 404 no-op. `views` is fed by `watch-progress` first-watch (+
+> campaign `impression`); `attemptCount` was already incremented. No client
+> change was needed — every call site written here now does real work. The
+> "does not exist yet" / "hits a 404" wording in **Decision** and
+> **Consequences** below is kept for historical context only.
+
 ## Problem
 
 Bug report: on the creator / brand analytics screens the **Views**, **Shares**
