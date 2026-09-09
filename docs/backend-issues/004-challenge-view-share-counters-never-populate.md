@@ -1,6 +1,7 @@
 # Backend gap: challenge Views / Shares / Attempts analytics counters never populate
 
 **Reported:** 2026-09-07
+**Status:** RESOLVED (2026-09-09) — backend shipped all three writers; see [Resolution](#resolution-2026-09-09).
 **Severity:** Medium — creator & brand analytics are unusable; every challenge reads 0 views / 0 shares / 0 attempts regardless of real activity
 **Affected endpoints:**
 - `GET /creator/challenges/{id}/analytics` (`views`, `shares`, `totalAttempts`)
@@ -111,3 +112,35 @@ as issue 002 (`GET /profile/videos` linkage).
    share it, and submit a scored entry.
 2. Open the creator analytics screen for that challenge.
 3. Views / Shares / Total Attempts all read `0` (expected: non-zero).
+
+## Resolution (2026-09-09)
+
+All three requested backend changes landed. Confirmed against the backend
+repo (`aura-arena/backend`) + the live OpenAPI spec.
+
+1. **`views` source — wired.** Backend ADR 086 added
+   `utilities/challengeStats.js#bumpChallengeStat`. The **first**
+   `watch-progress` ping per `(challenge, player)` bumps
+   `CreatorChallengeStats.views` (`watchAnalytics.service.js`). Backend
+   ADR 089 then added the matching `CreatorDailyAnalytics.views` +1 at the
+   same point, so the daily/trend series moves too. `POST /impression` also
+   bumps both, but **only for a challenge in an ACTIVE paid Campaign** — for
+   an organic challenge it's a no-op, so `watch-progress` is the organic
+   source. `ChallengeAnalyticsService` fires both; no client change needed.
+
+2. **Share endpoint — shipped**, exactly the proposed shape. `POST
+   /challenges/{id}/share` → `challenges.service.js#recordShare` bumps
+   `CreatorChallengeStats.shares` (ADR 086) and `CreatorDailyAnalytics.shares`
+   (ADR 089). The `platform` body field is accepted but **not yet stored** —
+   `CreatorShareAnalytics.platformDistribution` remains a backend follow-up.
+   `ChallengeAnalyticsService.recordShare` already sends it; nothing to change
+   client-side.
+
+3. **`attemptCount` — already incremented.** `creatorParticipants.service.js`
+   (`inc = { attemptCount: 1, totalAuraEarned }`) and the admin participant
+   aggregations read it. `totalAttempts` reflects real submissions.
+
+**Still open (backend follow-ups, not blocking this issue):**
+- Per-platform share attribution (`platformDistribution`).
+- Grid-feed scroll impressions on the client (needs a visibility detector);
+  opening a challenge still records a view via `ChallengeDetail`.

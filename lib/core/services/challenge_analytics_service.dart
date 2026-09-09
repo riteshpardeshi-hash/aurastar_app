@@ -12,15 +12,22 @@ import 'api_client.dart';
 /// `creator_challenge_status_screen`, `creator_insights_screen`) were
 /// permanently 0 no matter how much real activity a challenge got, because
 /// nothing in the app ever told the backend a view or a share had happened.
-/// Per the live OpenAPI spec these counters are fed purely by events the
-/// mobile client is expected to fire:
+/// The three events, and what each one feeds server-side (backend ADR 086 /
+/// ADR 089, confirmed against the live OpenAPI spec):
 ///
 /// * `POST /challenges/{id}/impression` — "Fired by the mobile app when this
-///   Challenge becomes visible inside the feed."
+///   Challenge becomes visible inside the feed." Consumes a paid Campaign's
+///   impression pool; it bumps `CreatorChallengeStats.views` **only for a
+///   challenge in an ACTIVE campaign** — a no-op for an organic challenge.
 /// * `POST /challenges/{id}/watch-progress` — "Fired repeatedly by the
-///   mobile app while a challenge's video is being watched."
+///   mobile app while a challenge's video is being watched." The **first**
+///   ping per (challenge, player) bumps `CreatorChallengeStats.views` and
+///   `CreatorDailyAnalytics.views` — this is the organic-view source.
+/// * `POST /challenges/{id}/share` — bumps `CreatorChallengeStats.shares`
+///   and `CreatorDailyAnalytics.shares`.
 ///
-/// See ADR 012 and `docs/backend-issues/004-challenge-view-share-counters-never-populate.md`.
+/// See ADR 012 and `docs/backend-issues/004-challenge-view-share-counters-never-populate.md`
+/// (resolved — the backend shipped all three writers in its ADR 086 / 089).
 ///
 /// Every method here is fire-and-forget: it never throws, never blocks the
 /// caller, and silently no-ops on any network / parse failure. Analytics
@@ -112,14 +119,15 @@ class ChallengeAnalyticsService {
 
   /// Fire when the user shares a challenge from anywhere in the app.
   ///
-  /// NOTE: `POST /challenges/{id}/share` is **not in the backend spec yet**.
-  /// There is currently no share-event ingestion anywhere in the API, which
-  /// is precisely why the creator analytics `shares` counter is always 0
-  /// (the spec's own words: share-rate "Always 0 — no data source exists to
-  /// compute this honestly"). This call is a deliberate no-op — it hits a
-  /// 404 that [_safe] swallows — until the backend adds the endpoint. Wiring
-  /// it at every share site now means the client side is finished the moment
-  /// that endpoint lands. See
+  /// `POST /challenges/{id}/share` is live (backend ADR 086): it bumps the
+  /// lifetime `CreatorChallengeStats.shares` counter and — since backend
+  /// ADR 089 — the per-day `CreatorDailyAnalytics.shares` bucket the trend
+  /// charts read. Raw count, no per-user dedup (same as views).
+  ///
+  /// `platform`, when given, is sent as a `platform` body field. The backend
+  /// currently ignores it (per-platform `CreatorShareAnalytics.platformDistribution`
+  /// is a tracked backend follow-up); keep passing it so the client is done
+  /// the moment that lands. See
   /// `docs/backend-issues/004-challenge-view-share-counters-never-populate.md`.
   void recordShare(String challengeId, {String? platform}) {
     if (challengeId.isEmpty) return;
