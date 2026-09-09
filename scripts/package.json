@@ -1,0 +1,9 @@
+{
+  "name": "aura-app-scripts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Operator scripts for aura_app (admin claims, etc).",
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
