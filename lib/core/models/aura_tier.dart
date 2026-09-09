@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 // e.g. "Myntra — 10% Off — RISE10") was removed — it was entirely
 // client-side placeholder data never backed by any API, real or otherwise.
 // Actual earned rewards now come from GET /profile/rewards
-// (AuthApiService.fetchRewards) and are shown in MyAccountScreen's rewards
-// section — they aren't organized by level tier, so there's no per-tier
-// reward list to attach here anymore.
+// (RewardsService.fetchRewards) and are shown on RewardsScreen — they aren't
+// organized by level tier, so there's no per-tier reward list to attach here
+// anymore.
 class AuraTier {
   final int minLevel;
   final String name;
@@ -70,11 +70,17 @@ AuraTier? nextAuraTier(int level) {
 
 // Maps the backend's authoritative `tier` string (GET /profile's `tier`
 // field: rookie/rising/viral/elite/sigma) to the matching AuraTier, instead
-// of recomputing a tier from a locally-guessed level formula. Falls back to
-// Rookie for an unrecognized or missing value.
-AuraTier auraTierForName(String? tierName) {
-  return auraTiers.firstWhere(
-    (t) => t.name.toLowerCase() == (tierName ?? '').toLowerCase(),
-    orElse: () => auraTiers.first,
-  );
+// of recomputing a tier from a locally-guessed level formula.
+//
+// When the backend sends no usable tier (null, or a value outside the enum),
+// fall back to [auraTierForLevel] if the caller passes the account's [level],
+// so the badge stays consistent with the level number shown next to it —
+// rather than blindly showing "Rookie" beside "Level 516". Only when no level
+// is available either does it settle on Rookie. See ADR 010.
+AuraTier auraTierForName(String? tierName, {int? level}) {
+  final needle = (tierName ?? '').toLowerCase();
+  for (final t in auraTiers) {
+    if (t.name.toLowerCase() == needle) return t;
+  }
+  return level != null ? auraTierForLevel(level) : auraTiers.first;
 }

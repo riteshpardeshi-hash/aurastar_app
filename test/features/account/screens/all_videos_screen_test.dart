@@ -1,12 +1,16 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/videos_service.dart';
+import 'package:aura_app/core/utils/asset_cache_key.dart';
 import 'package:aura_app/features/account/screens/all_videos_screen.dart';
 
 // Regression coverage: GET /profile/videos now returns a working
@@ -33,6 +37,8 @@ void main() {
       'api_refresh_token': 'test-refresh-token',
       'api_user_id': 'user-1',
     });
+    SharedPreferences.setMockInitialValues({});
+    VideosService.resetLocallyDeletedForTest();
 
     ApiClient.httpClient = MockClient((request) async {
       if (request.method == 'GET' &&
@@ -82,22 +88,20 @@ void main() {
     }
 
     expect(
-      find.byWidgetPredicate((w) {
-        if (w is! Image) return false;
-        // VideoThumbnailWidget passes cacheWidth to Image.network, which
-        // wraps the NetworkImage in a ResizeImage — unwrap it to compare.
-        final provider = w.image;
-        final inner = provider is ResizeImage ? provider.imageProvider : provider;
-        return inner is NetworkImage && inner.url == thumbnailUrl;
-      }),
+      find.byWidgetPredicate((w) =>
+          w is CachedNetworkImage &&
+          w.imageUrl == thumbnailUrl &&
+          // Cache is keyed on the unsigned URL so a re-signed variant is a
+          // hit, not a re-download (ADR 014).
+          w.cacheKey == assetCacheKey(thumbnailUrl)),
       findsOneWidget,
       reason: 'thumbnailUrl from GET /profile/videos must reach '
           'VideoThumbnailWidget so it can render the real thumbnail via '
-          'Image.network instead of extracting a frame from the (HLS, '
-          'unextractable) videoUrl. (Whether that Image.network request '
-          'actually succeeds is irrelevant here and untestable in '
-          '`flutter test` — it blocks all real dart:io HttpClient traffic — '
-          'the fix is about the thumbnailUrl being wired through at all.)',
+          'CachedNetworkImage instead of extracting a frame from the (HLS, '
+          'unextractable) videoUrl. (Whether that image request actually '
+          'succeeds is irrelevant here and untestable in `flutter test` — '
+          'it blocks all real dart:io HttpClient traffic — the fix is about '
+          'the thumbnailUrl being wired through at all.)',
     );
   });
 }

@@ -3,7 +3,6 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/services/brands_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -25,7 +24,6 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
 
   Map<String, dynamic>? _brand;
   List<Map<String, dynamic>> _challenges = [];
-  Map<String, String> _categoryNames = {};
   int _followerCount = 0;
   bool _loading = true;
 
@@ -40,7 +38,6 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
       _service.fetchBrand(widget.brandId),
       _service.fetchBrandChallenges(widget.brandId, limit: 30),
       _service.fetchBrandFollowerCount(widget.brandId),
-      ChallengesService().fetchCategoryNameMap(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -51,13 +48,34 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
               .map(normaliseChallenge)
               .toList();
       _followerCount = results[2] as int;
-      _categoryNames = results[3] as Map<String, String>;
       _loading = false;
     });
   }
 
-  void _share(String displayName) {
-    Share.share('Check out $displayName on Aura Arena!');
+  void _share(Map<String, dynamic> brand) {
+    final displayName = brand['displayName'] as String;
+    final bio = (brand['bio'] as String).trim();
+    final website = (brand['website'] as String).trim();
+    final challengeCount = _challenges.length;
+
+    final msg = StringBuffer('Check out $displayName on Aura Arena 🌟');
+    if (bio.isNotEmpty) msg.write('\n\n$bio');
+
+    final stats = <String>[];
+    if (_followerCount > 0) {
+      stats.add('${_formatCount(_followerCount)} followers');
+    }
+    if (challengeCount > 0) {
+      stats.add(
+        '$challengeCount ${challengeCount == 1 ? 'challenge' : 'challenges'} '
+        'to take on',
+      );
+    }
+    if (stats.isNotEmpty) msg.write('\n\n${stats.join(' · ')}');
+
+    if (website.isNotEmpty) msg.write('\n\n👉 $website');
+
+    Share.share(msg.toString());
   }
 
   @override
@@ -103,7 +121,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                 const Spacer(),
                 _circleIconButton(
                   Icons.ios_share_rounded,
-                  () => _share(displayName),
+                  () => _share(brand),
                 ),
               ],
             ),
@@ -149,10 +167,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                         ),
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final c = _challenges[index];
-                      return _ChallengeCard(
-                        challenge: c,
-                        categoryNames: _categoryNames,
-                      );
+                      return _ChallengeCard(challenge: c);
                     }, childCount: _challenges.length),
                   ),
         ),
@@ -358,11 +373,10 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
 
 class _ChallengeCard extends StatelessWidget {
   final Map<String, dynamic> challenge;
-  final Map<String, String> categoryNames;
 
   static const _accent = Color(0xFF7B2CBF);
 
-  const _ChallengeCard({required this.challenge, required this.categoryNames});
+  const _ChallengeCard({required this.challenge});
 
   @override
   Widget build(BuildContext context) {
@@ -372,7 +386,6 @@ class _ChallengeCard extends StatelessWidget {
     final thumbnailUrl = challenge['thumbnailUrl'] as String?;
     final instructions = challenge['instructions'] as String;
     final stars = challenge['starsCount'] as int;
-    final categoryId = challenge['category'] as String? ?? '';
 
     return GestureDetector(
       onTap:
@@ -410,14 +423,6 @@ class _ChallengeCard extends StatelessWidget {
                     ],
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: CategoryIconBadge(
-                categoryName: categoryNames[categoryId],
-                size: 28,
               ),
             ),
             Positioned(

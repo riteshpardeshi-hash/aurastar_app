@@ -28,6 +28,10 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
   }
 
   Future<void> _load() async {
+    // Restores ids deleted on earlier launches — /profile/videos still lists
+    // them, so without this a cold start un-hides every previously deleted
+    // video.
+    await VideosService.hydrate();
     final data = await AuthApiService().fetchMyVideos(limit: 100);
     if (mounted) {
       setState(() {
@@ -54,6 +58,10 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
     // AI scoring, which is nested under `submission`. Fall back to `s`
     // itself for a video with no submission yet (still pending).
     final submission = s['submission'] as Map<String, dynamic>? ?? s;
+    // `challengeId` may be a populated sub-document or a flat id/title pair —
+    // same defensive shape as my_account_screen's _normaliseSubmission.
+    final challenge = s['challengeId'];
+    final challengeMap = challenge is Map<String, dynamic> ? challenge : null;
     return {
       // The Submission and Video are distinct backend documents — DELETE
       // /videos/{id} needs the Video's own id. Fall back to the submission
@@ -76,6 +84,9 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
           submission['aiReason'] as String? ??
           '',
       'reviewedByAI': submission['reviewedByAI'] as bool? ?? true,
+      'challengeTitle': challengeMap?['title'] as String? ??
+          s['challengeTitle'] as String? ??
+          '',
     };
   }
 
@@ -189,6 +200,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
               MaterialPageRoute(
                 builder: (_) => UserVideoDetailScreen(
                   videoNumber: i + 1,
+                  challengeTitle: (data['challengeTitle'] as String?) ?? '',
                   auraPoints: auraPoints,
                   videoUrl: videoUrl,
                   status: status,

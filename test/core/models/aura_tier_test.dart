@@ -133,5 +133,28 @@ void main() {
       expect(auraTierForName(null).name, 'Rookie');
       expect(auraTierForName('legendary').name, 'Rookie');
     });
+
+    // Regression: a promoted/back-filled account can come back with level 516
+    // but no usable `tier` string, which used to render "Rookie" next to
+    // "Level 516". With a level supplied, an absent/unknown tier now derives
+    // from the level instead. See ADR 010.
+    group('level fallback when the tier string is missing/unknown', () {
+      test('null tier + high level → level-derived tier, not Rookie', () {
+        expect(auraTierForName(null, level: 516).name, 'Sigma');
+      });
+      test('unrecognized tier + level → level-derived tier', () {
+        expect(auraTierForName('legendary', level: 12).name, 'Viral');
+      });
+      test('null tier + low level → Rookie (from the level, not the fallback)', () {
+        expect(auraTierForName(null, level: 3).name, 'Rookie');
+      });
+      test('a valid tier string still wins over the level', () {
+        // Backend says rising; level would say Sigma. Trust the backend.
+        expect(auraTierForName('rising', level: 999).name, 'Rising');
+      });
+      test('no tier and no level → Rookie (unchanged default)', () {
+        expect(auraTierForName(null).name, 'Rookie');
+      });
+    });
   });
 }

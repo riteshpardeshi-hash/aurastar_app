@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import 'screen_cache.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._();
@@ -96,7 +97,14 @@ class ApiClient {
     ]);
   }
 
-  Future<void> clearSession() => _storage.deleteAll();
+  Future<void> clearSession() {
+    // Any session teardown — explicit logout, logout-all, or a forced 401
+    // sign-out — must also drop cached per-user screen data so the next
+    // account to sign in never briefly sees the previous user's profile,
+    // leaderboard position, etc.
+    ScreenCache.clear();
+    return _storage.deleteAll();
+  }
 
   Future<bool> isLoggedIn() async {
     final token = await accessToken;

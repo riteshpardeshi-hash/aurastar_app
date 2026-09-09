@@ -10,7 +10,20 @@ class VideoPlayerWidget extends StatefulWidget {
   /// Pre-generated thumbnail shown while the video buffers.
   final String? thumbnailUrl;
 
-  const VideoPlayerWidget(this.url, {super.key, this.thumbnailUrl});
+  /// For clips recorded by this app's own portrait-locked camera (the user's
+  /// own submissions), size the layout box from [portraitPreviewAspectRatio]
+  /// instead of trusting `rotationCorrection` — that metadata is unreliable
+  /// for locally-recorded files and otherwise squeezes a portrait recording
+  /// into a short, wide, letterboxed strip. Leave false for arbitrary remote
+  /// videos (reels, challenge reference clips) that may genuinely be landscape.
+  final bool forcePortrait;
+
+  const VideoPlayerWidget(
+    this.url, {
+    super.key,
+    this.thumbnailUrl,
+    this.forcePortrait = false,
+  });
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -57,19 +70,28 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Thumbnail visible until video is ready
-        VideoThumbnailWidget(
-          videoUrl: widget.url,
-          thumbnailUrl: widget.thumbnailUrl,
-          fit: BoxFit.cover,
-        ),
+        // Opaque base so any letterbox margin around a `contain`-fitted video
+        // reads as a clean bar, not a glimpse of the cover-scaled thumbnail
+        // underneath (which looks like a zoomed-in copy of the video itself).
+        const ColoredBox(color: Colors.black),
+        // Poster frame, only while the video is still loading — once it's
+        // playing the cover-scaled thumbnail would otherwise peek out past
+        // the edges of the aspect-fitted VideoPlayer.
+        if (!_ready)
+          VideoThumbnailWidget(
+            videoUrl: widget.url,
+            thumbnailUrl: widget.thumbnailUrl,
+            fit: BoxFit.cover,
+          ),
         if (_ready)
           AnimatedOpacity(
             opacity: 1.0,
             duration: const Duration(milliseconds: 300),
             child: Center(
               child: AspectRatio(
-                aspectRatio: correctedVideoAspectRatio(_ctrl.value),
+                aspectRatio: widget.forcePortrait
+                    ? portraitPreviewAspectRatio(_ctrl.value)
+                    : correctedVideoAspectRatio(_ctrl.value),
                 child: VideoPlayer(_ctrl),
               ),
             ),

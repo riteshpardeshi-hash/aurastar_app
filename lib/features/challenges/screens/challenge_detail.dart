@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/api_client.dart';
 import 'package:share_plus/share_plus.dart';
@@ -74,6 +75,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   @override
   void initState() {
     super.initState();
+    // Opening the detail page is an unambiguous view of this challenge.
+    ChallengeAnalyticsService().recordImpression(widget.challengeId);
     _fetchChallengeData();
     _fetchSubmissions();
     // Start warming the reference-video cache immediately — by the time the
@@ -182,6 +185,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // REST-API authenticated users, so it silently failed every time.
 
   void _share() {
+    ChallengeAnalyticsService().recordShare(widget.challengeId);
     final link = '$kChallengeBaseUrl/${widget.challengeId}';
     Share.share(
       'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
@@ -291,8 +295,20 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       setState(() => _videoInitialized = true);
     }
 
+    _videoController!.addListener(_reportWatchProgress);
     _enterFullscreen();
     _videoController!.play();
+  }
+
+  // Throttled inside the service; safe to fire on every controller tick.
+  void _reportWatchProgress() {
+    final v = _videoController?.value;
+    if (v == null || !v.isInitialized || !v.isPlaying) return;
+    ChallengeAnalyticsService().recordWatchProgress(
+      widget.challengeId,
+      watched: v.position,
+      total: v.duration > Duration.zero ? v.duration : null,
+    );
   }
 
   void _enterFullscreen() {
@@ -494,6 +510,17 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    final v = _videoController?.value;
+    if (v != null && v.isInitialized && v.position > Duration.zero) {
+      ChallengeAnalyticsService().recordWatchProgress(
+        widget.challengeId,
+        watched: v.position,
+        total: v.duration > Duration.zero ? v.duration : null,
+        flush: true,
+      );
+    }
+    ChallengeAnalyticsService().endWatchSession(widget.challengeId);
+    _videoController?.removeListener(_reportWatchProgress);
     _videoController?.dispose();
     super.dispose();
   }

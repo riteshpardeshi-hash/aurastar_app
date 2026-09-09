@@ -6,12 +6,22 @@ import '../../core/services/auth_api_service.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/friends_service.dart';
 import '../../core/services/leaderboard_service.dart';
+import '../../core/services/screen_cache.dart';
+import '../../core/services/videos_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/challenge_leaderboard_row.dart';
+import '../../shared/widgets/screen_skeleton.dart';
 
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
+  /// one shared bottom nav and the in-header back arrow is dropped.
+  final bool embeddedInShell;
+
+  const LeaderboardScreen({
+    super.key,
+    this.embeddedInShell = false,
+  });
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -40,7 +50,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.leaderboard),
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : const AppBottomNav(activeTab: AppNavTab.leaderboard),
       appBar: AppBar(
         backgroundColor: _bg,
         foregroundColor: Colors.white,
@@ -74,6 +86,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
         controller: _tabs,
         children: [
           _ApiBoard(
+            cacheKey: 'leaderboard.global',
             fetchPage:
                 (page, limit) =>
                     LeaderboardService().fetchGlobal(page: page, limit: limit),
@@ -82,6 +95,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             emptySubtitle: 'Complete challenges to appear here',
           ),
           _ApiBoard(
+            cacheKey: 'leaderboard.friends',
             fetchPage:
                 (page, limit) =>
                     LeaderboardService().fetchFriends(page: page, limit: limit),
@@ -114,6 +128,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 class _ApiBoard extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> Function(int page, int limit)
   fetchPage;
+  // ScreenCache key for this board's first page, so re-opening the
+  // Leaderboard tab shows the last-known standings immediately instead of a
+  // spinner while it re-fetches.
+  final String cacheKey;
   final String scoreSuffix;
   final String emptyTitle;
   final String emptySubtitle;
@@ -121,6 +139,7 @@ class _ApiBoard extends StatefulWidget {
 
   const _ApiBoard({
     required this.fetchPage,
+    required this.cacheKey,
     required this.scoreSuffix,
     required this.emptyTitle,
     required this.emptySubtitle,
@@ -150,10 +169,25 @@ class _ApiBoardState extends State<_ApiBoard>
   @override
   void initState() {
     super.initState();
-    ApiClient().userId.then((id) {
+    // Load the caller's id and hydrate the deleted-video Aura offset (see
+    // VideosService) so build() can drop the user's own row to the rank their
+    // post-deletion score actually earns — the server still ranks them on the
+    // pre-deletion total. setState covers both once they resolve.
+    () async {
+      await VideosService.hydrate();
+      final id = await ApiClient().userId;
       if (mounted) setState(() => _myId = id);
-    });
-    _loadMore();
+    }();
+    final cached =
+        ScreenCache.read<List<Map<String, dynamic>>>(widget.cacheKey);
+    if (cached != null) {
+      _entries.addAll(cached);
+      _initialLoading = false;
+      _page = 2; // page 1 is already on screen from the cache
+      _refresh(); // revalidate page 1 in the background, over the stale list
+    } else {
+      _loadMore();
+    }
     _scrollCtrl.addListener(_onScroll);
   }
 
@@ -174,35 +208,54 @@ class _ApiBoardState extends State<_ApiBoard>
     if (_loading || !_hasMore) return;
     setState(() => _loading = true);
     final page = _page;
-    final raw = await widget.fetchPage(page, _pageSize);
-    if (!mounted) return;
-    setState(() {
-      _entries.addAll(raw.map(normaliseLeaderboardEntry));
-      _hasMore = raw.length == _pageSize;
-      _page = page + 1;
-      _loading = false;
-      _initialLoading = false;
-    });
+    try {
+      final raw = await widget.fetchPage(page, _pageSize);
+      if (!mounted) return;
+      setState(() {
+        _entries.addAll(raw.map(normaliseLeaderboardEntry));
+        _hasMore = raw.length == _pageSize;
+        _page = page + 1;
+        _loading = false;
+        _initialLoading = false;
+      });
+      if (page == 1) ScreenCache.write(widget.cacheKey, List.of(_entries));
+    } catch (_) {
+      // A failed page fetch must still clear the loading state — otherwise
+      // the board is stuck on its placeholder forever.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _initialLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _refresh() async {
-    final raw = await widget.fetchPage(1, _pageSize);
-    if (!mounted) return;
-    setState(() {
-      _entries
-        ..clear()
-        ..addAll(raw.map(normaliseLeaderboardEntry));
-      _hasMore = raw.length == _pageSize;
-      _page = 2;
-      _initialLoading = false;
-    });
+    try {
+      final raw = await widget.fetchPage(1, _pageSize);
+      if (!mounted) return;
+      setState(() {
+        _entries
+          ..clear()
+          ..addAll(raw.map(normaliseLeaderboardEntry));
+        _hasMore = raw.length == _pageSize;
+        _page = 2;
+        _initialLoading = false;
+      });
+      ScreenCache.write(widget.cacheKey, List.of(_entries));
+    } catch (_) {
+      // Keep whatever's already on screen (cached or previously loaded) if a
+      // background revalidation fails.
+      if (mounted) setState(() => _initialLoading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     if (_initialLoading) {
-      return const Center(child: CircularProgressIndicator(color: _accent));
+      return const ScreenSkeleton(rows: 5);
     }
     if (_entries.isEmpty) {
       return RefreshIndicator(
@@ -223,12 +276,18 @@ class _ApiBoardState extends State<_ApiBoard>
         ),
       );
     }
-    final userInList = _myId != null && _entries.any((e) => e['id'] == _myId);
+    // The server ranks the current user on their pre-deletion Aura total;
+    // re-score and re-position their row for any videos they've deleted that
+    // the backend hasn't debited yet. Pure transform over a pristine
+    // `_entries` (which stays the raw server list for the cache).
+    final display =
+        VideosService.applyDeletedVideoOffsetToLeaderboard(_entries, _myId);
+    final userInList = _myId != null && display.any((e) => e['id'] == _myId);
     return RefreshIndicator(
       color: _accent,
       onRefresh: _refresh,
       child: _EntryList(
-        entries: _entries,
+        entries: display,
         currentId: _myId,
         scoreSuffix: widget.scoreSuffix,
         showCurrentUserFooter: !userInList && _myId != null,
@@ -262,10 +321,10 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   List<Map<String, dynamic>> _entries = [];
   bool _loadingBoard = false;
   String? _myId;
-  // GET /challenges/{id}/submissions (used below) never joins a display
-  // name for the submitter — see normaliseSubmissionEntry's doc comment —
-  // so every row falls back to "Player N". For the viewer's own row we
-  // don't need that guesswork: GET /profile already has their real name.
+  // GET /challenges/{id}/submissions populates the submitter's displayName
+  // only when they set one — see normaliseSubmissionEntry — so rows without
+  // one still fall back to "Player N". For the viewer's own row we skip that
+  // guesswork: GET /profile already has their real name/handle.
   String? _myUsername;
 
   @override
@@ -321,7 +380,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
     final raw = await ChallengesService().fetchSubmissions(id, limit: 50);
     if (!mounted || _challengeId != id) return;
     setState(() {
-      _entries = raw.map(normaliseSubmissionEntry).toList();
+      _entries = leaderboardFromSubmissions(raw);
       _loadingBoard = false;
     });
   }
@@ -607,10 +666,10 @@ class _EntryList extends StatelessWidget {
                 data['username'] as String? ??
                 data['profileName'] as String? ??
                 '';
-            final score =
+            final score = VideosService.adjustBalanceForDeletedVideos(
                 ((data['auraPoints'] ?? data['totalRewards']) as num?)
-                    ?.toInt() ??
-                0;
+                        ?.toInt() ??
+                    0);
             return _PlayerRow(
               rank: entries.length + 1,
               name: name,

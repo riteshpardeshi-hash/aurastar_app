@@ -1,10 +1,16 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
-/// Shared in-memory cache — keyed by video URL, value is extracted JPEG bytes.
-/// Accessible by dashboard's private widget so the two never re-extract the same video.
+import '../../core/utils/asset_cache_key.dart';
+
+/// Shared in-memory cache of extracted JPEG bytes, keyed by [assetCacheKey] of
+/// the video URL (NOT the raw URL — the backend re-signs presigned URLs on
+/// every read, so the raw string changes constantly for the same clip).
+/// Accessible by dashboard's private widget so the two never re-extract the
+/// same video.
 final Map<String, Uint8List> videoThumbnailCache = {};
 
 /// `video_thumbnail` has no partial/byte-range fetch — extracting a frame
@@ -40,8 +46,9 @@ class _ThumbnailExtractionGate {
 class VideoThumbnailWidget extends StatefulWidget {
   final String videoUrl;
 
-  /// Pre-generated thumbnail stored in Firestore. When non-null the widget
-  /// loads instantly via Image.network instead of extracting from the video.
+  /// Pre-generated thumbnail URL from the backend. When non-null the widget
+  /// loads it via [CachedNetworkImage] (disk-cached, keyed on the unsigned
+  /// URL) instead of extracting a frame from the whole video.
   final String? thumbnailUrl;
 
   final BoxFit fit;
@@ -79,8 +86,16 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
   @override
   void didUpdateWidget(VideoThumbnailWidget old) {
     super.didUpdateWidget(old);
-    if (old.videoUrl != widget.videoUrl ||
-        old.thumbnailUrl != widget.thumbnailUrl) {
+    // Compare by the stable (unsigned) key: list screens re-fetch in the
+    // background (SWR, ADR 007) and hand every card a freshly re-signed
+    // thumbnailUrl/videoUrl. That's the same image — reloading it would
+    // flash every visible thumbnail back to the shimmer and re-download on
+    // every screen revisit. Only reload when the underlying object changed.
+    final urlChanged =
+        assetCacheKey(old.videoUrl) != assetCacheKey(widget.videoUrl) ||
+            assetCacheKey(old.thumbnailUrl ?? '') !=
+                assetCacheKey(widget.thumbnailUrl ?? '');
+    if (urlChanged) {
       setState(() {
         _loading = true;
         _bytes = null;
@@ -102,11 +117,12 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
       return;
     }
 
-    // In-memory cache hit
-    if (videoThumbnailCache.containsKey(widget.videoUrl)) {
+    // In-memory cache hit (keyed by the stable, unsigned URL)
+    final key = assetCacheKey(widget.videoUrl);
+    if (videoThumbnailCache.containsKey(key)) {
       if (mounted) {
         setState(() {
-          _bytes = videoThumbnailCache[widget.videoUrl];
+          _bytes = videoThumbnailCache[key];
           _loading = false;
         });
       }
@@ -144,7 +160,9 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
   static final Map<String, Future<Uint8List?>> _inFlight = {};
 
   static Future<Uint8List?> _extract(String url) {
-    return _inFlight.putIfAbsent(url, () async {
+    // Dedupe and cache by the stable key; fetch with the full signed [url].
+    final key = assetCacheKey(url);
+    return _inFlight.putIfAbsent(key, () async {
       try {
         final data = await _ThumbnailExtractionGate.run(
           () => VideoThumbnail.thumbnailData(
@@ -155,11 +173,11 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
             timeMs: 500,
           ).timeout(const Duration(seconds: 30)),
         );
-        debugPrint('[VideoThumbnail] $url -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
-        if (data != null) videoThumbnailCache[url] = data;
+        debugPrint('[VideoThumbnail] $key -> ${data == null ? "null (no frame extracted)" : "${data.length} bytes"}');
+        if (data != null) videoThumbnailCache[key] = data;
         return data;
       } finally {
-        _inFlight.remove(url);
+        _inFlight.remove(key);
       }
     });
   }
@@ -169,13 +187,18 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
     if (_loading) return const VideoThumbnailSkeleton();
 
     if (_useNetwork) {
-      return Image.network(
-        widget.thumbnailUrl!,
+      // CachedNetworkImage persists to disk (survives restarts and list
+      // re-fetches) and, crucially, is keyed on `cacheKey` — the stable
+      // unsigned URL — not the presigned `imageUrl`, so a re-signed URL for
+      // the same image is a cache hit instead of a fresh download.
+      return CachedNetworkImage(
+        imageUrl: widget.thumbnailUrl!,
+        cacheKey: assetCacheKey(widget.thumbnailUrl!),
         fit: widget.fit,
-        cacheWidth: 480,
-        errorBuilder: (_, __, ___) => _fallback(),
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : const VideoThumbnailSkeleton(),
+        memCacheWidth: 480,
+        fadeInDuration: const Duration(milliseconds: 120),
+        placeholder: (_, __) => const VideoThumbnailSkeleton(),
+        errorWidget: (_, __, ___) => _fallback(),
       );
     }
 

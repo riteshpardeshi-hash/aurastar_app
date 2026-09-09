@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -198,6 +199,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         bytes = byteData?.buffer.asUint8List();
       }
 
+      ChallengeAnalyticsService().recordShare(widget.challengeId);
       final challengeLink = '$kChallengeBaseUrl/${widget.challengeId}';
       final message =
           'I just completed "${widget.challengeTitle}" on Aura and earned $_auraPoints Aura Points! 🏆\n\n'
@@ -233,6 +235,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         bytes = byteData?.buffer.asUint8List();
       }
       if (bytes != null) {
+        ChallengeAnalyticsService()
+            .recordShare(widget.challengeId, platform: 'instagram_story');
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
         );
@@ -261,6 +265,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   // ── Reviewing phase: full-screen "Aura Sense" analysing experience ──────────
 
   Widget _buildAuraSenseScreen() {
+    // Scale the percent readout to the device rather than a fixed 64pt — that
+    // was oversized on smaller/shorter screens and threw off the column's
+    // spacing. Kept in sync with AuraSenseLoadingView, its standalone twin.
+    final percentFontSize =
+        (MediaQuery.sizeOf(context).shortestSide * 0.13).clamp(38.0, 52.0);
     return Container(
       color: Colors.black,
       child: Stack(
@@ -268,9 +277,15 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         children: [
           ScaleTransition(
             scale: _pulseAnim,
+            // `contain`, not `cover`: the art is a tall 4325x7721 diamond whose
+            // bright points sit at ~6%/~93% of its width, so `cover` scales it
+            // to fill height and crops those points off both screen edges,
+            // making the shape look oversized and clipped. Its border is pure
+            // black — same as the Container behind it — so `contain`'s letterbox
+            // is invisible. Kept in sync with AuraSenseLoadingView.
             child: Image.asset(
               'assets/images/analysing/Asset 132.png',
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               alignment: Alignment.center,
             ),
           ),
@@ -295,15 +310,18 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         ).createShader(bounds),
-                        child: Text(
-                          '$pct%',
-                          style: const TextStyle(
-                            fontFamily: 'ClashDisplay',
-                            color: Colors.white,
-                            fontSize: 64,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
-                            decoration: TextDecoration.none,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$pct%',
+                            style: TextStyle(
+                              fontFamily: 'ClashDisplay',
+                              color: Colors.white,
+                              fontSize: percentFontSize,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
                       );
@@ -312,8 +330,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   const SizedBox(height: 10),
                   Image.asset('assets/images/analysing/Asset 135.png', height: 16),
                   const SizedBox(height: 18),
-                  Image.asset('assets/images/analysing/Asset 136.png', height: 60),
-                  const Spacer(flex: 3),
+                  Image.asset('assets/images/analysing/Asset 136.png', height: 36),
+                  const Spacer(flex: 5),
                   if (!_timedOut) ...[
                     Image.asset('assets/images/analysing/Asset 137.png', height: 22),
                     const SizedBox(height: 10),
@@ -391,9 +409,11 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
           isSummary
               ? ScaleTransition(
                   scale: _pulseAnim,
+                  // `contain` for the same reason as the analysing screen —
+                  // `cover` clips the diamond's points off the screen edges.
                   child: Image.asset(
                     'assets/images/aura earned/Asset 139.png',
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     alignment: Alignment.center,
                   ),
                 )
@@ -404,7 +424,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                     children: [
                       Image.asset(
                         'assets/images/aura earned/Asset 139.png',
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         alignment: Alignment.center,
                       ),
                       SafeArea(
@@ -497,7 +517,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       children: [
         const SizedBox(height: 12),
         Image.asset('assets/images/aura earned/Asset 140.png', height: 32),
-        const Spacer(flex: 4),
+        // Weighted so the "Aura Earned / +N" cluster sits lower — roughly
+        // centred inside the glowing diamond rather than above it. Tune the
+        // 5:4 top:bottom ratio to slide the cluster up/down.
+        const Spacer(flex: 5),
         Image.asset('assets/images/aura earned/Asset 141.png', height: 20),
         const SizedBox(height: 10),
         AnimatedBuilder(
@@ -506,11 +529,9 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             final n = (_auraPoints * Curves.easeOutCubic.transform(_countCtrl.value)).round();
             return Row(
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // Mirrors the icon's width (8 gap + 32 image) on the left so the
-                // number itself sits on the true center, not the whole row.
-                const SizedBox(width: 40),
                 ShaderMask(
                   shaderCallback: (bounds) => const LinearGradient(
                     colors: [Colors.white, Color(0xFFC9A6FF)],
@@ -525,14 +546,15 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                       fontSize: 56,
                       fontWeight: FontWeight.w700,
                       height: 1,
+                      leadingDistribution: TextLeadingDistribution.even,
                       decoration: TextDecoration.none,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 // ClashDisplay digits/'+' have no descenders, so their glyph
-                // shape sits above the text line-box's vertical center — nudge
-                // the star up to align with the numerals instead of the box.
+                // shape sits above the text line-box's vertical centre — nudge
+                // the star up to sit on the numerals, not the line box.
                 Transform.translate(
                   offset: const Offset(0, -6),
                   child: Image.asset('assets/images/aura earned/Asset 143.png', width: 32, height: 32),
@@ -541,7 +563,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             );
           },
         ),
-        const Spacer(flex: 5),
+        const Spacer(flex: 4),
         Image.asset('assets/images/aura earned/Asset 144.png', height: 24),
         const SizedBox(height: 24),
         Row(
@@ -872,7 +894,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Image.asset('assets/images/analysing/Asset 132.png', fit: BoxFit.cover, alignment: Alignment.center),
+                Image.asset('assets/images/analysing/Asset 132.png', fit: BoxFit.contain, alignment: Alignment.center),
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),

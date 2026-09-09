@@ -54,4 +54,30 @@ void main() {
         valueFor(size: const Size(1080, 1920), rotationCorrection: 180);
     expect(correctedVideoAspectRatio(value), value.aspectRatio);
   });
+
+  // Regression: a CameraX-recorded challenge reference clip
+  // (womaty-dev-raw-clips .mp4, played from the on-disk cache) reported
+  // `size: 480x640` — ALREADY the rotated, portrait display dimensions —
+  // *and still* carried `rotationCorrection: 270`. The old code inverted on
+  // any 90/270 flag, turning the correct 0.75 portrait ratio into 1.333, so
+  // `ChallengeDetail`'s fullscreen `AspectRatio` box became landscape and
+  // squeezed the portrait video into a letterboxed strip (the admin panel's
+  // browser <video>, which just reads the rotation matrix, showed it
+  // correctly). Fix: only invert when `size` is still landscape-shaped.
+  test('90/270 flag on an already-portrait size is NOT inverted (double-'
+      'correction bug)', () {
+    final r270 = valueFor(size: const Size(480, 640), rotationCorrection: 270);
+    expect(correctedVideoAspectRatio(r270), closeTo(480 / 640, 0.0001));
+    expect(correctedVideoAspectRatio(r270), lessThan(1),
+        reason: 'a portrait clip must get a portrait (<1) box');
+
+    final r90 = valueFor(size: const Size(1080, 1920), rotationCorrection: 90);
+    expect(correctedVideoAspectRatio(r90), closeTo(1080 / 1920, 0.0001));
+  });
+
+  test('degenerate zero size falls back to the raw aspectRatio, no divide-'
+      'by-zero', () {
+    final value = valueFor(size: Size.zero, rotationCorrection: 90);
+    expect(correctedVideoAspectRatio(value), value.aspectRatio);
+  });
 }

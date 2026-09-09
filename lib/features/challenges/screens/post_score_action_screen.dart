@@ -3,9 +3,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class PostScoreActionScreen extends StatefulWidget {
   final String submissionId;
@@ -73,6 +74,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
     if (_isInstagramSharing) return;
     setState(() => _isInstagramSharing = true);
     try {
+      ChallengeAnalyticsService().recordShare(widget.challengeId);
       Uint8List? bytes;
       final boundary =
           _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
@@ -102,7 +104,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   void _navigateToDashboard() {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const Dashboard()),
+      MaterialPageRoute(builder: (_) => const MainShell()),
       (route) => false,
     );
   }

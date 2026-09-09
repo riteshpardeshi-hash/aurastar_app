@@ -196,24 +196,40 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     children: [
                       SizedBox(height: size.height * 0.07),
 
-                      // ── Title ────────────────────────────────────────────────
-                      // Left-aligned to match the rest of the onboarding flow
-                      // (Rules/Trust Setup/Permissions) instead of this
-                      // screen's old one-off centered block.
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('SIGN IN', style: AppTextStyles.compactTitle),
-                          const SizedBox(height: 8),
-                          Container(
-                            width: 40,
-                            height: 2,
-                            decoration: BoxDecoration(
-                              color: _accent,
-                              borderRadius: BorderRadius.circular(1),
+                      // ── Logo + title ─────────────────────────────────────────
+                      // Centered brand mark above a centered "SIGN IN" heading.
+                      // The logo matches the Rules/AuthChoice screens
+                      // (`Aura arena.png` at width 160); the Align spans the
+                      // full width so the block centres against the screen, not
+                      // just its own content, inside this start-aligned Column.
+                      Align(
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/Aura arena.png',
+                              width: 160,
+                              fit: BoxFit.contain,
                             ),
-                          ),
-                        ],
+                            SizedBox(height: size.height * 0.035),
+                            const Text(
+                              'SIGN IN',
+                              style: AppTextStyles.compactTitle,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              width: 40,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: _accent,
+                                borderRadius: BorderRadius.circular(1),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
 
                       SizedBox(height: size.height * 0.06),

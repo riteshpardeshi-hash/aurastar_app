@@ -3,7 +3,20 @@ import '../../core/services/notifications_service.dart';
 import '../../features/notifications/notifications_screen.dart';
 
 class NotificationBellButton extends StatefulWidget {
-  const NotificationBellButton({super.key});
+  /// Passed straight through to the underlying [IconButton]. Left null for the
+  /// default 48px AppBar sizing (home feed); the Dashboard header overrides
+  /// them so the bell tucks against the page margin and lines up with the
+  /// name/Aura stack beside it.
+  final EdgeInsetsGeometry? padding;
+  final BoxConstraints? constraints;
+  final AlignmentGeometry? alignment;
+
+  const NotificationBellButton({
+    super.key,
+    this.padding,
+    this.constraints,
+    this.alignment,
+  });
 
   @override
   State<NotificationBellButton> createState() => _NotificationBellButtonState();
@@ -34,34 +47,26 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.notifications_outlined, color: Colors.white70),
-          if (_unread > 0)
-            Positioned(
-              right: -2,
-              top: -2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                constraints: const BoxConstraints(minWidth: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7B2CBF),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF080810), width: 1.5),
-                ),
-                child: Text(
-                  _unread > 99 ? '99+' : '$_unread',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
+      padding: widget.padding,
+      constraints: widget.constraints,
+      alignment: widget.alignment ?? Alignment.center,
+      // Flutter's Badge anchors the count past the top-right corner of the
+      // glyph (offset nudges it further clear), so it never lands on top of
+      // the bell and hides it the way the old hand-placed Stack did.
+      icon: Badge(
+        isLabelVisible: _unread > 0,
+        offset: const Offset(4, -6),
+        backgroundColor: const Color(0xFF7B2CBF),
+        largeSize: 14,
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        textStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 7.5,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+        label: Text(_unread > 99 ? '99+' : '$_unread'),
+        child: const Icon(Icons.notifications_outlined, color: Colors.white70),
       ),
       onPressed: _open,
     );

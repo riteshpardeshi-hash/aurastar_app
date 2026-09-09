@@ -354,46 +354,9 @@ Future<List<Map<String, dynamic>>> fetchAuraHistory({
     return false;
   }
 
-  // GET /profile/rewards — fully documented `UserReward` schema, no field
-  // guessing needed. Distinct from the aura/tier progression system in
-  // core/models/aura_tier.dart: these are individually-awarded rewards
-  // (streak completion, leaderboard win, brand challenge, admin grant,
-  // participant target), not level-based.
-  Future<List<Map<String, dynamic>>> fetchRewards({
-    String? status,
-    int page = 1,
-    int limit = 20,
-  }) async {
-    try {
-      final q = [
-        'page=$page',
-        'limit=$limit',
-        if (status != null) 'status=$status',
-      ].join('&');
-      final res = await _client.get('/profile/rewards?$q', auth: true);
-      if (res['status'] != 'success') return [];
-      final data = res['data'];
-      final list = data is Map
-          ? (data['responses'] as List? ?? data['rewards'] as List? ?? [])
-          : (data is List ? data : []);
-      return list.cast<Map<String, dynamic>>();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Only meaningful for `rewardType: 'coupon_code'` rewards — marks it
-  /// claimed and returns the updated reward (with `couponCode` revealed).
-  Future<Map<String, dynamic>?> claimReward(String id) async {
-    try {
-      final res = await _client.post('/profile/rewards/$id/claim', {}, auth: true);
-      if (res['status'] == 'success') {
-        final data = res['data'] as Map<String, dynamic>;
-        return data['reward'] as Map<String, dynamic>?;
-      }
-    } catch (_) {}
-    return null;
-  }
+  // Rewards (`/profile/rewards`) and leaderboard vouchers
+  // (`/profile/offer-vouchers`) moved to RewardsService — see
+  // core/services/rewards_service.dart.
 
   Future<bool> isLoggedIn() => _client.isLoggedIn();
 

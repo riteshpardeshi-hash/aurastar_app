@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class CreatorChallengeSubmittedScreen extends StatelessWidget {
   const CreatorChallengeSubmittedScreen({super.key});
@@ -46,7 +46,7 @@ class CreatorChallengeSubmittedScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => Dashboard()),
+                        MaterialPageRoute(builder: (_) => const MainShell()),
                         (route) => false,
                       );
                     },

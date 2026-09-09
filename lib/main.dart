@@ -14,12 +14,13 @@ import 'core/services/auth_api_service.dart';
 import 'core/services/boot_gate.dart';
 import 'core/services/challenges_service.dart';
 import 'core/utils/deep_link_validation.dart';
+import 'core/utils/push_message_text.dart';
 import 'firebase_options.dart';
 import 'features/auth/screens/phone_auth_screen.dart';
 import 'features/auth/screens/profile_setup_screen.dart';
 import 'features/challenges/screens/challenge_detail.dart';
-import 'features/dashboard/dashboard.dart';
 import 'features/notifications/notifications_screen.dart';
+import 'features/shell/main_shell.dart';
 import 'shared/theme/app_colors.dart';
 import 'shared/theme/app_text_styles.dart';
 
@@ -69,6 +70,7 @@ class _MyAppState extends State<MyApp> {
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _sessionExpiredSub;
   StreamSubscription<RemoteMessage>? _notificationTapSub;
+  StreamSubscription<RemoteMessage>? _foregroundMsgSub;
   // Guards against a burst of near-simultaneous 401s (e.g. Dashboard's
   // Future.wait of several authed calls) each firing onSessionExpired and
   // triggering a duplicate navigation reset.
@@ -83,10 +85,21 @@ class _MyAppState extends State<MyApp> {
         ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
   }
 
-  // Push payloads don't carry a documented per-type deep-link target today
-  // (NudgeTemplate.deepLinkScreen is admin-editable copy, not a contract the
-  // client can safely branch on), so tapping any push just surfaces the
-  // in-app notification list rather than guessing a destination.
+  // Two things handled here:
+  //
+  //  1. Foreground (onMessage): while the app is open the OS renders nothing
+  //     of its own — iOS is told to defer to us, Android never shows a
+  //     foreground heads-up — so the message is surfaced as an in-app
+  //     snackbar with a "View" action.
+  //  2. Taps: a foreground snackbar's "View", a background tap
+  //     (onMessageOpenedApp), and a cold start from a notification
+  //     (getInitialMessage) all open the in-app notification list.
+  //
+  // Every tap lands on the notification list rather than a specific screen:
+  // the push payload carries no per-type deep-link target the client can
+  // safely branch on (NudgeTemplate.deepLinkScreen is admin-editable copy,
+  // not a client contract — see ADR 042 in the backend repo), so guessing a
+  // destination would be fragile.
   Future<void> _initPushTapHandling() async {
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null && mounted) {
@@ -94,6 +107,30 @@ class _MyAppState extends State<MyApp> {
     }
     _notificationTapSub =
         FirebaseMessaging.onMessageOpenedApp.listen((_) => _openNotifications());
+    _foregroundMsgSub =
+        FirebaseMessaging.onMessage.listen(_showForegroundMessage);
+  }
+
+  void _showForegroundMessage(RemoteMessage message) {
+    final notification = message.notification;
+    final text = foregroundPushText(
+      notification?.title ?? message.data['title'] as String?,
+      notification?.body ?? message.data['body'] as String?,
+    );
+    if (text.isEmpty) return; // data-only message — nothing to display
+    _scaffoldMessengerKey.currentState
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(text),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: _openNotifications,
+          ),
+        ),
+      );
   }
 
   void _openNotifications() {
@@ -178,6 +215,7 @@ class _MyAppState extends State<MyApp> {
     _linkSub?.cancel();
     _sessionExpiredSub?.cancel();
     _notificationTapSub?.cancel();
+    _foregroundMsgSub?.cancel();
     super.dispose();
   }
 
@@ -338,7 +376,7 @@ class _BootScreenState extends State<_BootScreen> {
     // Fast path: local flag set when this user finished onboarding.
     final localComplete =
         uid != null && (prefs.getBool('setup_complete_$uid') ?? false);
-    if (localComplete) return const Dashboard();
+    if (localComplete) return const MainShell();
 
     // Fall back to API check.
     _setStep('fetching profile from server');
@@ -363,7 +401,7 @@ class _BootScreenState extends State<_BootScreen> {
 
     if (isComplete) {
       if (uid != null) await prefs.setBool('setup_complete_$uid', true);
-      return const Dashboard();
+      return const MainShell();
     }
     return const ProfileSetupScreen();
   }

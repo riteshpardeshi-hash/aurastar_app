@@ -10,10 +10,11 @@ import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../challenges/widgets/aura_sense_loading_view.dart';
+import '../../challenges/widgets/coupons_sheet.dart';
 import '../../challenges/screens/post_score_action_screen.dart';
 import '../../account/screens/settings_screen.dart';
 import '../../account/screens/edit_profile_screen.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String videoPath;
@@ -176,8 +177,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
         setState(() => _uploadState = _UploadState.scoring);
         _player.pause();
       }
-      final submission =
+      final result =
           await service.createSubmission(widget.challengeId, videoId);
+      final submission = result.submission;
 
       await UploadQueueService.clear();
 
@@ -199,6 +201,16 @@ class _PreviewScreenState extends State<PreviewScreen> {
       );
 
       if (!mounted) return;
+
+      // Any coupons this submission won (level-up + leaderboard offers) are
+      // worth pausing the flow for — show them before routing on, wherever
+      // the flow goes next. The same coupons also live permanently on
+      // RewardsScreen.
+      if (result.coupons.isNotEmpty) {
+        await showCouponsSheet(context, result.coupons);
+        if (!mounted) return;
+      }
+
       switch (postSubmitDestination(action, submission)) {
         case PostSubmitDestination.retake:
           // CameraScreen pushed this screen (not a replacement), so it's
@@ -305,7 +317,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   // the attempt at all (ai_error), which has no result screen to show.
   void _exitCaptureFlow() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const Dashboard()),
+      MaterialPageRoute(builder: (_) => const MainShell()),
       (route) => false,
     );
   }
@@ -640,90 +652,114 @@ class _PreviewScreenState extends State<PreviewScreen> {
               ),
             ],
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.15)),
-                      ),
-                      child: const Center(
-                        child: Text('Retake',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600)),
+            // A face-verification failure has only one button-worthy action —
+            // record a new take. Re-uploading the same clip fails identically,
+            // and the stale-avatar remedy is the "Update profile photo" link
+            // above. So show a single button here instead of two that both
+            // read "Retake" and both just popped back to the camera.
+            if (_isFaceMismatch)
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.redAccent.withValues(alpha: 0.40),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      )
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text('Retake',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.15)),
+                        ),
+                        child: const Center(
+                          child: Text('Retake',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: GestureDetector(
-                    onTap: _isProfileIncomplete
-                        ? () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const SettingsScreen()),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      onTap: _isProfileIncomplete
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const SettingsScreen()),
+                              )
+                          // A missing rubric or a paused/closed challenge are
+                          // both challenge-state problems, not something a
+                          // retry can fix — send the user back instead of
+                          // re-running the same failing upload.
+                          : (_isMissingRubric || _isChallengeNotAccepting)
+                              ? () => Navigator.pop(context)
+                              : _upload,
+                      child: Container(
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: (_isMissingRubric || _isChallengeNotAccepting)
+                              ? Colors.amber
+                              : Colors.redAccent,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isMissingRubric || _isChallengeNotAccepting
+                                      ? Colors.amber
+                                      : Colors.redAccent)
+                                  .withValues(alpha: 0.40),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
                             )
-                        // A missing rubric or a paused/closed challenge are
-                        // both challenge-state problems, not something a
-                        // retry can fix — send the user back instead of
-                        // re-running the same failing upload.
-                        : (_isMissingRubric || _isChallengeNotAccepting)
-                            ? () => Navigator.pop(context)
-                            // Same reasoning: the same video will never pass
-                            // face verification, so pop back to the camera
-                            // for a new take.
-                            : _isFaceMismatch
-                                ? () => Navigator.pop(context)
-                                : _upload,
-                    child: Container(
-                      height: 52,
-                      decoration: BoxDecoration(
-                        color: (_isMissingRubric || _isChallengeNotAccepting)
-                            ? Colors.amber
-                            : Colors.redAccent,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (_isMissingRubric || _isChallengeNotAccepting
-                                    ? Colors.amber
-                                    : Colors.redAccent)
-                                .withValues(alpha: 0.40),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          )
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                            _isProfileIncomplete
-                                ? 'Complete Your Profile'
-                                : (_isMissingRubric || _isChallengeNotAccepting)
-                                    ? 'Choose Another Challenge'
-                                    : _isFaceMismatch
-                                        ? 'Retake'
-                                        : 'Retry Upload',
-                            style: TextStyle(
-                                color: (_isMissingRubric || _isChallengeNotAccepting)
-                                    ? Colors.black87
-                                    : Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                              _isProfileIncomplete
+                                  ? 'Complete Your Profile'
+                                  : (_isMissingRubric || _isChallengeNotAccepting)
+                                      ? 'Choose Another Challenge'
+                                      : 'Retry Upload',
+                              style: TextStyle(
+                                  color: (_isMissingRubric || _isChallengeNotAccepting)
+                                      ? Colors.black87
+                                      : Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       );

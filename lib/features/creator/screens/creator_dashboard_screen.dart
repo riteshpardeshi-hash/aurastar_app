@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/models/aura_tier.dart';
-import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/creator_account_service.dart';
 import '../../../core/services/creator_challenges_service.dart' show pickInt, pickString;
 import '../../../core/services/creator_dashboard_service.dart';
@@ -24,13 +22,10 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
   bool _loading = true;
   Map<String, dynamic>? _page;
   Map<String, dynamic> _summary = {};
+  Map<String, dynamic> _overviewSummary = {};
   List<Map<String, dynamic>> _cards = [];
   List<Map<String, dynamic>> _pendingActions = [];
   int _followingCount = 0;
-  int _auraBalance = 0;
-  int _level = 1;
-  String? _tierName;
-  List<Map<String, dynamic>> _videos = [];
 
   @override
   void initState() {
@@ -45,48 +40,25 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
       CreatorPageService().fetchDashboardSummary(),
       CreatorDashboardService().fetchOverview(),
       CreatorAccountService().fetchFollowingCount(),
-      AuthApiService().getProfile(),
-      AuthApiService().fetchMyVideos(limit: 20),
     ]);
     if (!mounted) return;
     final overview = results[2] as Map<String, dynamic>;
-    final profile = results[4] as Map<String, dynamic>?;
     setState(() {
       _page = results[0] as Map<String, dynamic>?;
       _summary = results[1] as Map<String, dynamic>;
+      // Creator-scoped totals across this creator's own challenges (the
+      // backend reuses these from GET /creator/insights). Deliberately NOT
+      // the account's personal Aura balance or player submission history —
+      // those belong to the player profile (My Account), not the creator
+      // dashboard. See ADR 009.
+      _overviewSummary =
+          (overview['summary'] as Map?)?.cast<String, dynamic>() ?? {};
       _cards = (overview['cards'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _pendingActions =
           (overview['pendingActions'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _followingCount = results[3] as int;
-      _auraBalance = (profile?['auraPoints'] as num?)?.toInt() ?? 0;
-      // Server-computed and authoritative — do not recompute locally.
-      _level = (profile?['level'] as num?)?.toInt() ?? 1;
-      _tierName = profile?['tier'] as String?;
-      _videos = (results[5] as List)
-          .cast<Map<String, dynamic>>()
-          .map(_normaliseVideo)
-          .toList();
       _loading = false;
     });
-  }
-
-  /// `GET /profile/videos` returns `verdict` (PASS/FAIL) rather than a plain
-  /// `status` on some rows — same translation `my_account_screen.dart` does
-  /// before display.
-  static Map<String, dynamic> _normaliseVideo(Map<String, dynamic> v) {
-    final verdict = v['verdict'] as String?;
-    final rawStatus = v['status'] as String?;
-    final status = verdict != null
-        ? (verdict == 'PASS'
-            ? 'approved'
-            : verdict == 'FAIL'
-                ? 'rejected'
-                : 'ai_error')
-        : rawStatus ?? 'pending';
-    return {
-      ...v,
-      'status': status,
-    };
   }
 
   @override
@@ -116,16 +88,6 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     final canUploadChallenge = _summary['canUploadChallenge'] as bool? ?? true;
     final profileComplete = _summary['profileComplete'] as bool? ?? true;
     final creatorPageLive = _summary['creatorPageLive'] as bool? ?? true;
-
-    final tier = auraTierForName(_tierName);
-    // Ordinal "what's next" — not derived from a guessed level threshold.
-    final tierIdx = auraTiers.indexOf(tier);
-    final nextTier = tierIdx + 1 < auraTiers.length ? auraTiers[tierIdx + 1] : null;
-
-    final totalSubs = _videos.length;
-    final approvedSubs = _videos.where((v) => v['status'] == 'approved').length;
-    final approvalRate = totalSubs == 0 ? 0 : (approvedSubs / totalSubs * 100).round();
-    final recentVideos = _videos.take(5).toList();
 
     return CustomScrollView(
       slivers: [
@@ -157,13 +119,9 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
               child: _buildStatusBanner(profileComplete, creatorPageLive)),
         if (_pendingActions.isNotEmpty)
           SliverToBoxAdapter(child: _buildPendingActions(context)),
-        SliverToBoxAdapter(
-            child: _buildAuraProgress(_level, tier, nextTier, _auraBalance)),
-        SliverToBoxAdapter(
-            child: _buildStats(_auraBalance, totalSubs, approvedSubs, approvalRate)),
+        SliverToBoxAdapter(child: _buildStats()),
         if (_cards.isNotEmpty) SliverToBoxAdapter(child: _buildCards()),
         SliverToBoxAdapter(child: _buildQuickActions(context)),
-        SliverToBoxAdapter(child: _buildRecentSubmissions(context, recentVideos)),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
@@ -334,70 +292,16 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     );
   }
 
-  Widget _buildAuraProgress(
-    int level,
-    AuraTier tier,
-    AuraTier? nextTier,
-    int totalRewards,
-  ) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0820),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF7B2CBF).withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFF7B2CBF), Color(0xFF9B4DFF)]),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text('Level $level',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'SpaceGrotesk')),
-              ),
-              const SizedBox(width: 10),
-              Text(tier.name,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'ClashDisplay')),
-              const Spacer(),
-              Text('$totalRewards Aura',
-                  style: const TextStyle(
-                      color: Color(0xFF9B4DFF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'SpaceGrotesk')),
-            ],
-          ),
-          if (nextTier != null) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text('Next: ${nextTier.name}',
-                  style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStats(
-      int totalRewards, int totalSubs, int approvedSubs, int approvalRate) {
+  /// Creator-scoped stats only — challenges this creator has published and the
+  /// engagement they've drawn. The account's personal Aura balance, level, and
+  /// player submission history are intentionally absent: those are player-side
+  /// figures that carried over when the account was promoted to `creator`, and
+  /// they belong on My Account, not here. See ADR 009.
+  Widget _buildStats() {
+    final challenges = pickInt(_overviewSummary, ['totalChallenges']);
+    final live = pickInt(_overviewSummary, ['liveChallenges']);
+    final participants = pickInt(_overviewSummary, ['totalParticipants']);
+    final stars = pickInt(_overviewSummary, ['totalStars']);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: Column(
@@ -413,25 +317,24 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
           Row(
             children: [
               Expanded(
-                  child: _statCard(
-                      'Total Aura', '$totalRewards', Icons.auto_awesome,
-                      const Color(0xFF7B2CBF))),
+                  child: _statCard('Challenges', '$challenges',
+                      Icons.video_collection, Colors.blue)),
               const SizedBox(width: 10),
               Expanded(
-                  child: _statCard('Submissions', '$totalSubs',
-                      Icons.video_collection, Colors.blue)),
+                  child: _statCard('Live', '$live',
+                      Icons.podcasts_rounded, Colors.green)),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
-                  child: _statCard('Approved', '$approvedSubs',
-                      Icons.check_circle_outline, Colors.green)),
+                  child: _statCard('Participants', '$participants',
+                      Icons.groups_rounded, const Color(0xFF7B2CBF))),
               const SizedBox(width: 10),
               Expanded(
-                  child: _statCard('Approval Rate', '$approvalRate%',
-                      Icons.trending_up_rounded, Colors.orange)),
+                  child: _statCard('Stars', '$stars',
+                      Icons.star_rounded, Colors.orange)),
             ],
           ),
         ],
@@ -661,175 +564,4 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
     );
   }
 
-  Widget _buildRecentSubmissions(
-      BuildContext context, List<Map<String, dynamic>> recentVideos) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 20, 16, 12),
-          child: Text('Recent Submissions',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
-        ),
-        if (recentVideos.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF111111),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-              ),
-              child: const Column(
-                children: [
-                  Icon(Icons.video_camera_back_outlined,
-                      color: Colors.white24, size: 36),
-                  SizedBox(height: 10),
-                  Text('No submissions yet',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
-                  SizedBox(height: 4),
-                  Text('Take a challenge to earn Aura points',
-                      style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
-                ],
-              ),
-            ),
-          )
-        else
-          ...recentVideos.map((v) => _buildSubmissionRow(context, v)),
-      ],
-    );
-  }
-
-  Widget _buildSubmissionRow(BuildContext context, Map<String, dynamic> v) {
-    final challengeTitle = pickString(v, ['challengeTitle', 'challengeName'], fallback: 'Challenge');
-    final status = v['status'] as String? ?? 'pending';
-    final aiScore = v['aiScore'] as num?;
-    final auraPoints = (v['auraPoints'] as num?)?.toInt() ?? 0;
-    final createdAtRaw = pickString(v, ['createdAt']);
-    final createdAt = createdAtRaw.isEmpty ? null : DateTime.tryParse(createdAtRaw);
-    final timeStr = createdAt != null ? _timeAgo(createdAt) : '';
-
-    Color statusColor;
-    IconData statusIcon;
-    String statusLabel;
-    switch (status) {
-      case 'approved':
-        statusColor = Colors.green;
-        statusIcon = Icons.check_circle_rounded;
-        statusLabel = 'Approved';
-        break;
-      case 'rejected':
-        statusColor = Colors.red;
-        statusIcon = Icons.cancel_rounded;
-        statusLabel = 'Rejected';
-        break;
-      default:
-        statusColor = Colors.orange;
-        statusIcon = Icons.hourglass_top_rounded;
-        statusLabel = 'Pending';
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(statusIcon, color: statusColor, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(challengeTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13)),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(statusLabel,
-                          style: TextStyle(
-                              color: statusColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600)),
-                    ),
-                    if (timeStr.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Text(timeStr,
-                          style: const TextStyle(
-                              color: AppColors.textFaint, fontSize: 10)),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (aiScore != null)
-                Text('${aiScore.toInt()}%',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        fontFamily: 'SpaceGrotesk')),
-              if (status == 'approved' && auraPoints > 0)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.auto_awesome,
-                        color: Color(0xFF9B4DFF), size: 12),
-                    const SizedBox(width: 2),
-                    Text('+$auraPoints',
-                        style: const TextStyle(
-                            color: Color(0xFF9B4DFF),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays > 0) return '${diff.inDays}d ago';
-    if (diff.inHours > 0) return '${diff.inHours}h ago';
-    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
-    return 'just now';
-  }
 }

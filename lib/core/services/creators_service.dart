@@ -65,6 +65,28 @@ class CreatorsService {
     }
   }
 
+  /// The challenges this creator has authored (public feed rules apply: a
+  /// non-admin caller only sees `status: approved` challenges, minus any
+  /// whose lifecycle `submissionStatus` is PAUSED/ENDED). This is the
+  /// creator profile's primary content — `/creators/{id}/videos` (their
+  /// challenge *attempts*) is a separate, currently-empty backend feed, see
+  /// docs/backend-issues/005.
+  Future<List<Map<String, dynamic>>> fetchCreatorChallenges(
+    String id, {
+    int page = 1,
+    int limit = 30,
+  }) async {
+    try {
+      final res = await _client.get(
+          '/challenges?creatorId=$id&sourceType=Creator&page=$page&limit=$limit',
+          auth: true);
+      if (res['status'] != 'success') return [];
+      return _extractList(res['data']);
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Backend only exposes follower *ids* (`PaginatedFollowList`), not counts,
   /// so we read the pagination total from a 1-item page instead of a
   /// dedicated count endpoint.
@@ -113,6 +135,7 @@ class CreatorsService {
           data['data'] as List? ??
           data['creators'] as List? ??
           data['videos'] as List? ??
+          data['challenges'] as List? ??
           data['items'] as List? ??
           data['docs'] as List? ??
           [];

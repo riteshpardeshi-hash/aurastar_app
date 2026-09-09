@@ -287,8 +287,40 @@ class _PerformanceTabState extends State<_PerformanceTab> {
   String _metric = 'views';
   List<String> _availableMetrics = _metrics;
   List<String> _availableDateRanges = _dateRanges;
+  // Labels the backend supplied for its filter options, merged over the const
+  // fallback maps above at display time. `GET /creator/insights/filter-options`
+  // returns each option as a `{value, label}` object, not a bare string.
+  Map<String, String> _dateRangeLabelOverrides = const {};
+  Map<String, String> _metricLabelOverrides = const {};
   Map<String, dynamic> _overview = {};
   List<MapEntry<String, num>> _chartPoints = [];
+
+  String _dateRangeLabelOf(String v) =>
+      _dateRangeLabelOverrides[v] ?? _dateRangeLabels[v] ?? v;
+  String _metricLabelOf(String v) =>
+      _metricLabelOverrides[v] ?? _metricLabels[v] ?? v;
+
+  /// Each entry from `/creator/insights/filter-options` is either a bare
+  /// string or a `{value|id|key, label|name}` object. Return the option
+  /// values, recording any backend-supplied display label into [labelSink].
+  static List<String> _parseFilterOptions(
+      dynamic raw, Map<String, String> labelSink) {
+    if (raw is! List) return const [];
+    final out = <String>[];
+    for (final e in raw) {
+      if (e is Map) {
+        final value = (e['value'] ?? e['id'] ?? e['key'] ?? '').toString();
+        if (value.isEmpty) continue;
+        final label = (e['label'] ?? e['name'] ?? '').toString();
+        if (label.isNotEmpty) labelSink[value] = label;
+        out.add(value);
+      } else {
+        final value = e.toString();
+        if (value.isNotEmpty) out.add(value);
+      }
+    }
+    return out;
+  }
 
   @override
   void initState() {
@@ -301,15 +333,23 @@ class _PerformanceTabState extends State<_PerformanceTab> {
   /// this creator; falls back to the full documented enum otherwise.
   Future<void> _loadFilters() async {
     final filters = await _service.fetchInsightsFilterOptions();
-    final metrics = pickField(filters, ['metrics']);
-    final dateRanges = pickField(filters, ['dateRanges', 'dateRange']);
+    final metricOverrides = <String, String>{};
+    final dateRangeOverrides = <String, String>{};
+    final metrics =
+        _parseFilterOptions(pickField(filters, ['metrics']), metricOverrides);
+    final dateRanges = _parseFilterOptions(
+        pickField(filters, ['dateRanges', 'dateRange']), dateRangeOverrides);
     if (!mounted) return;
     setState(() {
-      if (metrics is List && metrics.isNotEmpty) {
-        _availableMetrics = metrics.map((e) => e.toString()).toList();
+      if (metrics.isNotEmpty) {
+        _availableMetrics = metrics;
+        _metricLabelOverrides = metricOverrides;
+        if (!metrics.contains(_metric)) _metric = metrics.first;
       }
-      if (dateRanges is List && dateRanges.isNotEmpty) {
-        _availableDateRanges = dateRanges.map((e) => e.toString()).toList();
+      if (dateRanges.isNotEmpty) {
+        _availableDateRanges = dateRanges;
+        _dateRangeLabelOverrides = dateRangeOverrides;
+        if (!dateRanges.contains(_dateRange)) _dateRange = dateRanges.first;
       }
     });
   }
@@ -345,7 +385,7 @@ class _PerformanceTabState extends State<_PerformanceTab> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          _chipRow(_availableDateRanges, (r) => _dateRangeLabels[r] ?? r, _dateRange, (r) {
+          _chipRow(_availableDateRanges, _dateRangeLabelOf, _dateRange, (r) {
             setState(() => _dateRange = r);
             _load();
           }),
@@ -376,10 +416,10 @@ class _PerformanceTabState extends State<_PerformanceTab> {
               child: _stat('Active Challenges', challengeCount, Icons.flash_on, Colors.amber),
             ),
             const SizedBox(height: 24),
-            Text(_metricLabels[_metric] ?? 'Metric',
+            Text(_metricLabelOf(_metric),
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            _chipRow(_availableMetrics, (m) => _metricLabels[m] ?? m, _metric, (m) {
+            _chipRow(_availableMetrics, _metricLabelOf, _metric, (m) {
               setState(() => _metric = m);
               _load();
             }),

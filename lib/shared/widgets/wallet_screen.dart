@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
+import '../../core/services/videos_service.dart';
 import '../../core/utils/wallet_today_total.dart';
 import '../theme/app_colors.dart';
 
@@ -36,8 +37,13 @@ class _WalletScreenState extends State<WalletScreen> {
         _api.fetchAuraBalance(),
         _api.fetchAuraHistory(limit: 50),
       ]);
+      // Aura from videos the user deleted isn't debited server-side yet
+      // (see VideosService) — subtract the local offset from the balance.
+      final serverBalance = results[0] as int;
+      await VideosService.hydrate();
       setState(() {
-        _balance = results[0] as int;
+        _balance =
+            VideosService.adjustBalanceForDeletedVideos(serverBalance);
         _transactions = results[1] as List<Map<String, dynamic>>;
         _loading = false;
       });

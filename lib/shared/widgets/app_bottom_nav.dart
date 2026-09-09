@@ -1,17 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
-import '../../features/account/screens/my_account_screen.dart';
-import '../../features/challenges/screens/all_general_challenges_screen.dart';
 import '../../features/challenges/screens/challenge_reels_screen.dart';
-import '../../features/leaderboard/leaderboard_screen.dart';
+import '../../features/shell/main_shell_controller.dart';
 import '../theme/app_colors.dart';
 import 'avatar_widget.dart';
 
 /// Which of [AppBottomNav]'s tabs (if any) corresponds to the screen it's
 /// shown on — highlights that tab and makes tapping it a no-op instead of
-/// pushing a duplicate copy of the current screen. Dashboard is the "home"
-/// screen every other tab returns to before pushing its destination.
+/// switching to a copy of the screen the user is already on.
 enum AppNavTab { home, search, leaderboard, profile }
+
+extension AppNavTabIndex on AppNavTab {
+  /// Position in [MainShell]'s `IndexedStack` — must match the order the
+  /// shell builds its pages in.
+  int get shellIndex => switch (this) {
+        AppNavTab.home => 0,
+        AppNavTab.search => 1,
+        AppNavTab.leaderboard => 2,
+        AppNavTab.profile => 3,
+      };
+}
 
 /// The single pill-shaped bottom nav + floating center action button used
 /// on every top-level screen. Previously each screen (Dashboard, the
@@ -60,26 +68,17 @@ class _AppBottomNavState extends State<AppBottomNav> {
     });
   }
 
-  // Every tab (other than the one the current screen already is) returns to
-  // Dashboard before pushing its destination, rather than pushing on top of
-  // whatever screen the tap happened to originate from. Without this,
-  // bouncing between tabs from a non-Dashboard screen stacks routes ever
-  // deeper (Dashboard > Challenges > Leaderboard > Brand > ...) instead of
-  // behaving like a normal tab bar — and this is the only way the resulting
-  // stack shape actually matches "same as Dashboard" regardless of which
-  // screen you tapped from.
-  void _goTo(BuildContext context, AppNavTab tab, WidgetBuilder builder) {
+  // The four tab screens are kept permanently alive inside [MainShell]'s
+  // IndexedStack, so a tab switch is never a route push/rebuild — it's just
+  // asking the shell to reveal an already-built screen (no reload, no
+  // spinner). Any drill-down screen pushed on top of the shell renders its
+  // own AppBottomNav too; from there we first pop back down to the shell so
+  // it's on screen to receive the request. On the shell's own screens
+  // `popUntil(isFirst)` is a no-op.
+  void _switchTab(BuildContext context, AppNavTab tab) {
     if (widget.activeTab == tab) return;
-    Navigator.popUntil(context, (route) => route.isFirst);
-    Navigator.push(context, MaterialPageRoute(builder: builder));
-  }
-
-  // Dashboard is always the app's root route (Splash reaches it via
-  // pushReplacement, never a push), so "Home" just pops back to it instead
-  // of pushing a new instance on top of itself.
-  void _goHome(BuildContext context) {
-    if (widget.activeTab == AppNavTab.home) return;
-    Navigator.popUntil(context, (route) => route.isFirst);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    MainShellController.instance.select(tab.shellIndex);
   }
 
   @override
@@ -123,28 +122,20 @@ class _AppBottomNavState extends State<AppBottomNav> {
                         icon: Icons.home_rounded,
                         label: 'Home',
                         active: widget.activeTab == AppNavTab.home,
-                        onTap: () => _goHome(context),
+                        onTap: () => _switchTab(context, AppNavTab.home),
                       ),
                       _navItem(
                         icon: Icons.search_rounded,
                         label: 'Search',
                         active: widget.activeTab == AppNavTab.search,
-                        onTap: () => _goTo(
-                          context,
-                          AppNavTab.search,
-                          (_) => const AllGeneralChallengesScreen(),
-                        ),
+                        onTap: () => _switchTab(context, AppNavTab.search),
                       ),
                       const SizedBox(width: 58),
                       _navItem(
                         icon: Icons.leaderboard_rounded,
                         label: 'Leaderboard',
                         active: widget.activeTab == AppNavTab.leaderboard,
-                        onTap: () => _goTo(
-                          context,
-                          AppNavTab.leaderboard,
-                          (_) => const LeaderboardScreen(),
-                        ),
+                        onTap: () => _switchTab(context, AppNavTab.leaderboard),
                       ),
                       _profileNavItem(context),
                     ],
@@ -156,6 +147,7 @@ class _AppBottomNavState extends State<AppBottomNav> {
               Positioned(
                 top: 0,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ChallengeReelsScreen()),
@@ -200,11 +192,10 @@ class _AppBottomNavState extends State<AppBottomNav> {
     final initial =
         _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'U';
     return GestureDetector(
-      onTap: () => _goTo(
-        context,
-        AppNavTab.profile,
-        (_) => const MyAccountScreen(),
-      ),
+      // Without this the tap only lands on the painted avatar/label pixels;
+      // the padding around them is dead. Opaque makes the whole item tappable.
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _switchTab(context, AppNavTab.profile),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Column(
@@ -248,6 +239,10 @@ class _AppBottomNavState extends State<AppBottomNav> {
     bool active = false,
   }) {
     return GestureDetector(
+      // Opaque so the whole padded column — not just the 22px glyph and the
+      // tiny label — registers the tap. Small hit targets here were making
+      // taps miss and forcing users to tap 2–3 times.
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/aura_score_badge.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -35,16 +35,10 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
   bool _loading = true;
   bool _loadingMore = false;
 
-  // categoryId → name, for resolving each reel's category icon badge.
-  Map<String, String> _categoryNames = const {};
-
   @override
   void initState() {
     super.initState();
     _loadInitial();
-    ChallengesService().fetchCategoryNameMap().then((map) {
-      if (mounted) setState(() => _categoryNames = map);
-    });
   }
 
   @override
@@ -67,6 +61,11 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
         _hasMore = list.length == _pageSize;
         _loading = false;
       });
+      // onPageChanged never fires for the page the feed opens on, so the
+      // first reel's impression has to be recorded here.
+      if (_reels.isNotEmpty) {
+        ChallengeAnalyticsService().recordImpression(_reels.first['id'] as String);
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -100,6 +99,9 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
 
   void _onPageChanged(int index) {
     setState(() => _currentIndex = index);
+    if (index >= 0 && index < _reels.length) {
+      ChallengeAnalyticsService().recordImpression(_reels[index]['id'] as String);
+    }
     if (index >= _reels.length - 3) _loadMore();
   }
 
@@ -155,9 +157,9 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
                         final c = _reels[index];
                         return _ReelPage(
                           key: ValueKey('${c['id']}_$index'),
+                          challengeId: c['id'] as String,
                           videoUrl: c['videoUrl'] as String,
                           thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
-                          categoryName: _categoryNames[c['category'] as String? ?? ''],
                           participants: c['submissionsCount'] as int,
                           isActive: index == _currentIndex,
                           onTap: () => _openDetail(c),
@@ -181,9 +183,9 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
 }
 
 class _ReelPage extends StatefulWidget {
+  final String challengeId;
   final String videoUrl;
   final String thumbnailUrl;
-  final String? categoryName;
   final int participants;
   final bool isActive;
   final Future<void> Function() onTap;
@@ -191,9 +193,9 @@ class _ReelPage extends StatefulWidget {
 
   const _ReelPage({
     super.key,
+    required this.challengeId,
     required this.videoUrl,
     required this.thumbnailUrl,
-    required this.categoryName,
     required this.participants,
     required this.isActive,
     required this.onTap,
@@ -241,11 +243,26 @@ class _ReelPageState extends State<_ReelPage> {
   // that point (observed to vary), so the auto-advance is reliable either way.
   void _onTick() {
     final ctrl = _ctrl;
-    if (ctrl == null || _ended) return;
+    if (ctrl == null) return;
     final v = ctrl.value;
     if (!v.isInitialized || v.duration <= Duration.zero) return;
+    // Throttled server-side inside the service — safe to call every tick.
+    if (v.isPlaying) {
+      ChallengeAnalyticsService().recordWatchProgress(
+        widget.challengeId,
+        watched: v.position,
+        total: v.duration,
+      );
+    }
+    if (_ended) return;
     if (v.position >= v.duration - const Duration(milliseconds: 150)) {
       _ended = true;
+      ChallengeAnalyticsService().recordWatchProgress(
+        widget.challengeId,
+        watched: v.duration,
+        total: v.duration,
+        flush: true,
+      );
       widget.onEnd();
     }
   }
@@ -265,6 +282,16 @@ class _ReelPageState extends State<_ReelPage> {
 
   @override
   void dispose() {
+    final v = _ctrl?.value;
+    if (v != null && v.isInitialized && v.position > Duration.zero) {
+      ChallengeAnalyticsService().recordWatchProgress(
+        widget.challengeId,
+        watched: v.position,
+        total: v.duration > Duration.zero ? v.duration : null,
+        flush: true,
+      );
+    }
+    ChallengeAnalyticsService().endWatchSession(widget.challengeId);
     _ctrl?.removeListener(_onTick);
     _ctrl?.dispose();
     super.dispose();
@@ -327,8 +354,6 @@ class _ReelPageState extends State<_ReelPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
                 child: Row(
                   children: [
-                    CategoryIconBadge(categoryName: widget.categoryName, size: 24),
-                    const SizedBox(width: 10),
                     const AuraScoreBadge(),
                     const SizedBox(width: 12),
                     const Icon(Icons.groups_rounded,

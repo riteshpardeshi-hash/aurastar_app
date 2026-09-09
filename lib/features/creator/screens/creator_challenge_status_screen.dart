@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../core/services/creator_gates_service.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -76,6 +77,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
         return;
       }
       final title = (_challenge?['title'] as String?) ?? 'this challenge';
+      ChallengeAnalyticsService().recordShare(widget.challengeId);
       await Share.share('Join "$title" on Aura Arena! $url');
     } finally {
       if (mounted) setState(() => _sharing = false);

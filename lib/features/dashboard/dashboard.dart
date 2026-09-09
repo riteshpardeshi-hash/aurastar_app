@@ -6,10 +6,11 @@ import '../../core/services/connectivity_probe.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
+import '../../core/services/videos_service.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart';
-import '../../shared/widgets/category_icon_badge.dart';
+import '../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../shared/widgets/level_up_sheet.dart';
 import '../../shared/widgets/wallet_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
@@ -26,6 +27,7 @@ import '../../shared/theme/app_text_styles.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../core/utils/error_message.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
+import '../../shared/widgets/screen_skeleton.dart';
 
 // Exponential backoff for Dashboard's profile-load auto-retry: 8s, 16s,
 // 32s, 60s (capped), for attempt numbers 1, 2, 3, 4+. Extracted as a top-
@@ -38,7 +40,11 @@ int profileAutoRetryDelaySeconds(int attemptNumber) {
 }
 
 class Dashboard extends StatefulWidget {
-  const Dashboard({super.key});
+  /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
+  /// one shared bottom nav and the in-header back arrow is dropped.
+  final bool embeddedInShell;
+
+  const Dashboard({super.key, this.embeddedInShell = false});
 
   @override
   State<Dashboard> createState() => _DashboardState();
@@ -54,9 +60,6 @@ class _DashboardState extends State<Dashboard> {
       ChallengesService()
           .fetchChallenges(limit: 20)
           .then((raw) => raw.map(normaliseChallenge).toList());
-
-  late final Future<Map<String, String>> _categoryNamesFuture =
-      ChallengesService().fetchCategoryNameMap();
 
   // Creator-page-tagged pages for the "Creator Videos" shelf.
   late final Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
@@ -169,10 +172,15 @@ class _DashboardState extends State<Dashboard> {
         (profile['avatar'] as String? ?? '').isNotEmpty
             ? profile['avatar'] as String
             : profile['profileImageUrl'] as String? ?? '';
-    final points =
+    final serverPoints =
         (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
+    // The backend doesn't debit Aura when a video is deleted; VideosService
+    // holds the lost points locally and we subtract them here. Level/tier
+    // below stay on the server's own values.
+    await VideosService.hydrate();
+    final points = VideosService.adjustBalanceForDeletedVideos(serverPoints);
     // Server-computed and authoritative — do not recompute level/tier from
     // `points` locally (see aura_tier.dart's auraTierForName).
     final level = (profile['level'] as num?)?.toInt() ?? 1;
@@ -203,6 +211,7 @@ class _DashboardState extends State<Dashboard> {
           return _buildScaffold(
             context,
             points: 0,
+            level: 1,
             tierName: null,
             isAdmin: false,
             isBrand: false,
@@ -287,7 +296,7 @@ class _DashboardState extends State<Dashboard> {
         if (!snap.hasData) {
           return const Scaffold(
             backgroundColor: _bg,
-            body: Center(child: CircularProgressIndicator(color: _accent)),
+            body: ScreenSkeleton(),
           );
         }
 
@@ -382,6 +391,7 @@ class _DashboardState extends State<Dashboard> {
         return _buildScaffold(
           context,
           points: points,
+          level: level,
           tierName: tierName,
           isAdmin: isAdmin,
           isBrand: isBrand,
@@ -400,6 +410,7 @@ class _DashboardState extends State<Dashboard> {
   Widget _buildScaffold(
     BuildContext context, {
     required int points,
+    required int level,
     required String? tierName,
     required bool isAdmin,
     required bool isBrand,
@@ -411,7 +422,7 @@ class _DashboardState extends State<Dashboard> {
     required int streakDay,
     required String lastStreakDate,
   }) {
-    final tier = auraTierForName(tierName);
+    final tier = auraTierForName(tierName, level: level);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -451,7 +462,9 @@ class _DashboardState extends State<Dashboard> {
               ],
             ),
           ),
-          const AppBottomNav(activeTab: AppNavTab.home),
+          // Inside MainShell the shell owns the one shared bottom nav.
+          if (!widget.embeddedInShell)
+            const AppBottomNav(activeTab: AppNavTab.home),
         ],
       ),
     );
@@ -483,67 +496,82 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
 
-          const Spacer(),
-
-          // ── Name + Points ─────────────────────────────
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                username.isNotEmpty ? '@$username' : displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'SpaceGrotesk',
-                ),
-              ),
-              const SizedBox(height: 4),
-              GestureDetector(
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const WalletScreen()),
+          // ── Name + Points + bell ──────────────────────
+          // Everything right of the logo, packed to the right margin and
+          // vertically centred. The @username Text is Flexible so a long
+          // name ellipsises; the pill and bell keep their size. NB: a
+          // Flexible inside a MainAxisSize.min Row collapses to zero width —
+          // that trap is why an earlier version showed no username — so this
+          // is an Expanded row aligned to its end instead.
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    username.isNotEmpty ? '@$username' : displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'SpaceGrotesk',
                     ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A0A2E),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _accent.withValues(alpha: 0.6)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(
-                        'assets/images/homescreen/separate elements/coin icon.png',
-                        height: 13,
-                        fit: BoxFit.contain,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$points',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'SpaceGrotesk',
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const WalletScreen()),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A0A2E),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: _accent.withValues(alpha: 0.6)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/homescreen/separate elements/coin icon.png',
+                          height: 11,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$points',
+                          // Clamp accessibility text scaling for this chip so
+                          // a large system font can't blow the header out.
+                          textScaler: MediaQuery.textScalerOf(context)
+                              .clamp(maxScaleFactor: 1.2),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'SpaceGrotesk',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const NotificationBellButton(
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(minWidth: 40, minHeight: 40),
+                  alignment: Alignment.centerRight,
+                ),
+              ],
+            ),
           ),
-
-          const NotificationBellButton(),
         ],
       ),
     );
@@ -739,7 +767,7 @@ class _DashboardState extends State<Dashboard> {
         String thumbnailUrl = '';
         String instructions = '';
         String challengeId = '';
-        String categoryId = '';
+        int participants = 0;
 
         if (hero != null) {
           title = hero['title'] as String? ?? title;
@@ -747,7 +775,7 @@ class _DashboardState extends State<Dashboard> {
           thumbnailUrl = hero['thumbnailUrl'] as String? ?? '';
           instructions = hero['instructions'] as String? ?? '';
           challengeId = hero['id'] as String? ?? '';
-          categoryId = hero['category'] as String? ?? '';
+          participants = hero['submissionsCount'] as int? ?? 0;
         }
 
         return Padding(
@@ -795,6 +823,12 @@ class _DashboardState extends State<Dashboard> {
                         ),
                       ),
                     ),
+                    Positioned(
+                      left: 6,
+                      right: 6,
+                      bottom: 4,
+                      child: ThumbnailStatsBadge(participants: participants),
+                    ),
                     // Featured tag
                     Positioned(
                       left: 16,
@@ -831,20 +865,6 @@ class _DashboardState extends State<Dashboard> {
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                    // Category icon — top-right (Featured tag owns top-left)
-                    Positioned(
-                      top: 16,
-                      right: 16,
-                      child: FutureBuilder<Map<String, String>>(
-                        future: _categoryNamesFuture,
-                        builder: (context, catSnap) {
-                          final categoryNames = catSnap.data ?? const {};
-                          return CategoryIconBadge(
-                            categoryName: categoryNames[categoryId],
-                          );
-                        },
                       ),
                     ),
                   ],
@@ -894,12 +914,7 @@ class _DashboardState extends State<Dashboard> {
             final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
-            return FutureBuilder<Map<String, String>>(
-              future: _categoryNamesFuture,
-              builder: (context, catSnap) {
-                final categoryNames = catSnap.data ?? const {};
-
-                return Column(
+            return Column(
                   children: [
                     // Top row: 3 square thumbnails
                     Padding(
@@ -912,9 +927,10 @@ class _DashboardState extends State<Dashboard> {
                           final thumbnailUrl =
                               data['thumbnailUrl'] as String? ?? '';
                           final challengeId = data['id'] as String? ?? '';
-                          final categoryId = data['category'] as String? ?? '';
                           final instructions =
                               data['instructions'] as String? ?? '';
+                          final participants =
+                              data['submissionsCount'] as int? ?? 0;
                           const brandLogoUrl = '';
 
                           return Expanded(
@@ -946,11 +962,11 @@ class _DashboardState extends State<Dashboard> {
                                           thumbnailUrl: thumbnailUrl,
                                         ),
                                         Positioned(
-                                          top: 6,
-                                          left: 6,
-                                          child: CategoryIconBadge(
-                                            categoryName:
-                                                categoryNames[categoryId],
+                                          left: 0,
+                                          right: 0,
+                                          bottom: 0,
+                                          child: ThumbnailStatsBadge(
+                                            participants: participants,
                                           ),
                                         ),
                                         if (brandLogoUrl.isNotEmpty)
@@ -993,8 +1009,8 @@ class _DashboardState extends State<Dashboard> {
                                   data['videoUrl'] as String? ?? '';
                               final thumbnailUrl =
                                   data['thumbnailUrl'] as String? ?? '';
-                              final categoryId =
-                                  data['category'] as String? ?? '';
+                              final participants =
+                                  data['submissionsCount'] as int? ?? 0;
                               const brandLogoUrl = '';
                               final challengeId = data['id'] as String? ?? '';
 
@@ -1034,11 +1050,11 @@ class _DashboardState extends State<Dashboard> {
                                               ),
                                             ),
                                             Positioned(
-                                              top: 8,
-                                              left: 8,
-                                              child: CategoryIconBadge(
-                                                categoryName:
-                                                    categoryNames[categoryId],
+                                              left: 0,
+                                              right: 0,
+                                              bottom: 0,
+                                              child: ThumbnailStatsBadge(
+                                                participants: participants,
                                               ),
                                             ),
                                             if (brandLogoUrl.isNotEmpty)
@@ -1068,8 +1084,6 @@ class _DashboardState extends State<Dashboard> {
                     ],
                   ],
                 );
-              },
-            );
           },
         ),
         const SizedBox(height: 24),
@@ -1112,12 +1126,7 @@ class _DashboardState extends State<Dashboard> {
             final docs = snap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
-            return FutureBuilder<Map<String, String>>(
-              future: _categoryNamesFuture,
-              builder: (context, catSnap) {
-                final categoryNames = catSnap.data ?? const {};
-
-                return Padding(
+            return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: List.generate(docs.length.clamp(0, 3), (i) {
@@ -1127,9 +1136,10 @@ class _DashboardState extends State<Dashboard> {
                       final thumbnailUrl =
                           data['thumbnailUrl'] as String? ?? '';
                       final challengeId = data['id'] as String? ?? '';
-                      final categoryId = data['category'] as String? ?? '';
                       final instructions =
                           data['instructions'] as String? ?? '';
+                      final participants =
+                          data['submissionsCount'] as int? ?? 0;
                       const brandLogoUrl = '';
 
                       return Expanded(
@@ -1161,10 +1171,11 @@ class _DashboardState extends State<Dashboard> {
                                       thumbnailUrl: thumbnailUrl,
                                     ),
                                     Positioned(
-                                      top: 6,
-                                      left: 6,
-                                      child: CategoryIconBadge(
-                                        categoryName: categoryNames[categoryId],
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 0,
+                                      child: ThumbnailStatsBadge(
+                                        participants: participants,
                                       ),
                                     ),
                                     if (brandLogoUrl.isNotEmpty)
@@ -1190,8 +1201,6 @@ class _DashboardState extends State<Dashboard> {
                     }),
                   ),
                 );
-              },
-            );
           },
         ),
         const SizedBox(height: 24),
@@ -1219,37 +1228,27 @@ class _DashboardState extends State<Dashboard> {
         if (docs.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
-        return FutureBuilder<Map<String, String>>(
-          future: _categoryNamesFuture,
-          builder: (context, catSnap) {
-            final categoryNames = catSnap.data ?? const {};
-            return SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 8,
-                  mainAxisSpacing: 8,
-                  childAspectRatio: 0.75,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final data = docs[i % docs.length];
-                    return _EndlessChallengeCard(
-                      data: data,
-                      categoryName:
-                          categoryNames[data['category'] as String? ?? ''],
-                    );
-                  },
-                  // Far more than anyone will ever actually scroll through —
-                  // not truly infinite (Sliver delegates need a concrete
-                  // count), just large enough that the grid never visibly
-                  // ends.
-                  childCount: 9000,
-                ),
-              ),
-            );
-          },
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 0.75,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) {
+                final data = docs[i % docs.length];
+                return _EndlessChallengeCard(data: data);
+              },
+              // Far more than anyone will ever actually scroll through —
+              // not truly infinite (Sliver delegates need a concrete
+              // count), just large enough that the grid never visibly
+              // ends.
+              childCount: 9000,
+            ),
+          ),
         );
       },
     );
@@ -1470,9 +1469,8 @@ class _DashboardState extends State<Dashboard> {
 // ── Endless challenges grid card ─────────────────────────────────────────────
 class _EndlessChallengeCard extends StatelessWidget {
   final Map<String, dynamic> data;
-  final String? categoryName;
 
-  const _EndlessChallengeCard({required this.data, required this.categoryName});
+  const _EndlessChallengeCard({required this.data});
 
   @override
   Widget build(BuildContext context) {
@@ -1481,6 +1479,7 @@ class _EndlessChallengeCard extends StatelessWidget {
     final thumbnailUrl = data['thumbnailUrl'] as String? ?? '';
     final challengeId = data['id'] as String? ?? '';
     final instructions = data['instructions'] as String? ?? '';
+    final participants = data['submissionsCount'] as int? ?? 0;
 
     return GestureDetector(
       onTap: () => Navigator.push(
@@ -1499,11 +1498,15 @@ class _EndlessChallengeCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            VideoThumbnailWidget(videoUrl: videoUrl, thumbnailUrl: thumbnailUrl),
+            VideoThumbnailWidget(
+              videoUrl: videoUrl,
+              thumbnailUrl: thumbnailUrl,
+            ),
             Positioned(
-              top: 6,
-              left: 6,
-              child: CategoryIconBadge(categoryName: categoryName),
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ThumbnailStatsBadge(participants: participants),
             ),
           ],
         ),

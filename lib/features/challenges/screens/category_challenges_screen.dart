@@ -3,8 +3,7 @@ import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/aura_score_badge.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
+import '../../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -261,6 +260,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
     final thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
     final instructions = c['instructions'] as String? ?? '';
     final challengeId = c['id'] as String? ?? '';
+    final participants = c['submissionsCount'] as int? ?? 0;
 
     return GestureDetector(
       onTap:
@@ -285,12 +285,12 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Thumbnail
+            // Thumbnail — this is the card's only content, so it must clip on
+            // all four corners (a top-only radius here left the bottom corners
+            // square, covering the container's rounded border).
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(14),
-                ),
+                borderRadius: BorderRadius.circular(14),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -314,21 +314,11 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
                         ),
                       ),
                     ),
-                    // Category badge bottom-right (every card here shares
-                    // this screen's single category, but we still surface
-                    // it so this grid matches the other browse screens)
                     Positioned(
-                      bottom: 7,
-                      right: 7,
-                      child: CategoryIconBadge(
-                        categoryName: widget.categoryName,
-                        size: 28,
-                      ),
-                    ),
-                    const Positioned(
-                      bottom: 7,
-                      left: 7,
-                      child: AuraScoreBadge(),
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: ThumbnailStatsBadge(participants: participants),
                     ),
                   ],
                 ),

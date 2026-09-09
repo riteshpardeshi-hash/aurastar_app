@@ -77,10 +77,10 @@ void main() {
     expect(capturedCategoryParam, '6a3b7c6f443e944c5ea60370',
         reason: 'must send the category ObjectId, not the display name '
             '"Freestyle Football"');
-    // Card titles were removed from this grid per a later request (kept
-    // only on the thumbnail/star-count), so a real challenge rendering is
-    // now checked via its star count rather than its title text.
-    expect(find.text('5'), findsOneWidget,
+    // Card titles and the star count were both removed from this grid; a card
+    // now shows only the thumbnail plus a participants/Aura stats badge, so a
+    // real challenge rendering is checked via that badge rather than any text.
+    expect(find.byIcon(Icons.groups_rounded), findsOneWidget,
         reason: 'a real challenge for this category must render, not the '
             'empty state');
     expect(find.textContaining('No Freestyle Football challenges'),
@@ -141,8 +141,65 @@ void main() {
         reason: 'the system/brand source tag was removed');
     expect(find.text('Medium'), findsNothing,
         reason: 'the difficulty tag was removed');
-    // The star count is the one piece of card info kept — proves the card
-    // still rendered at all rather than everything silently disappearing.
-    expect(find.text('5'), findsOneWidget);
+    // The thumbnail stats badge is what's left on a card — proves it still
+    // rendered at all rather than everything silently disappearing.
+    expect(find.byIcon(Icons.groups_rounded), findsOneWidget);
+  });
+
+  // Regression coverage: the card is a bare thumbnail with no footer section,
+  // so its ClipRRect has to round all four corners. It used to use a top-only
+  // `BorderRadius.vertical` (a copy of the brand-card layout, which *does*
+  // have a footer), leaving the bottom corners square over the container's
+  // rounded border.
+  testWidgets('card thumbnail clips all four corners, not just the top',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/challenges')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenges': [
+                {
+                  '_id': 'challenge-1',
+                  'title': 'Freestyle Trick Shot',
+                  'videoUrl': '',
+                  'starsCount': 5,
+                  'creatorId': 'system',
+                },
+              ],
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(
+      home: CategoryChallengesScreen(
+        categoryId: '6a3b7c6f443e944c5ea60370',
+        categoryName: 'Fitness',
+      ),
+    ));
+    await tester.pump();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    final cardClip = tester
+        .widgetList<ClipRRect>(find.descendant(
+          of: find.byType(GridView),
+          matching: find.byType(ClipRRect),
+        ))
+        .map((c) => c.borderRadius)
+        .whereType<BorderRadius>()
+        .firstWhere((b) => b.topLeft == const Radius.circular(14),
+            orElse: () => BorderRadius.zero);
+
+    expect(cardClip.bottomLeft, const Radius.circular(14),
+        reason: 'bottom-left corner must be rounded like the top');
+    expect(cardClip.bottomRight, const Radius.circular(14),
+        reason: 'bottom-right corner must be rounded like the top');
   });
 }

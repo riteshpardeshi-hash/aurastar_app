@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../shared/widgets/aura_score_badge.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -292,7 +291,6 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     final isHot = _isHot(data);
     final endLabel = campaignEndLabel(data['endDate']);
     final endColor = campaignEndColor(data['endDate']);
-    final category = data['category'] as String?;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
@@ -333,11 +331,6 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                       if (isHot) _badge('Hot 🔥', const Color(0xFFFF6B35)),
                     ],
                   ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: CategoryIconBadge(categoryName: category),
                 ),
                 // Bottom content
                 Positioned(
@@ -586,7 +579,6 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     final isHot = _isHot(data);
     final endLabel = campaignEndLabel(data['endDate']);
     final endColor = campaignEndColor(data['endDate']);
-    final category = data['category'] as String?;
 
     return GestureDetector(
       onTap: () => _openChallenge(context, doc),
@@ -637,14 +629,6 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                           if (isNew) _badge('New', Colors.green),
                           if (isHot) _badge('Hot', const Color(0xFFFF6B35)),
                         ],
-                      ),
-                    ),
-                    Positioned(
-                      top: 7,
-                      right: 7,
-                      child: CategoryIconBadge(
-                        categoryName: category,
-                        size: 26,
                       ),
                     ),
                     const Positioned(

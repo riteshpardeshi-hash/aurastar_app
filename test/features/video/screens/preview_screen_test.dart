@@ -213,11 +213,12 @@ void main() {
     expect(find.text('Retry Upload'), findsNothing,
         reason: 'a face mismatch can never be fixed by resubmitting the '
             'same clip, so the generic retry CTA must not show');
-    // The always-present left button already reads "Retake"; the CTA we
-    // fixed must now read the same, giving two matches.
-    expect(find.text('Retake'), findsNWidgets(2));
+    // "Retake" is the only button-worthy action for a face mismatch, so this
+    // state collapses the usual two-button row to a single button — having
+    // both read "Retake" and do the same thing was just confusing.
+    expect(find.text('Retake'), findsOneWidget);
 
-    await tester.tap(find.text('Retake').last);
+    await tester.tap(find.text('Retake'));
     await tester.pumpAndSettle();
 
     expect(find.text('Open Preview'), findsOneWidget,

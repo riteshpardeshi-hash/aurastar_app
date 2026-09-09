@@ -155,3 +155,10 @@ Android device:
   (real-device verification)" above. Local recording/preview is fixed;
   post-upload playback remains sideways, but is now conclusively isolated
   to the independent `ai_proxy` backend bug, not this client change.
+- **Follow-up (2026-09-07), ADR 013**: a *different* squeezed-playback bug
+  in the same symptom family — `correctedVideoAspectRatio` double-correcting
+  an already-portrait `size` that still carried a 90/270
+  `rotationCorrection` flag — was found and fixed in
+  `core/utils/video_aspect_ratio.dart`. That one is pure client-side
+  aspect-ratio math on a correctly-recorded file, unrelated to capture or
+  the `ai_proxy` step.

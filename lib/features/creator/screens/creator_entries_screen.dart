@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../features/challenges/widgets/achievement_card.dart'
     show kChallengeBaseUrl;
@@ -231,6 +232,8 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                     );
                   } else {
                     // Share challenge link (not the player video)
+                    ChallengeAnalyticsService()
+                        .recordShare(widget.challengeId);
                     final link =
                         '$kChallengeBaseUrl/${widget.challengeId}';
                     Share.share(

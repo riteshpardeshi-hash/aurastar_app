@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/challenges_service.dart';
 import 'package:aura_app/core/services/creators_service.dart';
 
 void main() {
@@ -94,6 +95,57 @@ void main() {
 
     expect(requestedQuery, contains('limit=1'));
     expect(count, 42);
+  });
+
+  test(
+      'fetchCreatorChallenges hits GET /challenges filtered by creatorId + '
+      'sourceType and unwraps data.challenges', () async {
+    // Regression: the creator profile used to have no authored-challenge feed
+    // at all — its "Challenges" stat was the length of the (always-empty,
+    // backend-issues/005) /creators/{id}/videos list, so every creator profile
+    // showed "0 Challenges" and an empty grid. This is the endpoint that
+    // populates both now.
+    String? requestedPath;
+    String? requestedQuery;
+    ApiClient.httpClient = MockClient((request) async {
+      requestedPath = request.url.path;
+      requestedQuery = request.url.query;
+      return http.Response(
+        jsonEncode({
+          'status': 'success',
+          'data': {
+            'challenges': [
+              {'_id': 'ch1', 'title': 'Wink', 'thumbnailUrl': 't1'},
+              {'_id': 'ch2', 'title': 'Smile'},
+            ],
+            'pagination': {'total': 2, 'hasNextPage': false},
+          },
+        }),
+        200,
+      );
+    });
+
+    final list = await CreatorsService().fetchCreatorChallenges('c1');
+
+    expect(requestedPath!.endsWith('/challenges'), isTrue,
+        reason: 'expected GET /challenges, got $requestedPath');
+    expect(requestedQuery, contains('creatorId=c1'));
+    expect(requestedQuery, contains('sourceType=Creator'));
+    expect(list, hasLength(2));
+    expect(normaliseChallenge(list.first)['id'], 'ch1');
+    expect(normaliseChallenge(list.first)['title'], 'Wink');
+  });
+
+  test('fetchCreatorChallenges returns [] when the request is not successful',
+      () async {
+    ApiClient.httpClient = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'status': 'fail', 'message': 'nope'}),
+        403,
+      );
+    });
+
+    expect(await CreatorsService().fetchCreatorChallenges('c1'), isEmpty);
   });
 
   test('followCreator POSTs to /creators/{id}/follow', () async {

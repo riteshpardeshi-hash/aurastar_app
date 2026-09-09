@@ -87,6 +87,11 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
 
   @override
   Widget build(BuildContext context) {
+    // The percent readout was a fixed 64pt, which looked oversized on
+    // smaller/shorter screens and unbalanced the whole column. Scale it to
+    // the device and cap it well below the old value.
+    final percentFontSize =
+        (MediaQuery.sizeOf(context).shortestSide * 0.13).clamp(38.0, 52.0);
     return Container(
       color: Colors.black,
       child: Stack(
@@ -94,9 +99,15 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
         children: [
           ScaleTransition(
             scale: _pulseAnim,
+            // `contain`, not `cover`: the art is a tall 4325x7721 diamond whose
+            // bright points sit at ~6%/~93% of its width, so `cover` scales it
+            // to fill height and crops those points off both screen edges,
+            // making the shape look oversized and clipped. The image border is
+            // pure black — same as the Container behind it — so the letterbox
+            // from `contain` is invisible and the whole diamond stays framed.
             child: Image.asset(
               'assets/images/analysing/Asset 132.png',
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               alignment: Alignment.center,
             ),
           ),
@@ -122,15 +133,18 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         ).createShader(bounds),
-                        child: Text(
-                          '$pct%',
-                          style: const TextStyle(
-                            fontFamily: 'ClashDisplay',
-                            color: Colors.white,
-                            fontSize: 64,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
-                            decoration: TextDecoration.none,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$pct%',
+                            style: TextStyle(
+                              fontFamily: 'ClashDisplay',
+                              color: Colors.white,
+                              fontSize: percentFontSize,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
                       );
@@ -139,8 +153,8 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
                   const SizedBox(height: 10),
                   Image.asset('assets/images/analysing/Asset 135.png', height: 16),
                   const SizedBox(height: 18),
-                  Image.asset('assets/images/analysing/Asset 136.png', height: 60),
-                  const Spacer(flex: 6),
+                  Image.asset('assets/images/analysing/Asset 136.png', height: 36),
+                  const Spacer(flex: 5),
                   if (!_timedOut) ...[
                     Image.asset('assets/images/analysing/Asset 137.png', height: 22),
                     const SizedBox(height: 10),

@@ -86,7 +86,32 @@ class ChallengesService {
   // point at which the app already considers scoring unusually slow.
   static const _scoringTimeout = Duration(seconds: 90);
 
-  Future<Map<String, dynamic>> createSubmission(
+  /// Returns the scored submission plus any coupons this submission won.
+  ///
+  /// Per the mobile coupon-integration contract (backend ADRs 082–084) the
+  /// response carries coupons in **two** arrays that we concatenate into
+  /// `coupons` — the app treats them uniformly and branches only on each
+  /// entry's `sourcing` (`POOL` vs `CATALOG`):
+  ///  - `data.levelUpOffers[]` — the user's Aura crossed a level boundary and
+  ///    an admin has a `LEVEL` offer for that level.
+  ///  - `data.leaderboardOffers[]` — the scored submission moved the user into
+  ///    a brand offer's top-N rank band (was `data.grantedVouchers`, which the
+  ///    backend renamed; still accepted here for transitional compatibility).
+  ///
+  /// Empty for the vast majority of submissions; a failure computing the
+  /// grants server-side never fails the submission, so `[]` then too.
+  ///
+  /// `auraBalance` (running Aura total after this submission) and `levelUp`
+  /// (non-null only when a level boundary was crossed) are surfaced for
+  /// callers that want them; the dashboard already updates the wallet and
+  /// fires the level-up animation off its own profile stream.
+  Future<
+      ({
+        Map<String, dynamic> submission,
+        List<Map<String, dynamic>> coupons,
+        int? auraBalance,
+        Map<String, dynamic>? levelUp,
+      })> createSubmission(
     String challengeId,
     String videoId,
   ) async {
@@ -99,7 +124,23 @@ class ChallengesService {
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create submission';
     }
-    return res['data']['submission'] as Map<String, dynamic>;
+    final data = res['data'] as Map<String, dynamic>;
+
+    List<Map<String, dynamic>> arr(String key) =>
+        (data[key] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
+    return (
+      submission: data['submission'] as Map<String, dynamic>,
+      coupons: [
+        ...arr('levelUpOffers'),
+        // `grantedVouchers` is the pre-rename name for `leaderboardOffers`.
+        ...(data['leaderboardOffers'] != null
+            ? arr('leaderboardOffers')
+            : arr('grantedVouchers')),
+      ],
+      auraBalance: (data['auraBalance'] as num?)?.toInt(),
+      levelUp: data['levelUp'] as Map<String, dynamic>?,
+    );
   }
 
   Future<Map<String, dynamic>> presignChallenge() async {
@@ -218,21 +259,57 @@ String submissionStatusFromApi(Map<String, dynamic> s) {
 }
 
 // GET /challenges/{id}/submissions (the backend's own docs call this "the
-// public leaderboard" — already sorted by aiScore descending) never joins a
-// display name: `userId` comes back as a bare id string or a populated
-// `{_id}` object, never with a name. There's no public endpoint to resolve a
-// player id to a name (creators/brands lookups 404 for regular players;
-// player profiles are otherwise private) — name/username are left blank
-// here so callers can apply an honest, rank-based fallback instead of
-// fabricating an identity.
+// public leaderboard" — already sorted by aiScore descending). `userId` comes
+// back populated: a `{_id, displayName?, avatar?}` object (the OpenAPI spec
+// still types it as a bare string — it's stale). `displayName` is only
+// present when that user set one, so callers still need a rank-based fallback
+// for the rest; there's no public endpoint to resolve a player id to a name
+// (creators/brands lookups 404 for regular players).
 Map<String, dynamic> normaliseSubmissionEntry(Map<String, dynamic> s) {
+  final u = s['userId'];
+  String pick(String key) =>
+      u is Map ? (u[key] as String?)?.trim() ?? '' : '';
+  final name = pick('displayName').isNotEmpty
+      ? pick('displayName')
+      : pick('name').isNotEmpty
+          ? pick('name')
+          : pick('username');
   return {
     'id': _extractRefId(s['userId']),
-    'name': '',
-    'username': '',
+    'name': name,
+    'username': pick('username'),
     'score': (s['aiScore'] as num?)?.toInt() ?? 0,
     'stars': (s['starsCount'] as num?)?.toInt() ?? 0,
+    'createdAt': s['createdAt'],
   };
+}
+
+/// Turns the raw submissions list (already score-desc) into leaderboard rows
+/// with **one row per user** — a user who submitted several videos to the
+/// same challenge appears once, at their best score. Without this the board
+/// shows the same person on several consecutive rows (their every attempt),
+/// which is not what a leaderboard means and also throws the rank numbers
+/// off. Mirrors the backend's own Aura rule, where only a user's personal
+/// best for a challenge counts (`netAurasAwarded = aiScore - previousBest`).
+List<Map<String, dynamic>> leaderboardFromSubmissions(
+  List<Map<String, dynamic>> raw,
+) {
+  final bestByUser = <String, Map<String, dynamic>>{};
+  final noId = <Map<String, dynamic>>[];
+  for (final s in raw) {
+    final e = normaliseSubmissionEntry(s);
+    final id = e['id'] as String;
+    if (id.isEmpty) {
+      noId.add(e); // can't dedupe a row with no user id — keep it as-is
+      continue;
+    }
+    final existing = bestByUser[id];
+    if (existing == null || (e['score'] as int) > (existing['score'] as int)) {
+      bestByUser[id] = e;
+    }
+  }
+  return [...bestByUser.values, ...noId]
+    ..sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
 }
 
 // Helper — normalises a backend challenge map into the fields the UI expects.

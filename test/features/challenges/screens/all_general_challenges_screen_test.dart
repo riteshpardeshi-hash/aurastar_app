@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -7,7 +8,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/screen_cache.dart';
 import 'package:aura_app/features/challenges/screens/all_general_challenges_screen.dart';
+import 'package:aura_app/shared/widgets/video_thumbnail_widget.dart';
 
 // Regression coverage for endless scroll: the Challenges tab used to fetch a
 // single fixed page (limit: 20) of /challenges and never request more, so a
@@ -33,10 +36,12 @@ void main() {
       'api_refresh_token': 'test-refresh-token',
       'api_user_id': 'user-1',
     });
+    ScreenCache.clear();
   });
 
   tearDown(() {
     ApiClient.httpClient = http.Client();
+    ScreenCache.clear();
   });
 
   testWidgets('scrolling near the bottom fetches and appends the next page',
@@ -106,5 +111,69 @@ void main() {
         reason:
             'once the backend runs out of pages, the grid must loop back to '
             'page 1 instead of the scroll simply ending');
+  });
+
+  testWidgets(
+      'a revisit paints the cached grid immediately with no spinner, then '
+      'still refreshes in the background', (tester) async {
+    var challengeCalls = 0;
+    Completer<void>? gate; // when set, holds the /challenges response open
+
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/challenges')) {
+        challengeCalls++;
+        final g = gate;
+        if (g != null) await g.future;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenges': [_challenge('c1')],
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/categories')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {'categories': []},
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    // First visit — cold load populates the cache.
+    await tester.pumpWidget(
+        const MaterialApp(home: AllGeneralChallengesScreen()));
+    await tester.pump();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+    expect(challengeCalls, 1);
+    expect(find.byType(VideoThumbnailWidget), findsOneWidget);
+
+    // Re-open the screen — same as re-tapping the tab — but this time hold
+    // the network response open so only the cache can paint the grid.
+    gate = Completer<void>();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump();
+    await tester.pumpWidget(
+        const MaterialApp(home: AllGeneralChallengesScreen()));
+    await tester.pump();
+
+    expect(find.byType(VideoThumbnailWidget), findsOneWidget,
+        reason: 'a revisit must paint the cached grid before the network '
+            'responds');
+    expect(find.byType(CircularProgressIndicator), findsNothing,
+        reason: 'a revisit must not flash a loading screen');
+    expect(challengeCalls, 2, reason: 'the background revalidation still fires');
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(VideoThumbnailWidget), findsOneWidget);
   });
 }

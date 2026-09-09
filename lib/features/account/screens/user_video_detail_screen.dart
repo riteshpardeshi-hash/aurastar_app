@@ -7,6 +7,7 @@ import '../../video/widgets/video_player_widget.dart';
 
 class UserVideoDetailScreen extends StatefulWidget {
   final int videoNumber;
+  final String challengeTitle;
   final int auraPoints;
   final String videoUrl;
   final String status;
@@ -21,6 +22,7 @@ class UserVideoDetailScreen extends StatefulWidget {
     required this.auraPoints,
     required this.videoUrl,
     required this.videoId,
+    this.challengeTitle = '',
     this.status = 'pending',
     this.aiScore,
     this.aiReason = '',
@@ -32,59 +34,32 @@ class UserVideoDetailScreen extends StatefulWidget {
 }
 
 class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
-  bool _starred = false;
-  int _starsCount = 0;
-  bool _starLoading = false;
-
   bool _deleting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLikeState();
-  }
-
-  Future<void> _loadLikeState() async {
-    final state = await VideosService().fetchLikeState(widget.videoId);
-    if (!mounted) return;
-    setState(() {
-      _starred = state['liked'] as bool;
-      _starsCount = state['likesCount'] as int;
-    });
-  }
-
-  Future<void> _toggleStar() async {
-    if (_starLoading) return;
-    setState(() => _starLoading = true);
-
-    final wasStarred = _starred;
-    try {
-      // POST /videos/{id}/like toggles server-side and its response shape
-      // is undocumented, so the local flip below is optimistic rather than
-      // derived from the response.
-      await VideosService().toggleLike(widget.videoId);
-      if (mounted) {
-        setState(() {
-          _starred = !wasStarred;
-          _starsCount += wasStarred ? -1 : 1;
-          _starLoading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _starLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not update star. Try again.')),
-        );
-      }
-    }
-  }
 
   void _share() {
     Share.share('Check out my video submission on Aura! 🌟\n${widget.videoUrl}');
   }
 
+  /// Points this delete will claw back from the wallet — only an approved
+  /// video that actually earned Aura has any.
+  int get _deductibleAura =>
+      widget.status == 'approved' && widget.auraPoints > 0
+          ? widget.auraPoints
+          : 0;
+
   Future<void> _delete() async {
+    final pts = _deductibleAura;
+    // The backend does not reverse Aura on delete (openapi.yaml: DELETE
+    // /videos/{id} is a bare soft-delete); VideosService tracks the lost
+    // points locally and subtracts them from displayed balances. Warn the
+    // user with the exact amount so the wallet drop isn't a surprise.
+    final message = pts > 0
+        ? 'This video earned you $pts Aura ${pts == 1 ? 'point' : 'points'}. '
+            'Deleting it will permanently remove those $pts '
+            '${pts == 1 ? 'point' : 'points'} from your wallet, and this '
+            "can't be undone."
+        : 'This will permanently remove your video. This action cannot be undone.';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -94,12 +69,9 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
         title: const Text('Delete Video',
             style:
                 TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        // Any Aura-point reversal for a deleted video is computed and
-        // applied server-side — the client doesn't assert a specific
-        // amount here since it can't verify what the backend will do.
-        content: const Text(
-          'This will permanently remove your video. This action cannot be undone.',
-          style: TextStyle(color: AppColors.textMuted),
+        content: Text(
+          message,
+          style: const TextStyle(color: AppColors.textMuted),
         ),
         actions: [
           TextButton(
@@ -120,7 +92,7 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
 
     setState(() => _deleting = true);
     try {
-      await VideosService().deleteVideo(widget.videoId);
+      await VideosService().deleteVideo(widget.videoId, auraPoints: pts);
       if (mounted) Navigator.pop(context, 'deleted');
     } catch (e) {
       if (!mounted) return;
@@ -142,7 +114,13 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Video ${widget.videoNumber}"),
+        title: Text(
+          widget.challengeTitle.trim().isNotEmpty
+              ? widget.challengeTitle
+              : "Video ${widget.videoNumber}",
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           if (_deleting)
             const Padding(
@@ -161,28 +139,24 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
             ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            SizedBox(
-              height: 220,
-              child: VideoPlayerWidget(widget.videoUrl),
+            // ~65% of the screen, portrait — these are always the user's own
+            // portrait-locked recordings, so give them a tall box they
+            // actually fill instead of a short, wide letterboxed strip.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                height: MediaQuery.of(context).size.height * 0.65,
+                width: double.infinity,
+                color: Colors.black,
+                child: VideoPlayerWidget(widget.videoUrl, forcePortrait: true),
+              ),
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _StarButton(
-                  starred: _starred,
-                  count: _starsCount,
-                  loading: _starLoading,
-                  onTap: _toggleStar,
-                ),
-                const SizedBox(width: 32),
-                _ShareButton(onTap: _share),
-              ],
-            ),
+            Center(child: _ShareButton(onTap: _share)),
             const SizedBox(height: 16),
             Card(
               child: Padding(
@@ -285,52 +259,6 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StarButton extends StatelessWidget {
-  final bool starred;
-  final int count;
-  final bool loading;
-  final VoidCallback onTap;
-
-  const _StarButton({
-    required this.starred,
-    required this.count,
-    required this.loading,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: loading ? null : onTap,
-      child: Column(
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: loading
-                ? const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Color(0xFF7B2CBF)),
-                  )
-                : Icon(
-                    starred ? Icons.star_rounded : Icons.star_outline_rounded,
-                    key: ValueKey(starred),
-                    color: starred ? const Color(0xFFFFD700) : Colors.grey,
-                    size: 28,
-                  ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$count',
-            style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-          ),
-        ],
       ),
     );
   }

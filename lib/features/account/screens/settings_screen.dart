@@ -90,7 +90,16 @@ class SettingsScreen extends StatelessWidget {
             context,
             icon: Icons.bug_report_outlined,
             label: 'Preview: Video Rejected',
-            onTap: () => showDialog<bool>(
+            // Must be showDialog<String>, not <bool>: every dismiss control in
+            // AuraSubmittedPopup pops with the String 'continue'/'retry', and
+            // popping a DialogRoute<bool> with a String throws inside
+            // Route.didPop — which silently swallows the pop and leaves the
+            // dialog undismissable. The fixture also uses the real backend
+            // shape ('scored' + verdict 'INVALID') so submissionStatusFromApi
+            // resolves it to 'rejected' the same way production does; a bare
+            // 'status': 'rejected' is not a real enum value and now falls
+            // through to the ai_error ("Review Unavailable") screen instead.
+            onTap: () => showDialog<String>(
               context: context,
               barrierDismissible: false,
               barrierColor: Colors.black.withValues(alpha: 0.85),
@@ -99,8 +108,8 @@ class SettingsScreen extends StatelessWidget {
                 challengeTitle: 'Dancing Girl',
                 challengeId: 'debug-preview',
                 initialResult: {
-                  'status': 'rejected',
-                  'verdict': 'FAIL',
+                  'status': 'scored',
+                  'verdict': 'INVALID',
                   'aiReason':
                       'The submission does not contain any dance performance, and no human subject is visible in the frame. Additionally, the video is only 3 seconds long, failing to meet the minimum duration and movement requirements of the challenge.',
                 },

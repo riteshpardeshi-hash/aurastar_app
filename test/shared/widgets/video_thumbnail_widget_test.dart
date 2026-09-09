@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:aura_app/core/utils/asset_cache_key.dart';
 import 'package:aura_app/shared/widgets/video_thumbnail_widget.dart';
 
 // Regression coverage for a "Home screen takes too long to load" complaint.
@@ -131,5 +133,100 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(videoThumbnailCache['https://example.com/same.mp4'], isNotNull);
+  });
+
+  // Regression for "thumbnails reload on every screen". List screens re-fetch
+  // in the background (SWR) and hand each card a freshly re-signed URL for
+  // the same clip. That must NOT re-extract / flash the shimmer — the cache
+  // and didUpdateWidget both key on the unsigned URL now.
+  testWidgets('a re-signed URL for the same clip does not re-extract',
+      (tester) async {
+    var callCount = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_channel, (call) async {
+      callCount++;
+      return _fakeImageBytes();
+    });
+
+    Widget host(String url) => MaterialApp(
+          home: SizedBox(
+            width: 50,
+            height: 50,
+            child: VideoThumbnailWidget(videoUrl: url),
+          ),
+        );
+
+    await tester.pumpWidget(host(
+        'https://b.s3.amazonaws.com/raw/uid/clip.mp4?X-Amz-Signature=aaaa'));
+    await tester.pumpAndSettle();
+    expect(callCount, 1);
+    expect(find.byType(VideoThumbnailSkeleton), findsNothing);
+
+    // Same clip, new signature — what an SWR list refresh produces.
+    await tester.pumpWidget(host(
+        'https://b.s3.amazonaws.com/raw/uid/clip.mp4?X-Amz-Signature=zzzz'));
+    // One frame only: didUpdateWidget must not have called
+    // setState(_loading = true) — the old code did, flashing the shimmer on
+    // every screen revisit.
+    await tester.pump();
+    expect(find.byType(VideoThumbnailSkeleton), findsNothing,
+        reason: 'didUpdateWidget must not reload for a query-only URL change');
+
+    await tester.pumpAndSettle();
+    expect(callCount, 1, reason: 'no second extraction for the same object');
+    expect(find.byType(VideoThumbnailSkeleton), findsNothing,
+        reason: 'must not flash back to the loading shimmer');
+    expect(
+      videoThumbnailCache.keys,
+      ['https://b.s3.amazonaws.com/raw/uid/clip.mp4'],
+      reason: 'cached under the unsigned key only',
+    );
+
+    // A genuinely different clip still extracts.
+    await tester.pumpWidget(host(
+        'https://b.s3.amazonaws.com/raw/uid/other.mp4?X-Amz-Signature=aaaa'));
+    await tester.pumpAndSettle();
+    expect(callCount, 2);
+  });
+
+  // The network-thumbnail path (thumbnailUrl set) is what the user actually
+  // sees reload on every screen: the old Image.network keyed its cache on the
+  // full presigned URL, so a re-signed URL = cache miss = re-download +
+  // shimmer. CachedNetworkImage keys on `cacheKey` (the unsigned URL), so the
+  // key stays put across re-signs even though `imageUrl` changes.
+  testWidgets('re-signed thumbnailUrl keeps a stable CachedNetworkImage '
+      'cacheKey', (tester) async {
+    const path =
+        'https://bucket.s3.amazonaws.com/challenge-thumbnails/uid/t.jpg';
+
+    Widget host(String sig) => MaterialApp(
+          home: SizedBox(
+            width: 60,
+            height: 60,
+            child: VideoThumbnailWidget(
+              videoUrl: 'https://x/v.mp4',
+              thumbnailUrl: '$path?X-Amz-Signature=$sig',
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(host('aaaa'));
+    await tester.pump();
+
+    var img = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
+    expect(img.cacheKey, assetCacheKey('$path?X-Amz-Signature=aaaa'));
+    expect(img.cacheKey, path);
+    expect(img.imageUrl, endsWith('Signature=aaaa'));
+
+    // Background SWR refresh hands the card a freshly signed URL.
+    await tester.pumpWidget(host('zzzz'));
+    await tester.pump();
+
+    img = tester.widget<CachedNetworkImage>(find.byType(CachedNetworkImage));
+    expect(img.cacheKey, path,
+        reason: 'cacheKey unchanged across the re-sign — a disk/mem hit '
+            'instead of a fresh download + shimmer on every screen revisit');
+    expect(img.imageUrl, endsWith('Signature=zzzz'),
+        reason: 'still fetches with a currently-valid signature if needed');
   });
 }

@@ -25,6 +25,11 @@ class FollowButton extends StatefulWidget {
   final Future<bool> Function(String id)? followFn;
   final Future<bool> Function(String id)? unfollowFn;
 
+  /// Called with the new follow state after a successful toggle. Hosts that
+  /// cache a page showing follower count / follow state use this to drop
+  /// their stale cache entry.
+  final ValueChanged<bool>? onChanged;
+
   const FollowButton({
     super.key,
     required this.targetUserId,
@@ -32,6 +37,7 @@ class FollowButton extends StatefulWidget {
     this.light = false,
     this.followFn,
     this.unfollowFn,
+    this.onChanged,
   });
 
   @override
@@ -72,6 +78,7 @@ class _FollowButtonState extends State<FollowButton> {
           ? unfollow(widget.targetUserId)
           : follow(widget.targetUserId));
       if (mounted) setState(() => _following = !wasFollowing);
+      widget.onChanged?.call(!wasFollowing);
     } catch (e) {
       // Previously this failure was swallowed entirely (the button just
       // silently stayed on "Follow"), so a failed follow was indistinguishable

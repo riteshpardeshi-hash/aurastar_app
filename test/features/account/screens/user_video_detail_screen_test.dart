@@ -5,9 +5,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/account/screens/user_video_detail_screen.dart';
 
 // Regression coverage: deleting a video used to run a Firestore transaction
@@ -31,6 +33,8 @@ void main() {
       'api_refresh_token': 'test-refresh-token',
       'api_user_id': 'user-1',
     });
+    SharedPreferences.setMockInitialValues({});
+    VideosService.resetLocallyDeletedForTest();
 
     deleteCalls = 0;
     deletedPath = null;
@@ -113,6 +117,67 @@ void main() {
     expect(find.text('Open Detail'), findsOneWidget,
         reason: 'a successful delete should pop back to the caller');
     expect(deletedResultHolder.value, 'deleted');
+    // The backend doesn't debit Aura on delete (openapi.yaml: bare
+    // soft-delete) — the 50 points this approved video earned are recorded
+    // as a local wallet offset so displayed balances drop right away.
+    expect(VideosService.deletedVideoAuraOffset, 50);
+    expect(VideosService.adjustBalanceForDeletedVideos(1000), 950);
+  });
+
+  // The confirm dialog must name the points the delete will cost, so the
+  // wallet drop that follows isn't a surprise (ADR 008).
+  testWidgets(
+      'the delete confirmation names the exact Aura amount for an approved '
+      'video', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: UserVideoDetailScreen(
+        videoNumber: 1,
+        auraPoints: 48,
+        videoUrl: 'https://example.com/video.m3u8',
+        videoId: 'video-abc',
+        status: 'approved',
+      ),
+    ));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('48 Aura points'), findsOneWidget);
+    expect(find.textContaining('from your wallet'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the delete confirmation keeps the generic copy for a video with no '
+      'earned Aura', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: UserVideoDetailScreen(
+        videoNumber: 1,
+        auraPoints: 0,
+        videoUrl: 'https://example.com/video.m3u8',
+        videoId: 'video-abc',
+        status: 'rejected',
+      ),
+    ));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.text('This will permanently remove your video. '
+          'This action cannot be undone.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('wallet'), findsNothing);
   });
 
   // Regression coverage: a failed delete used to show a hardcoded "Delete
@@ -170,33 +235,14 @@ void main() {
     expect(find.text('Delete failed. Please try again.'), findsNothing);
   });
 
-  // Regression coverage: star/like used to read and write a Firestore
-  // `submissions` document (`starredBy`/`starsCount` fields, plus an owner
-  // `starsReceived` counter) that no longer exists post-migration — the
-  // initial load silently no-opped (`if (!doc.exists) return`, so it always
-  // showed unstarred/0) and every tap threw, always showing "Could not
-  // update star." The fix reads initial state from `GET /videos/{id}` and
-  // toggles via the real `POST /videos/{id}/like` endpoint.
-  testWidgets(
-      'loads initial like state from GET and toggles via POST /videos/{id}/like',
-      (tester) async {
-    var likeCalls = 0;
+  // The star/like control was removed from this screen (product decision —
+  // it's the user's own video, there's nothing to like). No like GET/POST
+  // fires and no star icon renders.
+  testWidgets('has no star / like control', (tester) async {
     ApiClient.httpClient = MockClient((request) async {
-      if (request.method == 'GET' &&
-          request.url.path.endsWith('/videos/video-abc')) {
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'data': {'isLiked': false, 'likesCount': 3},
-          }),
-          200,
-        );
-      }
-      if (request.method == 'POST' &&
-          request.url.path.endsWith('/videos/video-abc/like')) {
-        likeCalls++;
-        return http.Response(jsonEncode({'status': 'success'}), 200);
-      }
+      // Fail loudly if the screen still probes the like endpoint.
+      expect(request.url.path.contains('/like'), isFalse,
+          reason: 'the like feature was removed from this screen');
       return http.Response(jsonEncode({'status': 'fail'}), 404);
     });
 
@@ -209,31 +255,57 @@ void main() {
         status: 'approved',
       ),
     ));
-
-    // Not pumpAndSettle(): see the repeating-animation note above.
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pump();
 
-    expect(find.text('3'), findsOneWidget,
-        reason: 'initial count must come from GET /videos/{id}, not a '
-            'silently-skipped Firestore read that always defaulted to 0');
-    expect(find.byIcon(Icons.star_outline_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.star_outline_rounded), findsNothing);
+    expect(find.byIcon(Icons.star_rounded), findsNothing);
+    expect(find.byIcon(Icons.share), findsOneWidget,
+        reason: 'Share is the only action left in that row');
+  });
 
+  // The AppBar shows the challenge title when the caller has it, falling
+  // back to "Video N" only when it doesn't.
+  testWidgets('AppBar shows the challenge title, not "Video N", when given one',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: UserVideoDetailScreen(
+        videoNumber: 1,
+        challengeTitle: 'Funny Facial Expressions Marathon',
+        auraPoints: 83,
+        videoUrl: 'https://example.com/video.m3u8',
+        videoId: 'video-abc',
+        status: 'approved',
+      ),
+    ));
     await tester.runAsync(() async {
-      await tester.tap(find.byIcon(Icons.star_outline_rounded));
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
-    // Duration pump (not zero) so _StarButton's AnimatedSwitcher finishes
-    // its crossfade instead of leaving both icons in the tree mid-transition.
-    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pump();
 
-    expect(likeCalls, 1,
-        reason: 'toggling must call the real POST /videos/{id}/like '
-            'endpoint, not throw against a nonexistent Firestore document');
-    expect(find.byIcon(Icons.star_rounded), findsOneWidget);
-    expect(find.text('4'), findsOneWidget);
+    expect(find.text('Funny Facial Expressions Marathon'), findsOneWidget);
+    expect(find.text('Video 1'), findsNothing);
+  });
+
+  testWidgets('AppBar falls back to "Video N" when no challenge title is given',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: UserVideoDetailScreen(
+        videoNumber: 2,
+        auraPoints: 0,
+        videoUrl: 'https://example.com/video.m3u8',
+        videoId: 'video-abc',
+        status: 'pending',
+      ),
+    ));
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+
+    expect(find.text('Video 2'), findsOneWidget);
   });
 }
 

@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/asset_cache_key.dart';
+
 /// Tracks recently viewed videos and caches their bytes to disk so a video
 /// that's known ahead of time (e.g. a challenge's reference clip, prefetched
 /// while the user is still reading the challenge/rules) can play back
@@ -61,12 +63,16 @@ class VideoCacheService {
     if (Uri.parse(videoUrl).path.toLowerCase().endsWith('.m3u8')) {
       return Future.value(null);
     }
-    return _inFlight.putIfAbsent(videoUrl, () => _download(videoUrl));
+    // Key the dedupe map and the on-disk file on the unsigned URL — the
+    // backend re-signs videoUrl on every read, so keying on the raw string
+    // re-downloads the same clip after every list refresh / app relaunch.
+    final key = assetCacheKey(videoUrl);
+    return _inFlight.putIfAbsent(key, () => _download(videoUrl, key));
   }
 
-  static Future<String?> _download(String videoUrl) async {
+  static Future<String?> _download(String videoUrl, String key) async {
     try {
-      final file = await _fileFor(videoUrl);
+      final file = await _fileFor(videoUrl, key);
       if (await file.exists() && await file.length() > 0) return file.path;
       final res = await httpClient
           .get(Uri.parse(videoUrl))
@@ -77,14 +83,17 @@ class VideoCacheService {
     } catch (_) {
       return null;
     } finally {
-      _inFlight.remove(videoUrl);
+      _inFlight.remove(key);
     }
   }
 
-  static Future<File> _fileFor(String videoUrl) async {
+  static Future<File> _fileFor(String videoUrl, String key) async {
     final dir = await getTemporaryDirectory();
-    final ext = videoUrl.toLowerCase().endsWith('.mov') ? 'mov' : 'mp4';
-    return File('${dir.path}/aura_video_cache_${_stableHash(videoUrl)}.$ext');
+    // Extension from the URL *path* (the query string on a presigned URL
+    // makes a naive `endsWith` always miss).
+    final ext =
+        Uri.parse(videoUrl).path.toLowerCase().endsWith('.mov') ? 'mov' : 'mp4';
+    return File('${dir.path}/aura_video_cache_${_stableHash(key)}.$ext');
   }
 
   // dart:core's hashCode isn't guaranteed stable across runs, so cache keys

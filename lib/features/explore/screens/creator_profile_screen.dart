@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
+import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../core/services/screen_cache.dart';
 import '../../../core/services/video_prewarm_cache.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../challenges/screens/challenge_detail.dart';
 import '../../video/widgets/video_player_widget.dart';
 
 class CreatorProfileScreen extends StatefulWidget {
@@ -23,13 +26,34 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   final _service = CreatorsService();
 
   Map<String, dynamic>? _creator;
+  // The creator's authored challenges — the profile's primary content.
+  List<Map<String, dynamic>> _challenges = [];
+  // Their own challenge-attempt submissions. Currently always empty from the
+  // backend (docs/backend-issues/005); kept as a fallback grid for accounts
+  // that authored no challenges, and for when that gap is fixed.
   List<Map<String, dynamic>> _videos = [];
   int _followerCount = 0;
   bool _loading = true;
 
+  // Stale-while-revalidate — creator pages get re-opened constantly (from
+  // every thumbnail grid), so the last-known page is cached per id and shown
+  // instantly on re-entry while a fresh copy loads underneath. Follower
+  // count / follow state converge on that background refresh.
+  String get _cacheKey => 'creator.${widget.creatorId}';
+
   @override
   void initState() {
     super.initState();
+    final cached = ScreenCache.read<Map<String, dynamic>>(_cacheKey);
+    if (cached != null) {
+      _creator = cached['creator'] as Map<String, dynamic>?;
+      _challenges =
+          (cached['challenges'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _videos =
+          (cached['videos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _followerCount = cached['followers'] as int? ?? 0;
+      _loading = false;
+    }
     _load();
   }
 
@@ -38,17 +62,38 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
       _service.fetchCreator(widget.creatorId),
       _service.fetchCreatorVideos(widget.creatorId, limit: 30),
       _service.fetchCreatorFollowerCount(widget.creatorId),
+      _service.fetchCreatorChallenges(widget.creatorId, limit: 30),
     ]);
     if (!mounted) return;
+    final raw = results[0] as Map<String, dynamic>?;
+    final creator = raw != null ? normaliseCreator(raw) : null;
+    final videos = (results[1] as List<Map<String, dynamic>>)
+        .map(normaliseCreatorVideo)
+        .toList();
+    final followers = results[2] as int;
+    final challenges = (results[3] as List<Map<String, dynamic>>)
+        .map(normaliseChallenge)
+        .toList();
+    // A failed fetch (creator == null) shouldn't wipe a good cached page.
+    if (creator == null && _creator != null) {
+      setState(() => _loading = false);
+      return;
+    }
     setState(() {
-      final raw = results[0] as Map<String, dynamic>?;
-      _creator = raw != null ? normaliseCreator(raw) : null;
-      _videos = (results[1] as List<Map<String, dynamic>>)
-          .map(normaliseCreatorVideo)
-          .toList();
-      _followerCount = results[2] as int;
+      _creator = creator;
+      _challenges = challenges;
+      _videos = videos;
+      _followerCount = followers;
       _loading = false;
     });
+    if (creator != null) {
+      ScreenCache.write(_cacheKey, {
+        'creator': creator,
+        'challenges': challenges,
+        'videos': videos,
+        'followers': followers,
+      });
+    }
     // Prewarm just the first few grid videos — the ones visible without
     // scrolling and most likely to be tapped first — not the whole list,
     // to keep VideoPrewarmCache's small cap from thrashing. mixWithOthers
@@ -107,43 +152,124 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
         ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 32),
-          sliver: _videos.isEmpty
-              ? SliverToBoxAdapter(child: _emptyVideos())
-              : SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 6,
-                    mainAxisSpacing: 6,
-                    childAspectRatio: 0.72,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final v = _videos[index];
-                      return GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => _VideoViewerScreen(
-                              videoUrl: v['videoUrl'] as String,
-                              aiScore: v['aiScore'] as int?,
-                            ),
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: VideoThumbnailWidget(
-                            videoUrl: v['videoUrl'] as String,
-                            thumbnailUrl: v['thumbnailUrl'] as String?,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      );
-                    },
-                    childCount: _videos.length,
-                  ),
-                ),
+          sliver: _buildContentSliver(context),
         ),
       ],
+    );
+  }
+
+  // Authored challenges are the primary content. Fall back to the creator's
+  // own attempt-submissions only when they've authored nothing (e.g. a
+  // regular user promoted to creator), then to an empty state.
+  Widget _buildContentSliver(BuildContext context) {
+    if (_challenges.isNotEmpty) return _challengeGrid(context);
+    if (_videos.isNotEmpty) return _videoGrid(context);
+    return SliverToBoxAdapter(child: _emptyVideos());
+  }
+
+  static const _gridDelegate = SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 3,
+    crossAxisSpacing: 6,
+    mainAxisSpacing: 6,
+    childAspectRatio: 0.72,
+  );
+
+  Widget _challengeGrid(BuildContext context) {
+    return SliverGrid(
+      gridDelegate: _gridDelegate,
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final c = _challenges[index];
+          return GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChallengeDetail(
+                  challengeId: c['id'] as String,
+                  title: c['title'] as String? ?? '',
+                  // ChallengeDetail fills these in from its own fetch.
+                  instructions: c['instructions'] as String? ?? '',
+                  videoUrl: c['videoUrl'] as String? ?? '',
+                ),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  VideoThumbnailWidget(
+                    videoUrl: c['videoUrl'] as String? ?? '',
+                    thumbnailUrl: (c['thumbnailUrl'] as String?)?.isNotEmpty == true
+                        ? c['thumbnailUrl'] as String
+                        : null,
+                    fit: BoxFit.cover,
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(6, 12, 6, 6),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.7),
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        c['title'] as String? ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        childCount: _challenges.length,
+      ),
+    );
+  }
+
+  Widget _videoGrid(BuildContext context) {
+    return SliverGrid(
+      gridDelegate: _gridDelegate,
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final v = _videos[index];
+          return GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => _VideoViewerScreen(
+                  videoUrl: v['videoUrl'] as String,
+                  aiScore: v['aiScore'] as int?,
+                ),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: VideoThumbnailWidget(
+                videoUrl: v['videoUrl'] as String,
+                thumbnailUrl: v['thumbnailUrl'] as String?,
+                fit: BoxFit.cover,
+              ),
+            ),
+          );
+        },
+        childCount: _videos.length,
+      ),
     );
   }
 
@@ -203,7 +329,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _statColumn('${_videos.length}', 'Challenges'),
+                    _statColumn('${_challenges.length}', 'Challenges'),
                     _statDivider(),
                     _statColumn(_formatCount(_followerCount), 'Followers'),
                   ],
@@ -266,6 +392,10 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             targetUserId: widget.creatorId,
             initialIsFollowing: isFollowing,
             light: true,
+            // Follower count + isFollowing in the cached page are now stale —
+            // drop it so the next visit re-fetches instead of showing the
+            // pre-toggle numbers.
+            onChanged: (_) => ScreenCache.invalidate(_cacheKey),
           ),
         ],
       ),
@@ -320,7 +450,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
           children: [
             Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 40),
             SizedBox(height: 10),
-            Text('No videos yet', style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
+            Text('No challenges yet', style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
           ],
         ),
       ),

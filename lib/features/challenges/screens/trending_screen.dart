@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
+import '../../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
 
@@ -21,15 +21,10 @@ class _TrendingScreenState extends State<TrendingScreen> {
   List<_TrendingItem>? _items;
   bool _loading = true;
 
-  Map<String, String> _categoryNames = {};
-
   @override
   void initState() {
     super.initState();
     _load();
-    ChallengesService().fetchCategoryNameMap().then((names) {
-      if (mounted) setState(() => _categoryNames = names);
-    });
   }
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -125,7 +120,7 @@ class _TrendingScreenState extends State<TrendingScreen> {
     final videoUrl = item.data['videoUrl'] as String? ?? '';
     final thumbnailUrl = item.data['thumbnailUrl'] as String? ?? '';
     final instructions = item.data['instructions'] as String? ?? '';
-    final categoryId = item.data['category'] as String? ?? '';
+    final participants = item.data['submissionsCount'] as int? ?? 0;
     final isTop3 = index < 3;
 
     return GestureDetector(
@@ -189,12 +184,10 @@ class _TrendingScreenState extends State<TrendingScreen> {
                 ),
               ),
               Positioned(
-                top: 8,
-                right: 8,
-                child: CategoryIconBadge(
-                  categoryName: _categoryNames[categoryId],
-                  size: 28,
-                ),
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: ThumbnailStatsBadge(participants: participants),
               ),
             ],
           ),

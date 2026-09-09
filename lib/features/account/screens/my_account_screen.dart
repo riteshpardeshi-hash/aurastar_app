@@ -6,6 +6,8 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creator_page_service.dart';
+import '../../../core/services/rewards_service.dart';
+import '../../../core/services/screen_cache.dart';
 import '../../../core/services/videos_service.dart';
 import '../../../core/utils/error_message.dart';
 import 'package:share_plus/share_plus.dart';
@@ -15,13 +17,14 @@ import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/avatar_widget.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/screen_skeleton.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import '../../creator/screens/creator_activity_screen.dart';
-import '../../creator/screens/become_creator_screen.dart';
 import '../../creator/screens/create_creator_profile_screen.dart';
 import 'user_video_detail_screen.dart';
 import 'all_videos_screen.dart';
 import 'settings_screen.dart';
+import 'rewards_screen.dart';
 import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
 
@@ -243,7 +246,15 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
 // ── MyAccountScreen ────────────────────────────────────────────────────────────
 
 class MyAccountScreen extends StatefulWidget {
-  const MyAccountScreen({super.key});
+  /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
+  /// one shared bottom nav and there is no route to pop back to, so the
+  /// AppBar back button is dropped.
+  final bool embeddedInShell;
+
+  const MyAccountScreen({
+    super.key,
+    this.embeddedInShell = false,
+  });
 
   @override
   State<MyAccountScreen> createState() => _MyAccountScreenState();
@@ -266,12 +277,46 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   List<Map<String, dynamic>> _rewards = [];
   bool _isCreator = false;
 
+  // Stale-while-revalidate: the Profile tab is pushed fresh on every tap and
+  // its 7-call fan-out took the whole screen over with a spinner each time.
+  // The assembled bundle is cached here so a revisit paints instantly and
+  // then refreshes underneath.
+  static const _kBundleCache = 'profile.bundle';
+
   @override
   void initState() {
     super.initState();
+    final cached = ScreenCache.read<Map<String, dynamic>>(_kBundleCache);
+    if (cached != null) {
+      _uid = cached['uid'] as String?;
+      _profile = (cached['profile'] as Map<String, dynamic>?) ?? {};
+      _videos =
+          (cached['videos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _savedChallenges =
+          (cached['saved'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _referral = cached['referral'] as Map<String, dynamic>?;
+      _streak = cached['streak'] as Map<String, dynamic>?;
+      _referralStatsDetail = cached['referralDetail'] as Map<String, dynamic>?;
+      _rewards =
+          (cached['rewards'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _loading = false;
+    }
     _loadAll();
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted) setState(() => _isCreator = v);
+    });
+  }
+
+  void _cacheBundle() {
+    ScreenCache.write(_kBundleCache, {
+      'uid': _uid,
+      'profile': _profile,
+      'videos': _videos,
+      'saved': _savedChallenges,
+      'referral': _referral,
+      'streak': _streak,
+      'referralDetail': _referralStatsDetail,
+      'rewards': _rewards,
     });
   }
 
@@ -288,6 +333,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
     try {
       final uid = await ApiClient().userId;
+      // Restores ids deleted on earlier launches before the grid filter
+      // below runs — /profile/videos keeps listing soft-deleted videos, so a
+      // cold start would otherwise un-hide every previously deleted one.
+      await VideosService.hydrate();
       final results = await Future.wait<dynamic>([
         AuthApiService().getProfile(),
         AuthApiService().fetchMyVideos(limit: 10),
@@ -295,8 +344,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         AuthApiService().fetchReferralStats(),
         AuthApiService().fetchStreak(),
         AuthApiService().fetchReferralStatsDetail(),
-        AuthApiService().fetchRewards(),
+        RewardsService().fetchRewards(),
       ]);
+      // The backend doesn't debit Aura when a video is deleted; VideosService
+      // carries the lost points locally and the Aura balance below subtracts
+      // them via adjustBalanceForDeletedVideos (hydrate() above loaded it).
       if (!mounted) return;
       setState(() {
         _uid = uid;
@@ -322,6 +374,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         _rewards = (results[6] as List).cast<Map<String, dynamic>>();
         _loading = false;
       });
+      _cacheBundle();
     } catch (e) {
       if (!mounted) return;
       if (isInitialLoad) {
@@ -338,8 +391,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   Future<void> _reloadRewards() async {
-    final rewards = await AuthApiService().fetchRewards();
-    if (mounted) setState(() => _rewards = rewards);
+    final rewards = await RewardsService().fetchRewards();
+    if (mounted) {
+      setState(() => _rewards = rewards);
+      _cacheBundle();
+    }
   }
 
   String _fmt(int n) {
@@ -673,44 +729,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  // ── Become Creator button (standalone entry point) ─────────────────────────
-  Widget _buildBecomeCreatorButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: OutlinedButton.icon(
-          onPressed:
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const BecomeCreatorScreen()),
-              ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
-            side: BorderSide(color: _accent.withValues(alpha: 0.5)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-          icon: const Icon(
-            Icons.diamond_rounded,
-            color: Color(0xFFD4A8FF),
-            size: 18,
-          ),
-          label: const Text(
-            'Become a Creator',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'SpaceGrotesk',
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // ── Creator gate modal ─────────────────────────────────────────────────────
   void _showCreatorGateSheet(BuildContext context, int currentPoints) {
     const required = 500;
@@ -842,7 +860,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   // ── Aura points card ─────────────────────────────────────────────────────────
   Widget _buildAuraPointsCard(int points, int level, String? tierName) {
-    final tier = auraTierForName(tierName);
+    final tier = auraTierForName(tierName, level: level);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -966,6 +984,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final completed = (_streak!['completedStreaks'] as num?)?.toInt() ?? 0;
     if (current == 0 && longest == 0) return const SizedBox.shrink();
 
+    // Streaks run in 7-day cycles (completing one grants the bonus), so show
+    // progress toward 7 — "0/7" when the streak has lapsed.
+    final dayOfCycle = current > 7 ? 7 : current;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
@@ -999,7 +1021,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$current day${current != 1 ? 's' : ''} in a row',
+                  '$dayOfCycle/7 days',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -1026,6 +1048,93 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Rewards & vouchers row ───────────────────────────────────────────────────
+  // Teaser into RewardsScreen (coupons/bonuses from /profile/rewards +
+  // leaderboard vouchers from /profile/offer-vouchers). The badge counts only
+  // coupon_code rewards still `active` — the ones a tap can actually claim.
+  Widget _buildRewardsRow(BuildContext context) {
+    final claimable = _rewards
+        .where((r) =>
+            r['rewardType'] == 'coupon_code' && r['status'] == 'active')
+        .length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RewardsScreen()),
+            );
+            await _reloadRewards();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.card_giftcard_rounded,
+                      color: _accent, size: 22),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Rewards & Vouchers',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700)),
+                      SizedBox(height: 2),
+                      Text('Coupons, bonuses & leaderboard prizes',
+                          style: TextStyle(
+                              color: AppColors.textMuted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                if (claimable > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _accent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: _accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Text('$claimable to claim',
+                        style: const TextStyle(
+                            color: AppColors.accentLight,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.textFaint, size: 22),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1335,6 +1444,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     MaterialPageRoute(
                       builder: (_) => UserVideoDetailScreen(
                         videoNumber: i + 1,
+                        challengeTitle:
+                            (data['challengeTitle'] as String?) ?? '',
                         auraPoints: auraPoints,
                         videoUrl: videoUrl,
                         status: status,
@@ -1465,29 +1576,40 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     if (_loading || _uid == null) {
       return const Scaffold(
         backgroundColor: _bg,
-        body: Center(
-            child: CircularProgressIndicator(color: Color(0xFF7B2CBF))),
+        body: ScreenSkeleton(),
       );
     }
 
-    final totalRewards = (_profile['auraPoints'] as num?)?.toInt() ??
+    final serverRewards = (_profile['auraPoints'] as num?)?.toInt() ??
         (_profile['totalRewards'] as num?)?.toInt() ??
         0;
+    // Subtract Aura from videos the user deleted that the backend hasn't
+    // debited yet (see VideosService). Only the displayed points move —
+    // level and tier stay on the server's authoritative values.
+    final totalRewards =
+        VideosService.adjustBalanceForDeletedVideos(serverRewards);
     // Server-computed and authoritative — do not recompute locally.
     final level = (_profile['level'] as num?)?.toInt() ?? 1;
     final tierName = _profile['tier'] as String?;
 
     return Scaffold(
       backgroundColor: _bg,
-      bottomNavigationBar: const AppBottomNav(activeTab: AppNavTab.profile),
+      // Inside MainShell the shell owns the one shared bottom nav, and there
+      // is no route underneath this screen to pop back to.
+      bottomNavigationBar: widget.embeddedInShell
+          ? null
+          : const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false,
+        leading: widget.embeddedInShell
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
         title: SizedBox(
           height: 22,
           child: Image.asset(
@@ -1523,11 +1645,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 const SizedBox(height: 16),
               ] else ...[
                 _buildBecomeCreatorBanner(context, totalRewards),
-                _buildBecomeCreatorButton(context),
               ],
               _buildAuraPointsCard(totalRewards, level, tierName),
               _buildStreakCard(),
-              _RewardsSection(rewards: _rewards, onClaimed: _reloadRewards),
+              _buildRewardsRow(context),
               const SizedBox(height: 8),
               _buildReferralCard(context),
               _AchievementCardsSection(
@@ -1548,170 +1669,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// ── Rewards Section (real awarded rewards, GET /profile/rewards) ───────────────
-
-class _RewardsSection extends StatelessWidget {
-  final List<Map<String, dynamic>> rewards;
-  final Future<void> Function() onClaimed;
-  const _RewardsSection({required this.rewards, required this.onClaimed});
-
-  @override
-  Widget build(BuildContext context) {
-    if (rewards.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('MY REWARDS', style: AppTextStyles.sectionHeader),
-        const SizedBox(height: 4),
-        const Text(
-          'Rewards earned from streaks, leaderboards, and challenges',
-          style: TextStyle(color: AppColors.textFaint, fontSize: 12),
-        ),
-        const SizedBox(height: 14),
-        for (final reward in rewards)
-          _RewardCard(reward: reward, onClaimed: onClaimed),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
-}
-
-class _RewardCard extends StatefulWidget {
-  final Map<String, dynamic> reward;
-  final Future<void> Function() onClaimed;
-  const _RewardCard({required this.reward, required this.onClaimed});
-
-  @override
-  State<_RewardCard> createState() => _RewardCardState();
-}
-
-class _RewardCardState extends State<_RewardCard> {
-  static const _accent = Color(0xFF7B2CBF);
-  bool _claiming = false;
-
-  static const _reasonLabels = {
-    'streak_completion': 'Streak Bonus',
-    'leaderboard_top': 'Leaderboard Reward',
-    'admin_manual': 'Bonus Reward',
-    'brand_challenge': 'Brand Challenge Reward',
-    'challenge_participant_target': 'Challenge Milestone Reward',
-  };
-
-  Future<void> _claim(String id) async {
-    setState(() => _claiming = true);
-    await AuthApiService().claimReward(id);
-    await widget.onClaimed();
-    if (mounted) setState(() => _claiming = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final id = widget.reward['_id'] as String? ?? '';
-    final rewardType = widget.reward['rewardType'] as String? ?? '';
-    final reason = widget.reward['reason'] as String?;
-    final status = widget.reward['status'] as String? ?? 'active';
-    final auraAmount = (widget.reward['auraAmount'] as num?)?.toInt();
-    final couponCode = widget.reward['couponCode'] as String?;
-    final couponValue = widget.reward['couponValue'] as String?;
-
-    final label = _reasonLabels[reason] ?? 'Reward';
-    final isCoupon = rewardType == 'coupon_code';
-    final icon = isCoupon ? Icons.card_giftcard_rounded : Icons.diamond_rounded;
-
-    final subtitle = isCoupon
-        ? (couponValue ?? 'Coupon reward')
-        : (auraAmount != null ? '+$auraAmount Aura' : 'Aura reward');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0E0C1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: _accent, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (isCoupon && status == 'claimed' && couponCode != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _accent.withValues(alpha: 0.4)),
-              ),
-              child: Text(couponCode,
-                  style: const TextStyle(
-                      color: _accent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5)),
-            )
-          else if (isCoupon && status == 'active')
-            SizedBox(
-              height: 32,
-              child: ElevatedButton(
-                onPressed: (_claiming || id.isEmpty) ? null : () => _claim(id),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: _claiming
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : const Text('Claim', style: TextStyle(fontSize: 12)),
-              ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                status == 'expired' ? 'Expired' : 'Claimed',
-                style: const TextStyle(color: AppColors.textFaint, fontSize: 10),
-              ),
-            ),
-        ],
       ),
     );
   }

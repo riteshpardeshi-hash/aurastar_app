@@ -5,7 +5,7 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -48,7 +48,7 @@ class _SetupScreenState extends State<SetupScreen> {
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const Dashboard()),
+      MaterialPageRoute(builder: (_) => const MainShell()),
       (_) => false,
     );
   }

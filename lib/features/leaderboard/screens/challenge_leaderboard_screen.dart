@@ -35,10 +35,10 @@ class _ChallengeLeaderboardScreenState
   List<Map<String, dynamic>> _entries = [];
   bool _loading = true;
   String? _myId;
-  // GET /challenges/{id}/submissions (used below) never joins a display
-  // name for the submitter — see normaliseSubmissionEntry's doc comment —
-  // so every row falls back to "Player N". For the viewer's own row we
-  // don't need that guesswork: GET /profile already has their real name.
+  // GET /challenges/{id}/submissions populates the submitter's displayName
+  // only when they set one — see normaliseSubmissionEntry — so rows without
+  // one still fall back to "Player N". For the viewer's own row we skip that
+  // guesswork: GET /profile already has their real name/handle.
   String? _myUsername;
 
   @override
@@ -69,7 +69,7 @@ class _ChallengeLeaderboardScreenState
         await ChallengesService().fetchSubmissions(widget.challengeId, limit: 50);
     if (!mounted) return;
     setState(() {
-      _entries = raw.map(normaliseSubmissionEntry).toList();
+      _entries = leaderboardFromSubmissions(raw);
       _loading = false;
     });
   }

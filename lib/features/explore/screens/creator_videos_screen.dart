@@ -3,7 +3,6 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/category_icon_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../challenges/screens/challenge_detail.dart';
@@ -34,7 +33,6 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
 
   String? _uid;
   List<Map<String, dynamic>>? _challenges;
-  Map<String, String> _categoryNames = {};
 
   @override
   void initState() {
@@ -43,9 +41,6 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
       if (mounted) setState(() => _uid = id);
     });
     _loadChallenges();
-    ChallengesService().fetchCategoryNameMap().then((names) {
-      if (mounted) setState(() => _categoryNames = names);
-    });
   }
 
   Future<void> _loadChallenges() async {
@@ -313,7 +308,6 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
     final thumbnailUrl = data['thumbnailUrl'] as String?;
     final instructions = data['instructions'] as String? ?? '';
     final auraPoints = (data['starsCount'] as num?)?.toInt() ?? 0;
-    final category = data['category'] as String? ?? '';
     final creatorId = data['creatorId'] as String? ?? '';
 
     return Container(
@@ -373,14 +367,6 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
                           color: Colors.white,
                           size: 26,
                         ),
-                      ),
-                    ),
-                    // Category badge
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: CategoryIconBadge(
-                        categoryName: _categoryNames[category],
                       ),
                     ),
                     // Aura badge
