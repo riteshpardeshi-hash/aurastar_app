@@ -1,0 +1,77 @@
+platform :ios, '13.0'
+
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+
+      # permission_handler: opt in to only the permission types this app
+      # actually uses (camera_screen.dart's camera/mic gating).
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_CAMERA=1'
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'PERMISSION_MICROPHONE=1'
+    end
+
+    target.build_phases.each do |phase|
+      next unless phase.respond_to?(:files)
+
+      phase.files.each do |file|
+        next unless file.settings && file.settings['COMPILER_FLAGS']
+
+        flags = file.settings['COMPILER_FLAGS'].split
+        flags.reject! { |flag| flag == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+        file.settings['COMPILER_FLAGS'] = flags.join(' ')
+      end
+    end
+  end
+
+  # Fix gRPC-Core Xcode 16 parse error: Clang 16 rejects `Type::template Func(`
+  # without explicit template args. Remove the `template` disambiguator where
+  # no `<...>` follows — argument deduction handles it without the keyword.
+  grpc_detail = "#{installer.sandbox.root}/gRPC-Core/src/core/lib/promise/detail"
+  Dir.glob("#{grpc_detail}/*.h").each do |file|
+    File.chmod(0644, file)
+    content = File.read(file)
+    # Match `SomeType::template FuncName(` — no `<` after the name
+    patched = content.gsub(/(\w+)::template (\w+)\(/, '\1::\2(')
+    File.write(file, patched) if patched != content
+  end
+end

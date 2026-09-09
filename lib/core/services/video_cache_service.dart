@@ -1,0 +1,109 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../utils/asset_cache_key.dart';
+
+/// Tracks recently viewed videos and caches their bytes to disk so a video
+/// that's known ahead of time (e.g. a challenge's reference clip, prefetched
+/// while the user is still reading the challenge/rules) can play back
+/// instantly from a local file instead of streaming over the network.
+class VideoCacheService {
+  VideoCacheService._();
+
+  static const _recentKey = 'recently_viewed_videos';
+  static const _maxEntries = 20;
+  static const _downloadTimeout = Duration(seconds: 45);
+
+  // Overridable so tests can substitute a package:http/testing.dart
+  // MockClient instead of hitting the network.
+  @visibleForTesting
+  static http.Client httpClient = http.Client();
+
+  // Dedupes concurrent ensureCached() calls for the same URL (e.g. a
+  // ChallengeDetail prefetch racing CameraScreen's own request) so they
+  // share one download instead of writing the same file twice.
+  static final Map<String, Future<String?>> _inFlight = {};
+
+  static Future<void> markViewed(String videoUrl) async {
+    if (videoUrl.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_recentKey) ?? [];
+    list.remove(videoUrl);
+    list.insert(0, videoUrl);
+    if (list.length > _maxEntries) list.length = _maxEntries;
+    await prefs.setStringList(_recentKey, list);
+  }
+
+  static Future<List<String>> recentlyViewed() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_recentKey) ?? [];
+  }
+
+  /// Downloads [videoUrl] to a local cache file if it isn't already cached,
+  /// and returns the local file path. Safe to call speculatively and more
+  /// than once for the same URL — a later call reuses the in-flight download
+  /// or the already-written file rather than re-fetching. Returns null (and
+  /// callers should fall back to streaming the network URL directly) if the
+  /// download fails.
+  static Future<String?> ensureCached(String videoUrl) {
+    if (videoUrl.isEmpty) return Future.value(null);
+    // Once a challenge's reference video finishes processing, the backend
+    // serves it as an HLS master playlist (path ending .m3u8) rather than a
+    // single downloadable file — see Challenge.videoUrl in openapi.yaml.
+    // A plain GET on that URL only fetches the small text manifest, not
+    // playable video bytes, so caching it as a local "video" file corrupts
+    // the cache permanently (it downloads once, "succeeds", and every later
+    // call reuses the same unplayable file — see _download's exists check).
+    // Skip caching and let callers stream it directly; platform video
+    // players (AVPlayer/ExoPlayer) speak HLS natively over the network.
+    if (Uri.parse(videoUrl).path.toLowerCase().endsWith('.m3u8')) {
+      return Future.value(null);
+    }
+    // Key the dedupe map and the on-disk file on the unsigned URL — the
+    // backend re-signs videoUrl on every read, so keying on the raw string
+    // re-downloads the same clip after every list refresh / app relaunch.
+    final key = assetCacheKey(videoUrl);
+    return _inFlight.putIfAbsent(key, () => _download(videoUrl, key));
+  }
+
+  static Future<String?> _download(String videoUrl, String key) async {
+    try {
+      final file = await _fileFor(videoUrl, key);
+      if (await file.exists() && await file.length() > 0) return file.path;
+      final res = await httpClient
+          .get(Uri.parse(videoUrl))
+          .timeout(_downloadTimeout);
+      if (res.statusCode != 200) return null;
+      await file.writeAsBytes(res.bodyBytes, flush: true);
+      return file.path;
+    } catch (_) {
+      return null;
+    } finally {
+      _inFlight.remove(key);
+    }
+  }
+
+  static Future<File> _fileFor(String videoUrl, String key) async {
+    final dir = await getTemporaryDirectory();
+    // Extension from the URL *path* (the query string on a presigned URL
+    // makes a naive `endsWith` always miss).
+    final ext =
+        Uri.parse(videoUrl).path.toLowerCase().endsWith('.mov') ? 'mov' : 'mp4';
+    return File('${dir.path}/aura_video_cache_${_stableHash(key)}.$ext');
+  }
+
+  // dart:core's hashCode isn't guaranteed stable across runs, so cache keys
+  // use a small FNV-1a hash of the URL instead.
+  static String _stableHash(String input) {
+    var hash = 0xcbf29ce484222325;
+    for (final byte in utf8.encode(input)) {
+      hash ^= byte;
+      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
+    }
+    return hash.toRadixString(16);
+  }
+}

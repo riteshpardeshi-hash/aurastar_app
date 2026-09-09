@@ -1,0 +1,112 @@
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 60
+    environment:
+      groups:
+        - ios_credentials
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.onadsgroup.auraapp
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    integrations:
+      app_store_connect: codemagic_api_key
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Install CocoaPods
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Flutter build iOS
+        script: flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
+
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
+      - name: Build and export IPA
+        script: |
+          sed -i '' '/alwaysOutOfDate = 1;/d' ios/Runner.xcodeproj/project.pbxproj
+
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --archive-xcargs "ENABLE_USER_SCRIPT_SANDBOXING=NO COMPILER_INDEX_STORE_ENABLE=NO"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+
+  ios-prototype:
+    name: iOS TestFlight - Prototype
+    max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: prototype
+          include: true
+    environment:
+      groups:
+        - ios_credentials
+        - ios_prototype_credentials
+      vars:
+        XCODE_WORKSPACE: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.onadsgroup.auraapp.prototype
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    integrations:
+      app_store_connect: codemagic_api_key
+    scripts:
+      - name: Patch bundle ID and app name
+        script: |
+          sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Aura Arena Prototype'" ios/Runner/Info.plist
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Install CocoaPods
+        script: find . -name "Podfile" -execdir pod install \;
+
+      - name: Flutter build iOS
+        script: flutter build ios --release --no-codesign --build-number=$BUILD_NUMBER
+
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+
+      - name: Build and export IPA
+        script: |
+          python3 -c "f='ios/Runner.xcodeproj/project.pbxproj'; c=open(f).read(); n=c.count('alwaysOutOfDate = 1;'); open(f,'w').write(c.replace('alwaysOutOfDate = 1;','')); print('Removed', n, 'occurrences of alwaysOutOfDate = 1;')"
+
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --config Release \
+            --archive-xcargs "ENABLE_USER_SCRIPT_SANDBOXING=NO COMPILER_INDEX_STORE_ENABLE=NO"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID

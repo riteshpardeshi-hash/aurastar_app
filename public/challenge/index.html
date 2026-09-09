@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- iOS Smart App Banner — replace __APP_STORE_ID__ once published -->
+  <meta name="apple-itunes-app" content="app-id=__APP_STORE_ID__">
+  <title>Aura Challenge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(180deg, #0A0018 0%, #2A0B6B 50%, #0A0018 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      text-align: center;
+      padding: 24px;
+    }
+    .card {
+      max-width: 360px;
+      width: 100%;
+      background: rgba(123, 44, 191, 0.15);
+      border: 1px solid rgba(155, 77, 202, 0.5);
+      border-radius: 24px;
+      padding: 36px 28px;
+    }
+    .trophy { font-size: 56px; line-height: 1; margin-bottom: 16px; }
+    h1 { color: #D4A8FF; font-size: 22px; margin-bottom: 8px; }
+    p { color: rgba(255,255,255,0.65); font-size: 15px; line-height: 1.5; margin-bottom: 28px; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      margin-bottom: 12px;
+      border-radius: 24px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      color: #fff;
+      cursor: pointer;
+    }
+    .btn-ios  { background: linear-gradient(135deg, #7B2CBF, #4B6EF6); }
+    .btn-android { background: linear-gradient(135deg, #1DB954, #0E7A38); }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="trophy">🏆</div>
+    <h1>Someone challenged you on Aura!</h1>
+    <p>Open the Aura app to accept this challenge and earn Aura Points.</p>
+    <a class="btn btn-ios"     id="btn-ios"     href="https://apps.apple.com/app/id__APP_STORE_ID__">📱 Download on the App Store</a>
+    <a class="btn btn-android" id="btn-android" href="https://play.google.com/store/apps/details?id=com.example.aura_app">🤖 Get it on Google Play</a>
+  </div>
+
+  <script>
+    var isIOS     = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    var isAndroid = /Android/.test(navigator.userAgent);
+
+    // Hide the irrelevant store button
+    if (isIOS)     document.getElementById('btn-android').classList.add('hidden');
+    if (isAndroid) document.getElementById('btn-ios').classList.add('hidden');
+
+    // On iOS, Universal Links should have already opened the app before this
+    // page loaded. If the user sees this page, the app isn't installed.
+    // On Android, App Links behave the same way.
+  </script>
+</body>
+</html>

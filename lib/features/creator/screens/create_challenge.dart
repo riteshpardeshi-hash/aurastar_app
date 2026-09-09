@@ -1,0 +1,512 @@
+import 'package:flutter/material.dart';
+import '../../../core/services/challenges_service.dart';
+import '../../../shared/theme/app_colors.dart';
+import 'brand_camera_screen.dart';
+
+class CreateChallenge extends StatefulWidget {
+  const CreateChallenge({super.key});
+
+  @override
+  State<CreateChallenge> createState() => _CreateChallengeState();
+}
+
+class _CreateChallengeState extends State<CreateChallenge> {
+  static const _bg     = Color(0xFF080810);
+  static const _card   = Color(0xFF100A20);
+  static const _accent = Color(0xFF7B2CBF);
+
+  final _titleCtrl       = TextEditingController();
+  final _descCtrl        = TextEditingController();
+  final _stepInputCtrl   = TextEditingController();
+
+  final _stepFocus  = FocusNode();
+
+  String             _difficulty   = 'Medium';
+  String?            _categoryId;
+  final List<String> _steps        = [];
+  List<Map<String, dynamic>> _categories = [];
+
+  static const _difficulties = [
+    ('Easy',   Color(0xFF22C55E)),
+    ('Medium', Color(0xFFF59E0B)),
+    ('Hard',   Color(0xFFEF4444)),
+    ('Expert', Color(0xFF9333EA)),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await ChallengesService().fetchCategoriesWithIds();
+    if (mounted && cats.isNotEmpty) setState(() => _categories = cats);
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _descCtrl.dispose();
+    _stepInputCtrl.dispose();
+    _stepFocus.dispose();
+    super.dispose();
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  void _addStep() {
+    final text = _stepInputCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _steps.add(text);
+      _stepInputCtrl.clear();
+    });
+    _stepFocus.requestFocus();
+  }
+
+  void _openRecorder() {
+    if (_titleCtrl.text.trim().isEmpty) {
+      _snack('Please enter a challenge title');
+      return;
+    }
+    if (_descCtrl.text.trim().isEmpty) {
+      _snack('Please enter a description');
+      return;
+    }
+    if (_categoryId == null) {
+      _snack('Please select a category');
+      return;
+    }
+    if (_steps.isEmpty) {
+      _snack('Add at least one instruction step');
+      return;
+    }
+
+    final instructions = _steps
+        .asMap()
+        .entries
+        .map((e) => '${e.key + 1}. ${e.value}')
+        .join('\n');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BrandCameraScreen(
+          challengeTitle:   _titleCtrl.text.trim(),
+          description:      _descCtrl.text.trim(),
+          instructions:     instructions,
+          difficulty:       _difficulty,
+          categoryId:       _categoryId!,
+          instructionSteps: List.unmodifiable(_steps),
+        ),
+      ),
+    );
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: const Color(0xFF1A0A2E),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text('Create Challenge'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Title ──────────────────────────────────────────────────
+            _SectionLabel('Challenge Title'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _titleCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              decoration: _inputDecor('e.g. Bollywood Walk Challenge'),
+            ),
+
+            const SizedBox(height: 22),
+
+            // ── Description ────────────────────────────────────────────
+            _SectionLabel('Description'),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _descCtrl,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              maxLines: 3,
+              decoration: _inputDecor('Describe what participants need to do…'),
+            ),
+
+            const SizedBox(height: 22),
+
+            // ── Category ───────────────────────────────────────────────
+            _SectionLabel('Category'),
+            const SizedBox(height: 6),
+            _categories.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: CircularProgressIndicator(
+                          color: _accent, strokeWidth: 2),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _categories.map((cat) {
+                      final id   = cat['_id'] as String? ?? '';
+                      final name = cat['name'] as String? ?? id;
+                      final sel  = _categoryId == id;
+                      return GestureDetector(
+                        onTap: () => setState(() => _categoryId = id),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: sel
+                                ? _accent.withValues(alpha: 0.20)
+                                : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: sel
+                                  ? _accent.withValues(alpha: 0.75)
+                                  : Colors.white.withValues(alpha: 0.10),
+                              width: sel ? 1.5 : 1,
+                            ),
+                          ),
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              color: sel
+                                  ? const Color(0xFFD4A8FF)
+                                  : AppColors.textFaint,
+                              fontSize: 13,
+                              fontWeight: sel
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+            const SizedBox(height: 22),
+
+            // ── Difficulty ─────────────────────────────────────────────
+            _SectionLabel('Difficulty'),
+            const SizedBox(height: 10),
+            Row(
+              children: _difficulties.map((pair) {
+                final name  = pair.$1;
+                final color = pair.$2;
+                final sel   = _difficulty == name;
+                return Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _difficulty = name),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? color.withValues(alpha: 0.20)
+                            : Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: sel
+                              ? color.withValues(alpha: 0.75)
+                              : Colors.white.withValues(alpha: 0.10),
+                          width: sel ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        name,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: sel ? color : AppColors.textFaint,
+                          fontSize: 12,
+                          fontWeight:
+                              sel ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Instruction builder ────────────────────────────────────
+            Row(
+              children: [
+                const _SectionLabel('Instructions'),
+                const Spacer(),
+                if (_steps.isNotEmpty)
+                  Text(
+                    '${_steps.length} step${_steps.length == 1 ? '' : 's'}',
+                    style:
+                        const TextStyle(color: AppColors.textFaint, fontSize: 12),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Add step-by-step instructions participants must follow.',
+              style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+
+            if (_steps.isNotEmpty)
+              _StepList(
+                items: _steps,
+                icon: Icons.format_list_numbered_rounded,
+                onDelete: (i) => setState(() => _steps.removeAt(i)),
+                numberItems: true,
+              ),
+
+            _AddItemRow(
+              ctrl:        _stepInputCtrl,
+              focusNode:   _stepFocus,
+              hint:        'Describe a step…',
+              buttonLabel: 'Add step',
+              onAdd:       _addStep,
+            ),
+
+            const SizedBox(height: 32),
+
+            // ── CTA ────────────────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: _openRecorder,
+                icon: const Icon(Icons.videocam_rounded, size: 20),
+                label: const Text('Record Challenge Video'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                  textStyle: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecor(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
+        filled: true,
+        fillColor: _card,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:
+                BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide:
+                BorderSide(color: Colors.white.withValues(alpha: 0.12))),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _accent, width: 1.5)),
+      );
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          fontFamily: 'ClashDisplay',
+        ),
+      );
+}
+
+// ── Reorderable step/checklist list ──────────────────────────────────────────
+
+class _StepList extends StatelessWidget {
+  final List<String>    items;
+  final IconData        icon;
+  final void Function(int) onDelete;
+  final bool            numberItems;
+
+  const _StepList({
+    required this.items,
+    required this.icon,
+    required this.onDelete,
+    required this.numberItems,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: items.asMap().entries.map((e) {
+        final i    = e.key;
+        final text = e.value;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF100A20),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7B2CBF).withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: numberItems
+                      ? Text(
+                          '${i + 1}',
+                          style: const TextStyle(
+                              color: Color(0xFFD4A8FF),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700),
+                        )
+                      : Icon(icon,
+                          color: const Color(0xFFD4A8FF), size: 13),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ),
+              GestureDetector(
+                onTap: () => onDelete(i),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close_rounded,
+                      color: Colors.white24, size: 18),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ── Add-item input row ────────────────────────────────────────────────────────
+
+class _AddItemRow extends StatelessWidget {
+  final TextEditingController ctrl;
+  final FocusNode             focusNode;
+  final String                hint;
+  final String                buttonLabel;
+  final VoidCallback          onAdd;
+
+  const _AddItemRow({
+    required this.ctrl,
+    required this.focusNode,
+    required this.hint,
+    required this.buttonLabel,
+    required this.onAdd,
+  });
+
+  static const _accent = Color(0xFF7B2CBF);
+  static const _card   = Color(0xFF100A20);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: TextField(
+            controller: ctrl,
+            focusNode:  focusNode,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            onSubmitted: (_) => onAdd(),
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle:
+                  const TextStyle(color: Colors.white24, fontSize: 13),
+              filled: true,
+              fillColor: _card,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.10))),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.10))),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide:
+                      const BorderSide(color: _accent, width: 1.5)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            onPressed: onAdd,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _accent.withValues(alpha: 0.25),
+              foregroundColor: const Color(0xFFD4A8FF),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(
+                      color: _accent.withValues(alpha: 0.40))),
+              textStyle: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            child: Text(buttonLabel),
+          ),
+        ),
+      ],
+    );
+  }
+}

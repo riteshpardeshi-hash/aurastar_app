@@ -4,6 +4,7 @@
 *.pyc
 *.swp
 .DS_Store
+._*
 .atom/
 .build/
 .buildlog/
@@ -43,6 +44,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Claude Code local settings (may contain API keys)
+.claude/settings.local.json
+.claude/worktrees/
+
+# iOS build artifacts
+ios/build/
 
 # Operator scripts
 /scripts/node_modules/
