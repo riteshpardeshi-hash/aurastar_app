@@ -175,20 +175,26 @@ class SettingsScreen extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E0E20),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white10),
       ),
-      child: ListTile(
-        leading: Icon(icon, color: c, size: 22),
-        title: Text(label, style: TextStyle(color: c, fontSize: 15)),
-        subtitle: subtitle == null
-            ? null
-            : Text(subtitle,
-                style: const TextStyle(color: Colors.white38, fontSize: 12)),
-        trailing: Icon(Icons.chevron_right_rounded,
-            color: Colors.white24, size: 20),
-        onTap: onTap,
+      // Material (not a bare DecoratedBox color) so ListTile's ink/splash and
+      // its subtitle-layout assertions have a proper backing surface.
+      child: Material(
+        color: const Color(0xFF0E0E20),
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          leading: Icon(icon, color: c, size: 22),
+          title: Text(label, style: TextStyle(color: c, fontSize: 15)),
+          subtitle: subtitle == null
+              ? null
+              : Text(subtitle,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          trailing: Icon(Icons.chevron_right_rounded,
+              color: Colors.white24, size: 20),
+          onTap: onTap,
+        ),
       ),
     );
   }

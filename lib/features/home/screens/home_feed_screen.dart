@@ -19,27 +19,49 @@ import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/cdn_url.dart';
 import '../../../shared/widgets/notification_bell_button.dart';
 
-class HomeFeedScreen extends StatelessWidget {
+class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
 
+  @override
+  State<HomeFeedScreen> createState() => _HomeFeedScreenState();
+}
+
+class _HomeFeedScreenState extends State<HomeFeedScreen> {
   static const _bg = Color(0xFF080810);
+
+  // Bumped on pull-to-refresh. Every shelf below is keyed on it, so bumping it
+  // disposes + recreates each shelf → their initState → _load() runs again.
+  int _tick = 0;
+
+  Future<void> _refresh() async {
+    setState(() => _tick++);
+    // Let the spinner show briefly; the shelves re-fetch on their own with
+    // their own skeletons.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(context),
-          SliverToBoxAdapter(child: _buildSearchBar(context)),
-          SliverToBoxAdapter(child: _FeaturedHeroCard()),
-          SliverToBoxAdapter(child: _BannersCarousel()),
-          SliverToBoxAdapter(child: _BrandChallengesShelf()),
-          SliverToBoxAdapter(child: _TrendingCreatorsShelf()),
-          SliverToBoxAdapter(child: _CategoriesSection()),
-          SliverToBoxAdapter(child: _TrendingShelf()),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        color: const Color(0xFF7B2CBF),
+        backgroundColor: const Color(0xFF12102A),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildAppBar(context),
+            SliverToBoxAdapter(child: _buildSearchBar(context)),
+            SliverToBoxAdapter(child: _FeaturedHeroCard(key: ValueKey('hero-$_tick'))),
+            SliverToBoxAdapter(child: _BannersCarousel(key: ValueKey('banners-$_tick'))),
+            SliverToBoxAdapter(child: _BrandChallengesShelf(key: ValueKey('brand-$_tick'))),
+            SliverToBoxAdapter(child: _TrendingCreatorsShelf(key: ValueKey('creators-$_tick'))),
+            SliverToBoxAdapter(child: _CategoriesSection(key: ValueKey('cats-$_tick'))),
+            SliverToBoxAdapter(child: _TrendingShelf(key: ValueKey('trending-$_tick'))),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        ),
       ),
     );
   }
@@ -270,6 +292,8 @@ Widget _challengeCard(
 // ── Featured Hero Card ─────────────────────────────────────────────────────────
 
 class _FeaturedHeroCard extends StatefulWidget {
+  const _FeaturedHeroCard({super.key});
+
   @override
   State<_FeaturedHeroCard> createState() => _FeaturedHeroCardState();
 }
@@ -409,6 +433,8 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
 // ── Banners Carousel ───────────────────────────────────────────────────────────
 
 class _BannersCarousel extends StatefulWidget {
+  const _BannersCarousel({super.key});
+
   @override
   State<_BannersCarousel> createState() => _BannersCarouselState();
 }
@@ -567,6 +593,8 @@ class _BannersCarouselState extends State<_BannersCarousel> {
 // ── Brand Challenges Shelf ─────────────────────────────────────────────────────
 
 class _BrandChallengesShelf extends StatefulWidget {
+  const _BrandChallengesShelf({super.key});
+
   @override
   State<_BrandChallengesShelf> createState() => _BrandChallengesShelfState();
 }
@@ -638,6 +666,8 @@ class _BrandChallengesShelfState extends State<_BrandChallengesShelf> {
 // ── Trending Creators Shelf ────────────────────────────────────────────────────
 
 class _TrendingCreatorsShelf extends StatefulWidget {
+  const _TrendingCreatorsShelf({super.key});
+
   @override
   State<_TrendingCreatorsShelf> createState() => _TrendingCreatorsShelfState();
 }
@@ -748,7 +778,7 @@ class _TrendingCreatorsShelfState extends State<_TrendingCreatorsShelf> {
 // ── Categories Section ─────────────────────────────────────────────────────────
 
 class _CategoriesSection extends StatefulWidget {
-  const _CategoriesSection();
+  const _CategoriesSection({super.key});
 
   @override
   State<_CategoriesSection> createState() => _CategoriesSectionState();
@@ -852,6 +882,8 @@ class _CategoriesSectionState extends State<_CategoriesSection> {
 // ── Trending Shelf ─────────────────────────────────────────────────────────────
 
 class _TrendingShelf extends StatefulWidget {
+  const _TrendingShelf({super.key});
+
   @override
   State<_TrendingShelf> createState() => _TrendingShelfState();
 }
