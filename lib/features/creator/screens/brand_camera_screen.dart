@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import '../../../core/globals.dart';
-import '../../../core/utils/selfie_preview.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'brand_preview_screen.dart';
 
@@ -176,9 +175,7 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
               child: SizedBox(
                 width: controller!.value.previewSize!.height,
                 height: controller!.value.previewSize!.width,
-                // Un-mirror the front-camera preview so what the creator
-                // frames matches the recorded file (ADR 020).
-                child: unmirroredIfFront(controller!, CameraPreview(controller!)),
+                child: CameraPreview(controller!),
               ),
             ),
           ),

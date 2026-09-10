@@ -44,4 +44,3 @@ because it's three pages long isn't documented, it's buried.
 | 017 | [Tab shell reveals the tapped tab immediately; drop the ready-gate](017-tab-shell-reveals-immediately-no-ready-gate.md) | Accepted (amends 011) |
 | 018 | [Bottom nav row can't overflow; full-slot hit targets; clamped text scale](018-bottom-nav-row-cannot-overflow-full-height-hit-targets.md) | Accepted |
 | 019 | [Post-login navigation must land on MainShell, not a bare Dashboard](019-post-login-navigation-must-land-on-mainshell.md) | Accepted |
-| 020 | [Un-mirror the front-camera preview instead of mirroring the file](020-front-camera-preview-unmirrored-to-match-recording.md) | Accepted |
