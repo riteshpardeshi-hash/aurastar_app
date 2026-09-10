@@ -20,8 +20,9 @@ class CreatorProfileScreen extends StatefulWidget {
 }
 
 class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
-  static const _bg     = Color(0xFF080810);
-  static const _accent = Color(0xFF7B2CBF);
+  static const _bg          = Color(0xFF080810);
+  static const _accent      = Color(0xFF7B2CBF);
+  static const _accentLight  = Color(0xFFD4A8FF);
 
   final _service = CreatorsService();
 
@@ -299,158 +300,186 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
     AuraTier tier,
   ) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
       decoration: BoxDecoration(
-        image: const DecorationImage(
-          image: AssetImage('assets/images/creator public profile/Asset 6.png'),
-          fit: BoxFit.cover,
+        // A clean themed surface with a soft purple glow bleeding from the top
+        // — replaces the old full-bleed raster gradient image that washed the
+        // text out and looked off-theme.
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            _accent.withValues(alpha: 0.16),
+            const Color(0xFF12111C),
+          ],
+          stops: const [0.0, 0.55],
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Avatar with a tier-coloured ring.
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: tier.color.withValues(alpha: 0.9), width: 2),
+            ),
+            child: CircleAvatar(
+              radius: 40,
+              backgroundColor: Colors.white12,
+              backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
+              child: avatar.isEmpty
+                  ? Text(
+                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 28,
+                          fontFamily: 'SpaceGrotesk'),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Name + verified tick.
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(
-                radius: 32,
-                backgroundColor: Colors.white24,
-                backgroundImage: avatar.isNotEmpty ? NetworkImage(avatar) : null,
-                child: avatar.isEmpty
-                    ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22))
-                    : null,
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _statColumn('${_challenges.length}', 'Challenges'),
-                    _statDivider(),
-                    _statColumn(_formatCount(_followerCount), 'Followers'),
-                  ],
+              Flexible(
+                child: Text(
+                  displayName,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'SpaceGrotesk'),
                 ),
               ),
+              if (isVerified) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.verified_rounded, color: _accentLight, size: 18),
+              ],
+            ],
+          ),
+          if (username.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text('@$username',
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          ],
+          const SizedBox(height: 10),
+          // Tier chip.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: tier.color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: tier.color.withValues(alpha: 0.45)),
+            ),
+            child: Text(
+              tier.name.toUpperCase(),
+              style: TextStyle(
+                  color: tier.color,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                  fontFamily: 'SpaceGrotesk'),
+            ),
+          ),
+          if (bio.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              bio,
+              maxLines: 3,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  color: AppColors.textMuted, fontSize: 12.5, height: 1.45),
+            ),
+          ],
+          const SizedBox(height: 18),
+          // Stats.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _stat('${_challenges.length}', 'Challenges'),
+              Container(
+                width: 1,
+                height: 34,
+                margin: const EdgeInsets.symmetric(horizontal: 28),
+                color: Colors.white.withValues(alpha: 0.12),
+              ),
+              _stat(_formatCount(_followerCount), 'Followers'),
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'ClashDisplay'),
-                          ),
-                        ),
-                        if (isVerified) ...[
-                          const SizedBox(width: 6),
-                          Image.asset(
-                            'assets/images/creator public profile/Asset 13.png',
-                            width: 16,
-                            height: 16,
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (username.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text('@$username',
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
-                    ],
-                    if (bio.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(bio,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4)),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _tierBadge(tier),
-            ],
-          ),
-          const SizedBox(height: 18),
-          FollowButton(
-            targetUserId: widget.creatorId,
-            initialIsFollowing: isFollowing,
-            light: true,
-            // Follower count + isFollowing in the cached page are now stale —
-            // drop it so the next visit re-fetches instead of showing the
-            // pre-toggle numbers.
-            onChanged: (_) => ScreenCache.invalidate(_cacheKey),
+          SizedBox(
+            width: double.infinity,
+            child: FollowButton(
+              targetUserId: widget.creatorId,
+              initialIsFollowing: isFollowing,
+              // Follower count + isFollowing in the cached page are now stale —
+              // drop it so the next visit re-fetches instead of showing the
+              // pre-toggle numbers.
+              onChanged: (_) => ScreenCache.invalidate(_cacheKey),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _statDivider() {
-    return Opacity(
-      opacity: 0.35,
-      child: Image.asset(
-        'assets/images/creator public profile/Asset 10.png',
-        width: 1,
-        height: 28,
-        fit: BoxFit.fill,
-      ),
-    );
-  }
-
-  Widget _statColumn(String value, String label) {
+  Widget _stat(String value, String label) {
     return Column(
       children: [
         Text(value,
             style: const TextStyle(
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
                 fontFamily: 'SpaceGrotesk')),
-        const SizedBox(height: 2),
-        Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+        const SizedBox(height: 3),
+        Text(label.toUpperCase(),
+            style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 10,
+                letterSpacing: 0.8,
+                fontFamily: 'SpaceGrotesk')),
       ],
     );
   }
 
-  Widget _tierBadge(AuraTier tier) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: tier.color.withValues(alpha: 0.15),
-        border: Border.all(color: tier.color.withValues(alpha: 0.5), width: 1.5),
-      ),
-      child: Icon(Icons.workspace_premium_rounded, color: tier.color, size: 28),
-    );
-  }
-
   Widget _emptyVideos() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 40),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 56),
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.videocam_off_outlined, color: Colors.white24, size: 40),
-            SizedBox(height: 10),
-            Text('No challenges yet', style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _accent.withValues(alpha: 0.12),
+                border: Border.all(color: _accent.withValues(alpha: 0.25)),
+              ),
+              child: const Icon(Icons.videocam_off_rounded,
+                  color: _accentLight, size: 28),
+            ),
+            const SizedBox(height: 14),
+            const Text('No challenges yet',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'SpaceGrotesk')),
+            const SizedBox(height: 4),
+            const Text("This creator hasn't published a challenge.",
+                style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
           ],
         ),
       ),
