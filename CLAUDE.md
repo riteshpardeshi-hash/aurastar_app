@@ -68,6 +68,16 @@ Roles are boolean flags on the Firestore `users` doc:
 
 Points live in `totalRewards` on the user doc. Level = `totalRewards ~/ 1300 + 1` (`_xpPerLevel` in `dashboard.dart`). Crossing a tier boundary triggers `LevelUpSheet`. Tiers/unlocks defined in `core/models/aura_tier.dart`.
 
+### Engagement reporting — no per-user de-dup (high-value rule)
+
+`ChallengeAnalyticsService` reports challenge **impressions** and **views**. One
+logged-in user produces **many** of each per session — revisit / replay /
+re-scroll each counts again. The client never de-dupes engagement per user or
+per app session: `recordImpression` fires on every on-screen sighting, and each
+player mount mints a fresh `sessionId` so each play is its own candidate view.
+The only collapse is the backend's, within one uninterrupted play. Full contract:
+`docs/features/engagement-reporting.md` + ADR 012 → 018 → 019.
+
 ## Backend: AI scoring pipeline (`functions/index.js`)
 
 Two Firestore `onDocumentCreated` triggers, both using **Gemini 2.5 Flash** with the video Files API:

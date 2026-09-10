@@ -1,16 +1,22 @@
 # 012 — Client-side reporting of challenge views, watch progress and shares
 
-Status: Accepted
+Status: Accepted — amended by [018](018-engagement-reporting-realigned-to-backend-adr-090.md) (view/impression definitions) and [019](019-feed-impression-instrumentation-visibilitydetector.md) (grid-feed instrumentation)
 
-> **Update (2026-09-09).** The backend has since closed all three gaps this
-> ADR worked around (`docs/backend-issues/004` → RESOLVED). `POST
-> /challenges/{id}/share` is **live** (backend ADR 086) and writes both the
-> lifetime and daily share counters (backend ADR 089) — it is no longer a
-> deliberate 404 no-op. `views` is fed by `watch-progress` first-watch (+
-> campaign `impression`); `attemptCount` was already incremented. No client
-> change was needed — every call site written here now does real work. The
-> "does not exist yet" / "hits a 404" wording in **Decision** and
-> **Consequences** below is kept for historical context only.
+> **Amended.** This ADR stood the reporting service up against an unconfirmed
+> backend contract. The backend has since defined views/impressions precisely
+> ([backend ADR 090](http://144.91.79.237:5173/decisions/090-engagement-metrics-and-redis-buffered-counters)):
+> an **impression** is every on-screen sighting (no de-dup), a **view** is
+> ≥1s watched per **play session** (not per user, not "first watch ever").
+> [ADR 018](018-engagement-reporting-realigned-to-backend-adr-090.md) drops
+> this ADR's per-session impression de-dup and sends the first watch ping at
+> the 1s mark; [ADR 019](019-feed-impression-instrumentation-visibilitydetector.md)
+> adds the grid-feed `VisibilityDetector` instrumentation this ADR deferred.
+> Current behaviour: [`docs/features/engagement-reporting.md`](../features/engagement-reporting.md).
+>
+> **Update (2026-09-09).** `POST /challenges/{id}/share` is **live** (backend
+> ADR 086/089) — it is no longer a deliberate 404 no-op. `attemptCount` was
+> already incremented server-side. The "does not exist yet" / "hits a 404"
+> wording in **Decision** / **Consequences** below is historical.
 
 ## Problem
 

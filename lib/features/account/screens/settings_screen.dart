@@ -8,6 +8,7 @@ import '../../auth/screens/phone_auth_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
+import '../../../core/config/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -116,6 +117,18 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
+          _tile(
+            context,
+            icon: Icons.dns_outlined,
+            label: 'API server',
+            subtitle: ApiConfig.isCompileTimePinned
+                ? '${ApiConfig.baseUrl}  (pinned via --dart-define)'
+                : ApiConfig.baseUrl,
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => const _ApiServerDialog(),
+            ),
+          ),
           const SizedBox(height: 24),
           _section('Danger Zone'),
           _tile(
@@ -156,6 +169,7 @@ class SettingsScreen extends StatelessWidget {
     required String label,
     required VoidCallback onTap,
     Color? color,
+    String? subtitle,
   }) {
     final c = color ?? Colors.white;
     return Container(
@@ -168,6 +182,10 @@ class SettingsScreen extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: c, size: 22),
         title: Text(label, style: TextStyle(color: c, fontSize: 15)),
+        subtitle: subtitle == null
+            ? null
+            : Text(subtitle,
+                style: const TextStyle(color: Colors.white38, fontSize: 12)),
         trailing: Icon(Icons.chevron_right_rounded,
             color: Colors.white24, size: 20),
         onTap: onTap,
@@ -400,6 +418,115 @@ class _HelpItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Debug-only picker to point the app at a different backend (local dev server
+/// vs. production) without rebuilding — persists via [ApiConfig.setRuntimeOverride].
+class _ApiServerDialog extends StatefulWidget {
+  const _ApiServerDialog();
+
+  @override
+  State<_ApiServerDialog> createState() => _ApiServerDialogState();
+}
+
+class _ApiServerDialogState extends State<_ApiServerDialog> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: ApiConfig.baseUrl);
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply(String url) async {
+    setState(() => _saving = true);
+    // '' / the production constant → clear the override (fall back to prod).
+    await ApiConfig.setRuntimeOverride(
+        url.trim() == ApiConfig.production ? '' : url.trim());
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('API server → ${ApiConfig.baseUrl}\n'
+            'Restart the app and log in again (tokens are per-backend).'),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  Widget _preset(String label, String url) => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: _saving ? null : () => _ctrl.text = url,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            foregroundColor: const Color(0xFF7B2CBF),
+          ),
+          child: Text('$label  ·  $url',
+              style: const TextStyle(fontSize: 12), textAlign: TextAlign.left),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF12102A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('API server', style: TextStyle(color: Colors.white)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (ApiConfig.isCompileTimePinned)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Pinned by --dart-define=API_BASE_URL — this picker is ignored '
+                'until that build flag is removed.',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              ),
+            ),
+          TextField(
+            controller: _ctrl,
+            enabled: !_saving && !ApiConfig.isCompileTimePinned,
+            autocorrect: false,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'http://host:port/api/v1',
+              hintStyle: TextStyle(color: Colors.white24),
+              enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _preset('Production', ApiConfig.production),
+          _preset('Local · Android emulator', ApiConfig.localAndroidEmulator),
+          _preset('Local · simulator / adb reverse', ApiConfig.localLoopback),
+          const SizedBox(height: 6),
+          const Text(
+            'Physical device on the same wifi: use http://<your-machine-LAN-IP>:3000/api/v1',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+        ),
+        TextButton(
+          onPressed: _saving || ApiConfig.isCompileTimePinned
+              ? null
+              : () => _apply(_ctrl.text),
+          child: const Text('Save',
+              style: TextStyle(
+                  color: Color(0xFF7B2CBF), fontWeight: FontWeight.w700)),
+        ),
+      ],
     );
   }
 }

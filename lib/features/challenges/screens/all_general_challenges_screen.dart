@@ -5,8 +5,10 @@ import '../../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../../features/search/search_screen.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/screen_skeleton.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/screen_cache.dart';
+import '../../../shared/widgets/impression_tracker.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import 'challenge_detail.dart';
@@ -358,13 +360,19 @@ class _AllGeneralChallengesScreenState
         ),
         delegate: SliverChildBuilderDelegate((context, i) {
           final c = list[i];
-          return _ChallengeCard(
-            challengeId: c['id'] as String,
-            title: c['title'] as String,
-            videoUrl: c['videoUrl'] as String,
-            thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
-            instructions: c['instructions'] as String,
-            participants: c['submissionsCount'] as int? ?? 0,
+          final id = c['id'] as String;
+          return ImpressionTracker(
+            detectorKey: ValueKey('imp-allchal-$id'),
+            onImpression: () =>
+                ChallengeAnalyticsService().recordImpression(id),
+            child: _ChallengeCard(
+              challengeId: id,
+              title: c['title'] as String,
+              videoUrl: c['videoUrl'] as String,
+              thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
+              instructions: c['instructions'] as String,
+              participants: c['submissionsCount'] as int? ?? 0,
+            ),
           );
         }, childCount: list.length),
       ),

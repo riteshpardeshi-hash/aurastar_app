@@ -8,6 +8,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'core/config/api_config.dart';
 import 'core/globals.dart';
 import 'core/services/api_client.dart';
 import 'core/services/auth_api_service.dart';
@@ -36,6 +37,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Load any saved backend-URL override (Settings → Debug → API server) so the
+  // very first request already hits the right server. Bounded internally.
+  await ApiConfig.load();
   try {
     // Bounded: on some devices/networks this call has been observed to
     // never resolve rather than throw, which — since nothing after it runs
