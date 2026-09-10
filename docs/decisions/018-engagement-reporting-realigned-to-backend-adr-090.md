@@ -70,6 +70,12 @@ a pre-filtered one.
 
 ## Decision
 
+**Core rule (non-negotiable):** one logged-in user produces many views and many
+impressions per session — every revisit / replay / re-scroll counts again. The
+client never de-dupes engagement per user or per app session; the only collapse
+is the backend's, within one uninterrupted play (`sessionId`). Everything below
+serves that rule.
+
 Option 2. Changes to `lib/core/services/challenge_analytics_service.dart`:
 
 - **`recordImpression(id)` no longer de-dupes.** The `_impressed` set and its

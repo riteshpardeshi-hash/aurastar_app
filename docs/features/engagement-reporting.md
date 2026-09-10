@@ -14,6 +14,21 @@ Decisions behind it: [ADR 012](../decisions/012-client-side-challenge-view-share
 
 ---
 
+## ⚠️ Core rule — one user, many views and impressions per login
+
+A single logged-in user produces **many** views and **many** impressions in one
+session. Watch challenge A, go to challenge B, come back to A → **two views**,
+not one. Same for impressions on every re-scroll / revisit. The client must
+**never** de-dupe engagement per user or per app session — it sends every
+sighting and every play. The only collapse is the backend's, *within one
+uninterrupted play* (same `sessionId` → one view). This client's job:
+
+1. `recordImpression` on **every** on-screen sighting (no `_impressed` set — removed in ADR 018).
+2. A **fresh `sessionId` per player mount** (`_WatchState`, dropped by `endWatchSession`) so each play is a candidate for its own view.
+3. The first `watch-progress` ping out at ≥1s so short plays still register.
+
+---
+
 ## Definitions
 
 | Term | Means | De-dup | Endpoint |
