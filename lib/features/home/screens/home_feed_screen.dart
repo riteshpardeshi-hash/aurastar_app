@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,27 +21,49 @@ import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/cdn_url.dart';
 import '../../../shared/widgets/notification_bell_button.dart';
 
-class HomeFeedScreen extends StatelessWidget {
+class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
 
+  @override
+  State<HomeFeedScreen> createState() => _HomeFeedScreenState();
+}
+
+class _HomeFeedScreenState extends State<HomeFeedScreen> {
   static const _bg = Color(0xFF080810);
+
+  // Bumped on pull-to-refresh. Every shelf below is keyed on it, so bumping it
+  // disposes + recreates each shelf → their initState → _load() runs again.
+  int _tick = 0;
+
+  Future<void> _refresh() async {
+    setState(() => _tick++);
+    // Let the spinner show briefly; the shelves re-fetch on their own with
+    // their own skeletons.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(context),
-          SliverToBoxAdapter(child: _buildSearchBar(context)),
-          SliverToBoxAdapter(child: _FeaturedHeroCard()),
-          SliverToBoxAdapter(child: _BannersCarousel()),
-          SliverToBoxAdapter(child: _BrandChallengesShelf()),
-          SliverToBoxAdapter(child: _TrendingCreatorsShelf()),
-          SliverToBoxAdapter(child: _CategoriesSection()),
-          SliverToBoxAdapter(child: _TrendingShelf()),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        color: const Color(0xFF7B2CBF),
+        backgroundColor: const Color(0xFF12102A),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            _buildAppBar(context),
+            SliverToBoxAdapter(child: _buildSearchBar(context)),
+            SliverToBoxAdapter(child: _FeaturedHeroCard(key: ValueKey('hero-$_tick'))),
+            SliverToBoxAdapter(child: _BannersCarousel(key: ValueKey('banners-$_tick'))),
+            SliverToBoxAdapter(child: _BrandChallengesShelf(key: ValueKey('brand-$_tick'))),
+            SliverToBoxAdapter(child: _TrendingCreatorsShelf(key: ValueKey('creators-$_tick'))),
+            SliverToBoxAdapter(child: _CategoriesSection(key: ValueKey('cats-$_tick'))),
+            SliverToBoxAdapter(child: _TrendingShelf(key: ValueKey('trending-$_tick'))),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        ),
       ),
     );
   }
@@ -270,13 +294,23 @@ Widget _challengeCard(
 // ── Featured Hero Card ─────────────────────────────────────────────────────────
 
 class _FeaturedHeroCard extends StatefulWidget {
+  const _FeaturedHeroCard({super.key});
+
   @override
   State<_FeaturedHeroCard> createState() => _FeaturedHeroCardState();
 }
 
+/// The admin-curated Featured carousel (backend ADR 092). Auto-advances every
+/// [_interval]; each new card slides in from the left. Hidden entirely when
+/// nothing is featured.
 class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
-  Map<String, dynamic>? _challenge;
+  static const _interval = Duration(seconds: 4);
+  static const accent = Color(0xFF7B2CBF);
+
+  List<Map<String, dynamic>> _items = const [];
   bool _loaded = false;
+  int _index = 0;
+  Timer? _timer;
 
   @override
   void initState() {
@@ -284,30 +318,92 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    final c = await HomeService().fetchFeatured();
-    if (mounted) setState(() { _challenge = c; _loaded = true; });
-    // The most prominent card on the whole screen — almost certainly the
-    // first thing a user taps. Start loading its reference video now so
-    // ChallengeDetail's own player has nothing left to wait on when it
-    // opens. mixWithOthers:true matches what ChallengeDetail's player
-    // itself uses — see VideoPrewarmCache.prewarm's doc comment on why
-    // this has to match the eventual consumer.
-    final videoUrl = c != null
-        ? normaliseHomeSummary(c)['videoUrl'] as String? ?? ''
-        : '';
-    if (videoUrl.isNotEmpty) {
-      VideoPrewarmCache.prewarm(videoUrl, mixWithOthers: true);
+    final items = await HomeService().fetchFeatured();
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _loaded = true;
+      _index = 0;
+    });
+    _prewarmCurrent();
+    _timer?.cancel();
+    if (_items.length > 1) {
+      _timer = Timer.periodic(_interval, (_) => _advance());
+    }
+  }
+
+  void _advance() {
+    if (!mounted || _items.length < 2) return;
+    setState(() => _index = (_index + 1) % _items.length);
+    _prewarmCurrent();
+  }
+
+  void _prewarmCurrent() {
+    if (_index >= _items.length) return;
+    final url =
+        normaliseHomeSummary(_items[_index])['videoUrl'] as String? ?? '';
+    if (url.isNotEmpty) {
+      VideoPrewarmCache.prewarm(url, mixWithOthers: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded || _challenge == null) return const SizedBox.shrink();
-    final c = normaliseHomeSummary(_challenge!);
-    const accent = Color(0xFF7B2CBF);
+    if (!_loaded || _items.isEmpty) return const SizedBox.shrink();
 
+    return Column(
+      children: [
+        SizedBox(
+          height: 204, // 180 card + 24 bottom margin
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 450),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(-1, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: _card(_items[_index], key: ValueKey(_index)),
+          ),
+        ),
+        if (_items.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_items.length, (i) {
+                final on = i == _index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: on ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: on ? accent : Colors.white24,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _card(Map<String, dynamic> raw, {required Key key}) {
+    final c = normaliseHomeSummary(raw);
     return GestureDetector(
+      key: key,
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
@@ -377,24 +473,13 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
                           fontWeight: FontWeight.w800,
                           height: 1.3),
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.diamond, color: accent, size: 13),
-                        const SizedBox(width: 4),
-                        Text('${c['starsCount']} Aura',
-                            style: const TextStyle(
-                                color: Color(0xFFD4A8FF),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(width: 12),
-                        if ((c['category'] as String).isNotEmpty)
-                          Text(c['category'] as String,
-                              style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.55),
-                                  fontSize: 12)),
-                      ],
-                    ),
+                    if ((c['category'] as String).isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(c['category'] as String,
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 12)),
+                    ],
                   ],
                 ),
               ),
@@ -409,6 +494,8 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
 // ── Banners Carousel ───────────────────────────────────────────────────────────
 
 class _BannersCarousel extends StatefulWidget {
+  const _BannersCarousel({super.key});
+
   @override
   State<_BannersCarousel> createState() => _BannersCarouselState();
 }
@@ -567,6 +654,8 @@ class _BannersCarouselState extends State<_BannersCarousel> {
 // ── Brand Challenges Shelf ─────────────────────────────────────────────────────
 
 class _BrandChallengesShelf extends StatefulWidget {
+  const _BrandChallengesShelf({super.key});
+
   @override
   State<_BrandChallengesShelf> createState() => _BrandChallengesShelfState();
 }
@@ -638,6 +727,8 @@ class _BrandChallengesShelfState extends State<_BrandChallengesShelf> {
 // ── Trending Creators Shelf ────────────────────────────────────────────────────
 
 class _TrendingCreatorsShelf extends StatefulWidget {
+  const _TrendingCreatorsShelf({super.key});
+
   @override
   State<_TrendingCreatorsShelf> createState() => _TrendingCreatorsShelfState();
 }
@@ -748,7 +839,7 @@ class _TrendingCreatorsShelfState extends State<_TrendingCreatorsShelf> {
 // ── Categories Section ─────────────────────────────────────────────────────────
 
 class _CategoriesSection extends StatefulWidget {
-  const _CategoriesSection();
+  const _CategoriesSection({super.key});
 
   @override
   State<_CategoriesSection> createState() => _CategoriesSectionState();
@@ -852,6 +943,8 @@ class _CategoriesSectionState extends State<_CategoriesSection> {
 // ── Trending Shelf ─────────────────────────────────────────────────────────────
 
 class _TrendingShelf extends StatefulWidget {
+  const _TrendingShelf({super.key});
+
   @override
   State<_TrendingShelf> createState() => _TrendingShelfState();
 }

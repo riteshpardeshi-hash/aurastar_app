@@ -4,13 +4,16 @@ import '../config/api_config.dart';
 class HomeService {
   final _client = ApiClient();
 
-  Future<Map<String, dynamic>?> fetchFeatured() async {
+  /// The admin-curated Featured carousel (ADR 092). Empty list when nothing is
+  /// featured — the carousel then hides itself.
+  Future<List<Map<String, dynamic>>> fetchFeatured() async {
     try {
       final res = await _client.get('/home/featured', auth: true);
       final data = res['data'] as Map<String, dynamic>;
-      return data['challenge'] as Map<String, dynamic>?;
+      return (data['challenges'] as List? ?? const [])
+          .cast<Map<String, dynamic>>();
     } catch (_) {
-      return null;
+      return const [];
     }
   }
 
