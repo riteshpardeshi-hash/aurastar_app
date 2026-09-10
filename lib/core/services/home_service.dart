@@ -68,25 +68,47 @@ class HomeService {
   }
 }
 
-// Normalises a ChallengeSummary (from home endpoints) into the UI shape.
-// Tries videoUrl first, falls back to constructing from videoKey + mediaBaseUrl.
+// Normalises a challenge from a `/home/*` endpoint into the flat UI shape.
+//
+// Read every field defensively: these endpoints return *populated* Challenge
+// documents, so `category` / `creatorId` arrive as `{ _id, name, ... }` objects
+// (not strings), and the video URL may be top-level (`presignS3Keys` flattens
+// the populated `videoId` to `videoUrl` when it has a raw key) or still nested
+// on `videoId` for an already-processed clip. A bare `as String` cast on any of
+// these throws and red-screens the whole home feed.
+String _hs(dynamic v) => v is String ? v : '';
+
 Map<String, dynamic> normaliseHomeSummary(Map<String, dynamic> c) {
-  final rawUrl = c['videoUrl'] as String?;
-  final key = c['videoKey'] as String? ?? '';
-  final videoUrl = (rawUrl?.isNotEmpty == true)
-      ? rawUrl!
+  final videoObj = c['videoId'];
+  final videoMap = videoObj is Map ? videoObj : const <dynamic, dynamic>{};
+
+  final rawUrl =
+      _hs(c['videoUrl']).isNotEmpty ? _hs(c['videoUrl']) : _hs(videoMap['videoUrl']);
+  final key = _hs(c['videoKey']).isNotEmpty ? _hs(c['videoKey']) : _hs(videoMap['videoKey']);
+  final videoUrl = rawUrl.isNotEmpty
+      ? rawUrl
       : (key.isNotEmpty && ApiConfig.mediaBaseUrl.isNotEmpty
           ? '${ApiConfig.mediaBaseUrl}/$key'
           : '');
+
+  final category = c['category'];
+  final categoryName = category is Map ? _hs(category['name']) : _hs(category);
+
+  final thumb = _hs(c['thumbnailUrl']).isNotEmpty
+      ? _hs(c['thumbnailUrl'])
+      : _hs(videoMap['thumbnailUrl']);
+
+  final description = _hs(c['description']);
+
   return {
-    'id': c['_id'] as String? ?? '',
-    'title': c['title'] as String? ?? '',
-    'instructions': c['description'] as String? ?? c['title'] as String? ?? '',
+    'id': _hs(c['_id']),
+    'title': _hs(c['title']),
+    'instructions': description.isNotEmpty ? description : _hs(c['title']),
     'videoUrl': videoUrl,
-    'thumbnailUrl': c['thumbnailUrl'] as String? ?? '',
+    'thumbnailUrl': thumb,
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
-    'sourceType': c['sourceType'] as String? ?? '',
-    'category': c['category'] as String? ?? '',
+    'sourceType': _hs(c['sourceType']),
+    'category': categoryName,
   };
 }
