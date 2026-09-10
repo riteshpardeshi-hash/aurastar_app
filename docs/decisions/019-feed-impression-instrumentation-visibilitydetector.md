@@ -22,7 +22,7 @@ first cut." That first cut shipped; this is the deferred follow-up.
 ## Investigation
 
 - The grids are ordinary `ListView` / `GridView` / `CustomScrollView` builders
-  (`home_feed_screen.dart`, `dashboard.dart` horizontal rails,
+  (`dashboard.dart` — the home screen — and its horizontal rails,
   `trending_screen.dart`, `all_general_challenges_screen.dart`,
   `category_challenges_screen.dart`, `brand_challenges_screen.dart`). None
   expose "which items are on screen right now" — a `ScrollController` offset
@@ -83,9 +83,12 @@ bad key can't break a feed):
 | `trending_screen.dart` | trending grid | ✅ wired |
 | `all_general_challenges_screen.dart` | "All Challenges" grid | ✅ wired |
 | `category_challenges_screen.dart` | per-category grid | ✅ wired |
-| `home_feed_screen.dart` | main challenge feed (multiple rails) | ⏳ pending — sectioned layout, needs per-rail care |
-| `dashboard.dart` | hero / brand / trending rails | ⏳ pending — sectioned layout |
-| `brand_challenges_screen.dart` | brand challenges grid | ⏳ pending — Firestore-doc data shape |
+| `dashboard.dart` | home screen — Featured carousel + brand / creator / trending rails + endless grid | ✅ wired (rails via `VideoThumbnailWidget.impressionChallengeId`; Featured carousel added with ADR 020) |
+| `brand_challenges_screen.dart` | brand challenges grid | ✅ wired |
+
+`home_feed_screen.dart` was an unreferenced alternate home layout (the shell
+renders `dashboard.dart`); it was deleted with ADR 020 and its pull-to-refresh
++ Featured carousel ported into `dashboard.dart`.
 
 `test/flutter_test_config.dart` zeroes `VisibilityDetectorController.updateInterval`
 globally so the detector's timer never outlives a widget test's pump cycle

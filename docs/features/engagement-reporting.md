@@ -86,9 +86,9 @@ must not be able to break a screen.
 
 | Method | Behaviour |
 | --- | --- |
-| `recordImpression(id)` | POSTs on **every** call. No de-dup (removed in ADR 018). Caller decides what "seen" means. |
+| `recordImpression(id)` | POSTs on **every** call. No de-dup (removed in ADR 018). Caller decides what "seen" means. Body: `device` (`android`/`ios`/`web`/`unknown`, from `defaultTargetPlatform`). |
 | `recordVideoView(id)` | Call the instant a challenge video starts playing. Sends the session's first `watch-progress` ping (`watchedDuration: 0`) → the backend records **one view**. Idempotent within a play; a fresh mount (after `endWatchSession`) sends again. |
-| `recordWatchProgress(id, {watched, total, flush})` | The **first** ping of a session always sends immediately (that is the view). Later pings are throttled to "grew ≥ 3s **and** ≥ 5s since the last send"; `flush: true` overrides the throttle. Negative `watched` sends nothing. Body: `watchedDuration` (s), `videoDuration` (s, omitted if `total` null/zero), `sessionId`. |
+| `recordWatchProgress(id, {watched, total, flush})` | The **first** ping of a session always sends immediately (that is the view). Later pings are throttled to "grew ≥ 3s **and** ≥ 5s since the last send"; `flush: true` overrides the throttle. Negative `watched` sends nothing. Body: `watchedDuration` (s), `videoDuration` (s, omitted if `total` null/zero), `sessionId`, `device` — the last drives the 360°/creator/brand "Device Distribution" section (backend ADR 093), persisted on `ChallengeWatchAnalytics.device`. |
 | `endWatchSession(id)` | Drops the session so the next play mints a fresh `sessionId` → a new view. Call from the player's `dispose()`, and (reels) when scrolling off a page. |
 | `recordShare(id, {platform})` | POSTs on every call. `platform` is sent when given (backend accepts but does not yet store it). |
 

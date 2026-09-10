@@ -48,6 +48,22 @@ class ChallengeAnalyticsService {
   @visibleForTesting
   ApiClient client = ApiClient();
 
+  /// The OS this client is running on — sent with every engagement ping so the
+  /// 360°/creator/brand "Device Distribution" section can attribute the view
+  /// to a real platform instead of "Unknown" (backend ADR 093). Resolved from
+  /// [defaultTargetPlatform], which is safe on every target including web.
+  static String get _clientPlatform {
+    if (kIsWeb) return 'web';
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'android';
+      case TargetPlatform.iOS:
+        return 'ios';
+      default:
+        return 'unknown';
+    }
+  }
+
   /// Per-challenge watch-progress bookkeeping, keyed by challenge id.
   final Map<String, _WatchState> _watch = <String, _WatchState>{};
 
@@ -70,7 +86,7 @@ class ChallengeAnalyticsService {
     if (challengeId.isEmpty) return;
     unawaited(_safe(() => client.post(
           '/challenges/$challengeId/impression',
-          const <String, dynamic>{},
+          <String, dynamic>{'device': _clientPlatform},
           auth: true,
         )));
   }
@@ -119,6 +135,7 @@ class ChallengeAnalyticsService {
       if (total != null && total > Duration.zero)
         'videoDuration': total.inMilliseconds / 1000.0,
       'sessionId': st.sessionId,
+      'device': _clientPlatform,
     };
     unawaited(_safe(() => client.post(
           '/challenges/$challengeId/watch-progress',
