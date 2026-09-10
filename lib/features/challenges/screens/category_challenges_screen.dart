@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/impression_tracker.dart';
 import '../../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
@@ -262,7 +264,11 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
     final challengeId = c['id'] as String? ?? '';
     final participants = c['submissionsCount'] as int? ?? 0;
 
-    return GestureDetector(
+    return ImpressionTracker(
+      detectorKey: ValueKey('imp-category-$challengeId'),
+      onImpression: () =>
+          ChallengeAnalyticsService().recordImpression(challengeId),
+      child: GestureDetector(
       onTap:
           () => Navigator.push(
             context,
@@ -326,6 +332,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

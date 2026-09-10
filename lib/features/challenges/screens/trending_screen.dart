@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
+import '../../../shared/widgets/impression_tracker.dart';
 import '../../../shared/widgets/thumbnail_stats_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
@@ -123,7 +125,11 @@ class _TrendingScreenState extends State<TrendingScreen> {
     final participants = item.data['submissionsCount'] as int? ?? 0;
     final isTop3 = index < 3;
 
-    return GestureDetector(
+    return ImpressionTracker(
+      detectorKey: ValueKey('imp-trending-${item.challengeId}'),
+      onImpression: () =>
+          ChallengeAnalyticsService().recordImpression(item.challengeId),
+      child: GestureDetector(
       onTap:
           () => Navigator.push(
             context,
@@ -192,6 +198,7 @@ class _TrendingScreenState extends State<TrendingScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

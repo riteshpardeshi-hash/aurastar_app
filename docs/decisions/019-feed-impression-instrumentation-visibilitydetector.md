@@ -75,17 +75,22 @@ ImpressionTracker(
   challenge id, **not** the list index). `VisibilityDetector` only tracks the
   last widget mounted with a given key.
 
-Screens to wrap (each in its own small commit; `ChallengeAnalyticsService`
-already swallows failures so a bad key can't break a feed):
+Screens to wrap (`ChallengeAnalyticsService` already swallows failures so a
+bad key can't break a feed):
 
-| Screen | Feed |
-| --- | --- |
-| `home_feed_screen.dart` | main challenge feed |
-| `dashboard.dart` | hero / brand / trending rails |
-| `trending_screen.dart` | trending grid |
-| `all_general_challenges_screen.dart` | "All Challenges" grid |
-| `category_challenges_screen.dart` | per-category grid |
-| `brand_challenges_screen.dart` | brand challenges grid |
+| Screen | Feed | Status |
+| --- | --- | --- |
+| `trending_screen.dart` | trending grid | ✅ wired |
+| `all_general_challenges_screen.dart` | "All Challenges" grid | ✅ wired |
+| `category_challenges_screen.dart` | per-category grid | ✅ wired |
+| `home_feed_screen.dart` | main challenge feed (multiple rails) | ⏳ pending — sectioned layout, needs per-rail care |
+| `dashboard.dart` | hero / brand / trending rails | ⏳ pending — sectioned layout |
+| `brand_challenges_screen.dart` | brand challenges grid | ⏳ pending — Firestore-doc data shape |
+
+`test/flutter_test_config.dart` zeroes `VisibilityDetectorController.updateInterval`
+globally so the detector's timer never outlives a widget test's pump cycle
+(it otherwise throws inside `RenderVisibilityDetectorBase` against a torn-down
+tree).
 
 The reels feed and `ChallengeDetail` keep their existing direct
 `recordImpression` calls (they already know when a challenge is *the* focused
