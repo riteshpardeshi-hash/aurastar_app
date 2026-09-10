@@ -8,16 +8,19 @@ class UploadQueueService {
   static const _keyVideoPath      = 'uq_video_path';
   static const _keyChallengId     = 'uq_challenge_id';
   static const _keyChallengeTitle = 'uq_challenge_title';
+  static const _keyMirrored       = 'uq_mirrored';
 
   static Future<void> save({
     required String videoPath,
     required String challengeId,
     required String challengeTitle,
+    bool mirrored = false,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyVideoPath,      videoPath);
     await prefs.setString(_keyChallengId,     challengeId);
     await prefs.setString(_keyChallengeTitle, challengeTitle);
+    await prefs.setBool(_keyMirrored,         mirrored);
   }
 
   static Future<void> clear() async {
@@ -25,6 +28,7 @@ class UploadQueueService {
     await prefs.remove(_keyVideoPath);
     await prefs.remove(_keyChallengId);
     await prefs.remove(_keyChallengeTitle);
+    await prefs.remove(_keyMirrored);
   }
 
   /// Returns null if nothing is queued or the file no longer exists on disk.
@@ -45,6 +49,7 @@ class UploadQueueService {
       videoPath:      videoPath,
       challengeId:    challengeId,
       challengeTitle: challengeTitle,
+      mirrored:       prefs.getBool(_keyMirrored) ?? false,
     );
   }
 
@@ -87,9 +92,14 @@ class PendingUpload {
   final String challengeId;
   final String challengeTitle;
 
+  /// Whether the review screen should mirror playback (front-camera take on
+  /// a platform that records the front camera un-mirrored). See ADR 020.
+  final bool mirrored;
+
   const PendingUpload({
     required this.videoPath,
     required this.challengeId,
     required this.challengeTitle,
+    this.mirrored = false,
   });
 }

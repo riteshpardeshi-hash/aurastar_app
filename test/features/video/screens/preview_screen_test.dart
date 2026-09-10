@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
@@ -400,6 +401,56 @@ void main() {
     expect(presignCalls, 1);
     expect(s3PutCalls, 1);
     expect(createSubmissionCalls, 1);
+  });
+
+  // ADR 020: Android records the front camera un-mirrored while its preview
+  // is mirrored, so the review screen looked flipped vs what the user just
+  // framed. `mirrored: true` flips playback back; the uploaded file is left
+  // alone. Default is false (back camera, gallery pick, iOS).
+  Iterable<Transform> horizontalFlipsAround(WidgetTester tester, Finder of) =>
+      tester
+          .widgetList<Transform>(
+              find.ancestor(of: of, matching: find.byType(Transform)))
+          .where((t) => t.transform.storage[0] == -1.0);
+
+  testWidgets('mirrored:true flips the review playback horizontally',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: PreviewScreen(
+        videoPath: videoFile.path,
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+        mirrored: true,
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    final player = find.byType(VideoPlayer);
+    expect(player, findsOneWidget);
+    final flips = horizontalFlipsAround(tester, player);
+    expect(flips, isNotEmpty,
+        reason: 'a front-camera take must be mirrored back so the review '
+            'matches the selfie-mirrored camera preview');
+    expect(flips.every((t) => t.transform.storage[5] == 1.0), isTrue,
+        reason: 'horizontal flip only — no vertical flip');
+  });
+
+  testWidgets('mirrored defaults to false — playback is not flipped',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: PreviewScreen(
+        videoPath: videoFile.path,
+        challengeTitle: 'Test Challenge',
+        challengeId: 'challenge-1',
+      ),
+    ));
+    await tester.pump();
+    await tester.pump();
+
+    final player = find.byType(VideoPlayer);
+    expect(player, findsOneWidget);
+    expect(horizontalFlipsAround(tester, player), isEmpty);
   });
 }
 

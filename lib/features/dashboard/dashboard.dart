@@ -1556,6 +1556,7 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
               videoPath: p.videoPath,
               challengeId: p.challengeId,
               challengeTitle: p.challengeTitle,
+              mirrored: p.mirrored,
             ),
       ),
     );

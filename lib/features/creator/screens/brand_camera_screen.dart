@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
@@ -34,6 +35,9 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
   XFile? videoFile;
   int selectedCameraIndex = 0;
   bool _cameraError = false;
+  // Lens the take in [videoFile] used, captured at stop time (the user can
+  // flip afterward). Drives mirrored playback on BrandPreviewScreen.
+  bool _lastRecordingWasFront = false;
 
   @override
   void initState() {
@@ -107,8 +111,13 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
       await controller!.startVideoRecording();
       setState(() => recording = true);
     } else {
+      final wasFront =
+          controller!.description.lensDirection == CameraLensDirection.front;
       videoFile = await controller!.stopVideoRecording();
-      setState(() => recording = false);
+      setState(() {
+        recording = false;
+        _lastRecordingWasFront = wasFront;
+      });
     }
   }
 
@@ -208,6 +217,8 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
                                   difficulty:       widget.difficulty,
                                   categoryId:       widget.categoryId,
                                   instructionSteps: widget.instructionSteps,
+                                  mirrored: Platform.isAndroid &&
+                                      _lastRecordingWasFront,
                                 ),
                               ),
                             );

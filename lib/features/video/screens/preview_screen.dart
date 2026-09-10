@@ -21,11 +21,20 @@ class PreviewScreen extends StatefulWidget {
   final String challengeTitle;
   final String challengeId;
 
+  /// Mirror the playback horizontally so this review screen matches what the
+  /// user saw in the (mirrored, selfie-style) camera preview while recording.
+  /// Set only for front-camera takes on Android, whose recorded file is
+  /// un-mirrored (iOS already records the front camera mirrored). The
+  /// uploaded file itself is untouched — the feed still shows the recording
+  /// as others' cameras see it. See ADR 020.
+  final bool mirrored;
+
   const PreviewScreen({
     super.key,
     required this.videoPath,
     required this.challengeTitle,
     required this.challengeId,
+    this.mirrored = false,
   });
 
   @override
@@ -129,6 +138,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         videoPath: widget.videoPath,
         challengeId: widget.challengeId,
         challengeTitle: widget.challengeTitle,
+        mirrored: widget.mirrored,
       );
       _startAutoRetry();
       if (!isAutoRetry && mounted) {
@@ -258,6 +268,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
         videoPath: widget.videoPath,
         challengeId: widget.challengeId,
         challengeTitle: widget.challengeTitle,
+        mirrored: widget.mirrored,
       );
       // Only auto-retry connectivity failures — server-rejected requests
       // (e.g. incomplete profile) will just fail the same way again.
@@ -385,7 +396,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
                         children: [
                           AspectRatio(
                             aspectRatio: portraitPreviewAspectRatio(_player.value),
-                            child: VideoPlayer(_player),
+                            child: widget.mirrored
+                                ? Transform.scale(
+                                    scaleX: -1,
+                                    child: VideoPlayer(_player),
+                                  )
+                                : VideoPlayer(_player),
                           ),
                           if (!_isPlaying)
                             Container(

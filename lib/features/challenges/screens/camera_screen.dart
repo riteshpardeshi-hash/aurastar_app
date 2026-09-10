@@ -50,6 +50,11 @@ class _CameraScreenState extends State<CameraScreen>
   // Recording
   bool _recording = false;
   XFile? _videoFile;
+  // Which lens the take in [_videoFile] was shot with — captured when
+  // recording stops (the user can flip the camera afterward, so reading
+  // _cam at preview time would be wrong). Drives the mirrored playback on
+  // PreviewScreen so the review matches the selfie-mirrored camera preview.
+  bool _lastRecordingWasFront = false;
   int _elapsed = 0; // seconds elapsed while recording
   Timer? _timer;
 
@@ -339,11 +344,14 @@ class _CameraScreenState extends State<CameraScreen>
     _graceRemaining = null;
     _ghostCtrl?.pause();
     _ghostCtrl?.seekTo(Duration.zero);
+    final wasFront =
+        _cam!.description.lensDirection == CameraLensDirection.front;
     final file = await _cam!.stopVideoRecording();
     if (mounted) {
       setState(() {
         _recording = false;
         _videoFile = file;
+        _lastRecordingWasFront = wasFront;
       });
     }
   }
@@ -362,6 +370,10 @@ class _CameraScreenState extends State<CameraScreen>
           videoPath: _videoFile!.path,
           challengeTitle: widget.challengeTitle,
           challengeId: widget.challengeId,
+          // Android records the front camera un-mirrored while the preview is
+          // mirrored; flip the review playback back so it matches what the
+          // user just saw. iOS already records the front camera mirrored.
+          mirrored: Platform.isAndroid && _lastRecordingWasFront,
         ),
       ),
     );

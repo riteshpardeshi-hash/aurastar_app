@@ -16,6 +16,11 @@ class BrandPreviewScreen extends StatefulWidget {
   final String categoryId;
   final List<String> instructionSteps;
 
+  /// Mirror playback so the review matches the selfie-mirrored camera
+  /// preview. Set only for front-camera takes on Android (iOS already
+  /// records the front camera mirrored). See ADR 020.
+  final bool mirrored;
+
   const BrandPreviewScreen({
     super.key,
     required this.videoPath,
@@ -25,6 +30,7 @@ class BrandPreviewScreen extends StatefulWidget {
     required this.categoryId,
     this.difficulty = 'Medium',
     this.instructionSteps = const [],
+    this.mirrored = false,
   });
 
   @override
@@ -126,7 +132,12 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
               child: _controller.value.isInitialized
                   ? AspectRatio(
                       aspectRatio: portraitPreviewAspectRatio(_controller.value),
-                      child: VideoPlayer(_controller),
+                      child: widget.mirrored
+                          ? Transform.scale(
+                              scaleX: -1,
+                              child: VideoPlayer(_controller),
+                            )
+                          : VideoPlayer(_controller),
                     )
                   : const CircularProgressIndicator(),
             ),
