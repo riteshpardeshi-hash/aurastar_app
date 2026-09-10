@@ -9,7 +9,7 @@ import '../../../core/utils/apple_sign_in_error.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class AuthChoiceScreen extends StatefulWidget {
   const AuthChoiceScreen({super.key});
@@ -65,8 +65,11 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
+        // MainShell, not a bare Dashboard: the bottom-nav tabs switch via
+        // MainShellController, which is only wired up while a MainShell is
+        // mounted. A standalone Dashboard leaves all four tab buttons dead.
         builder: (_) =>
-            isProfileComplete ? const Dashboard() : const ProfileSetupScreen(),
+            isProfileComplete ? const MainShell() : const ProfileSetupScreen(),
       ),
     );
   }

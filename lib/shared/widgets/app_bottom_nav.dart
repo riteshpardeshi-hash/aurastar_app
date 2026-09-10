@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
+import '../../core/utils/nav_diag.dart';
 import '../../features/challenges/screens/challenge_reels_screen.dart';
 import '../../features/shell/main_shell_controller.dart';
 import '../theme/app_colors.dart';
@@ -76,111 +77,167 @@ class _AppBottomNavState extends State<AppBottomNav> {
   // it's on screen to receive the request. On the shell's own screens
   // `popUntil(isFirst)` is a no-op.
   void _switchTab(BuildContext context, AppNavTab tab) {
-    if (widget.activeTab == tab) return;
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    navDiag('AppBottomNav._switchTab: tap tab=$tab activeTab=${widget.activeTab} '
+        'shellIndex=${tab.shellIndex}');
+    if (widget.activeTab == tab) {
+      navDiag('  -> early return (already on this tab)');
+      return;
+    }
+    final nav = Navigator.of(context);
+    var predicateCalls = 0;
+    nav.popUntil((route) {
+      predicateCalls++;
+      return route.isFirst;
+    });
+    navDiag('  -> popUntil(isFirst): $predicateCalls predicate call(s), '
+        '${predicateCalls - 1} pop(s); canPop now=${nav.canPop()}');
     MainShellController.instance.select(tab.shellIndex);
+    navDiag('  -> MainShellController.select(${tab.shellIndex}) returned');
   }
+
+  // Width reserved in the centre of the row for the floating action button.
+  // The FAB's opaque hit box is [_fabSize] wide and sits inside this gap, so
+  // keeping the gap wider than the FAB stops the FAB from stealing taps that
+  // belong to the Search / Leaderboard slots on either side.
+  static const _fabGap = 64.0;
+  static const _fabSize = 56.0;
+  static const _pillHeight = 62.0;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: SizedBox(
-          height: 74,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.bottomCenter,
-            children: [
-              // Pill-shaped nav bar
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 62,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111111),
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _navItem(
-                        icon: Icons.home_rounded,
-                        label: 'Home',
-                        active: widget.activeTab == AppNavTab.home,
-                        onTap: () => _switchTab(context, AppNavTab.home),
-                      ),
-                      _navItem(
-                        icon: Icons.search_rounded,
-                        label: 'Search',
-                        active: widget.activeTab == AppNavTab.search,
-                        onTap: () => _switchTab(context, AppNavTab.search),
-                      ),
-                      const SizedBox(width: 58),
-                      _navItem(
-                        icon: Icons.leaderboard_rounded,
-                        label: 'Leaderboard',
-                        active: widget.activeTab == AppNavTab.leaderboard,
-                        onTap: () => _switchTab(context, AppNavTab.leaderboard),
-                      ),
-                      _profileNavItem(context),
-                    ],
-                  ),
-                ),
-              ),
-              // Floating centre button — opens the full-screen vertical
-              // challenge-video reel feed, for every role.
-              Positioned(
-                top: 0,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ChallengeReelsScreen()),
-                  ),
+    final mq = MediaQuery.of(context);
+    navDiag('AppBottomNav.build: activeTab=${widget.activeTab} '
+        'size=${mq.size} padding.bottom=${mq.padding.bottom} '
+        'viewInsets.bottom=${mq.viewInsets.bottom} textScaler=${mq.textScaler}');
+    // Clamp text scaling for the bar only. The labels are 9px and the row has
+    // no room to grow: at the OS's larger font sizes the un-clamped row is
+    // wider than the pill, Flutter clips the overflow, and — the actual bug —
+    // pointer events are not delivered to the clipped-out region, so the last
+    // items (Leaderboard, Profile) stop responding to taps on some devices.
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.2,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: SizedBox(
+            height: 74,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.bottomCenter,
+              children: [
+                // Pill-shaped nav bar
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: _pillHeight,
                   child: Container(
-                    width: 56,
-                    height: 56,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF0D0020),
+                      color: const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(32),
                       border: Border.all(
-                        color: _accent.withValues(alpha: 0.7),
-                        width: 1.5,
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: _accent.withValues(alpha: 0.5),
-                          blurRadius: 18,
-                          spreadRadius: 1,
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(13),
-                      child: Image.asset(
-                        'assets/images/Aura Arena Mono.png',
-                        fit: BoxFit.contain,
+                    // Equal-width Expanded slots (not spaceAround) so the row
+                    // can never overflow the pill however narrow the device or
+                    // large the font — each slot just gets tighter and its
+                    // label ellipsises. Every slot is also full pill height, so
+                    // the tap target is the whole slot, not the ~36px glyph +
+                    // label stack it used to be (below the 48px min target).
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.home_rounded,
+                            label: 'Home',
+                            active: widget.activeTab == AppNavTab.home,
+                            onTap: () => _switchTab(context, AppNavTab.home),
+                          ),
+                        ),
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.search_rounded,
+                            label: 'Search',
+                            active: widget.activeTab == AppNavTab.search,
+                            onTap: () => _switchTab(context, AppNavTab.search),
+                          ),
+                        ),
+                        const SizedBox(width: _fabGap),
+                        Expanded(
+                          child: _navItem(
+                            icon: Icons.leaderboard_rounded,
+                            label: 'Leaderboard',
+                            active: widget.activeTab == AppNavTab.leaderboard,
+                            onTap: () =>
+                                _switchTab(context, AppNavTab.leaderboard),
+                          ),
+                        ),
+                        Expanded(child: _profileNavItem(context)),
+                      ],
+                    ),
+                  ),
+                ),
+                // Floating centre button — opens the full-screen vertical
+                // challenge-video reel feed, for every role. Stretched full
+                // width and centred so its opaque hit box stays a fixed
+                // [_fabSize] square inside [_fabGap] and cannot overlap the
+                // slots on either side.
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        navDiag('AppBottomNav: centre FAB tapped -> push reels');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ChallengeReelsScreen()),
+                        );
+                      },
+                      child: Container(
+                        width: _fabSize,
+                        height: _fabSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF0D0020),
+                          border: Border.all(
+                            color: _accent.withValues(alpha: 0.7),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accent.withValues(alpha: 0.5),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(13),
+                          child: Image.asset(
+                            'assets/images/Aura Arena Mono.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -192,12 +249,12 @@ class _AppBottomNavState extends State<AppBottomNav> {
     final initial =
         _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'U';
     return GestureDetector(
-      // Without this the tap only lands on the painted avatar/label pixels;
-      // the padding around them is dead. Opaque makes the whole item tappable.
+      // Opaque + full pill height (see [_navItem]) so the whole slot is the
+      // tap target, not just the painted avatar/label pixels.
       behavior: HitTestBehavior.opaque,
       onTap: () => _switchTab(context, AppNavTab.profile),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: SizedBox(
+        height: _pillHeight,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -219,6 +276,9 @@ class _AppBottomNavState extends State<AppBottomNav> {
             Text(
               'Profile',
               textAlign: TextAlign.center,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: active ? _accent : AppColors.textFaint,
                 fontSize: 9,
@@ -239,13 +299,13 @@ class _AppBottomNavState extends State<AppBottomNav> {
     bool active = false,
   }) {
     return GestureDetector(
-      // Opaque so the whole padded column — not just the 22px glyph and the
-      // tiny label — registers the tap. Small hit targets here were making
-      // taps miss and forcing users to tap 2–3 times.
+      // Opaque + full pill height so the whole slot — not just the 22px glyph
+      // and the tiny label — registers the tap. Small hit targets here were
+      // making taps miss and forcing users to tap 2–3 times.
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: SizedBox(
+        height: _pillHeight,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
@@ -255,6 +315,9 @@ class _AppBottomNavState extends State<AppBottomNav> {
             Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: active ? _accent : AppColors.textFaint,
                 fontSize: 9,

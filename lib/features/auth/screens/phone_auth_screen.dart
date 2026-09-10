@@ -10,7 +10,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import 'profile_setup_screen.dart';
-import '../../dashboard/dashboard.dart';
+import '../../shell/main_shell.dart';
 
 class PhoneAuthScreen extends StatefulWidget {
   const PhoneAuthScreen({super.key, this.smsAutofill});
@@ -126,19 +126,23 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       setState(() => _isLoading = false);
 
       if (!result.isNewUser) {
-        // Returning user — mark complete locally and go straight to Dashboard.
+        // Returning user — mark complete locally and go straight to the app.
+        // Must land on MainShell, not a bare Dashboard: the bottom-nav tabs
+        // switch by pushing to MainShellController, which only has a listener
+        // while a MainShell is mounted. Landing on a standalone Dashboard
+        // leaves all four tab buttons dead.
         final uid = await ApiClient().userId;
         if (uid != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('setup_complete_$uid', true);
         }
-        _navigateTo(const Dashboard());
+        _navigateTo(const MainShell());
       } else {
         // Brand-new user — send through onboarding.
         final isComplete =
             result.user['isProfileComplete'] as bool? ?? false;
         _navigateTo(
-            isComplete ? const Dashboard() : const ProfileSetupScreen());
+            isComplete ? const MainShell() : const ProfileSetupScreen());
       }
     } catch (e) {
       if (!mounted) return;

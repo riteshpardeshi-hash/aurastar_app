@@ -42,3 +42,5 @@ because it's three pages long isn't documented, it's buried.
 | 015 | [Creator profile grid shows the creator's authored challenges, not their attempt videos](015-creator-profile-shows-authored-challenges-not-attempt-videos.md) | Accepted |
 | 016 | [Coupon integration: POOL vs CATALOG sourcing, one post-score sheet](016-catalog-vs-pool-coupon-sourcing.md) | Accepted |
 | 017 | [Tab shell reveals the tapped tab immediately; drop the ready-gate](017-tab-shell-reveals-immediately-no-ready-gate.md) | Accepted (amends 011) |
+| 018 | [Bottom nav row can't overflow; full-slot hit targets; clamped text scale](018-bottom-nav-row-cannot-overflow-full-height-hit-targets.md) | Accepted |
+| 019 | [Post-login navigation must land on MainShell, not a bare Dashboard](019-post-login-navigation-must-land-on-mainshell.md) | Accepted |

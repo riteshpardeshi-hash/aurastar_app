@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../core/utils/nav_diag.dart';
+
 /// App-wide bus for "switch to bottom-nav tab N".
 ///
 /// [MainShell] hosts the four top-level tab screens in an `IndexedStack` and
@@ -23,7 +25,13 @@ class MainShellController {
   Stream<int> get onSelect => _select.stream;
 
   void select(int tabIndex) {
-    if (tabIndex < 0 || tabIndex > 3) return;
+    navDiag('MainShellController.select($tabIndex): '
+        'hasListener=${_select.hasListener} isClosed=${_select.isClosed}');
+    if (tabIndex < 0 || tabIndex > 3) {
+      navDiag('  -> rejected (out of range)');
+      return;
+    }
     _select.add(tabIndex);
+    navDiag('  -> added to stream');
   }
 }

@@ -6,10 +6,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/screen_cache.dart';
 import 'package:aura_app/core/services/sms_otp_autofill.dart';
+import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/auth/screens/phone_auth_screen.dart';
+import 'package:aura_app/features/dashboard/dashboard.dart';
+import 'package:aura_app/features/shell/main_shell.dart';
 
 /// Test double for the Android SMS-read path — never touches a platform
 /// channel. `code` is what an incoming SMS would yield (null = nothing read).
@@ -166,6 +171,100 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(requests, 2);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  });
+
+  // Regression: after the "Unify bottom nav" rework the four bottom-nav tabs
+  // switch by pushing to MainShellController, whose only listener is a mounted
+  // MainShell. These post-login paths still navigated to a bare Dashboard()
+  // widget, so users who signed in this session (vs. booting with a saved
+  // session, which goes through main.dart -> MainShell) landed on a Dashboard
+  // with no MainShell above it — every bottom-nav tab was dead. The landing
+  // must be a MainShell.
+  Future<void> pumpAndVerifyOtp(WidgetTester tester,
+      {required bool isNewUser, bool isProfileComplete = true}) async {
+    SharedPreferences.setMockInitialValues({});
+    ScreenCache.clear();
+    VideosService.resetLocallyDeletedForTest();
+    addTearDown(ScreenCache.clear);
+
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/otp/request')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {'validitySeconds': 180},
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/auth/otp/verify')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'accessToken': 'a',
+              'refreshToken': 'r',
+              'user': {'id': 'u1', 'isProfileComplete': isProfileComplete},
+              'isNewUser': isNewUser,
+            },
+          }),
+          200,
+        );
+      }
+      // Keep the landed tab screens calm — generic empty success.
+      return http.Response(
+        jsonEncode({
+          'status': 'success',
+          'data': {
+            'user': {'_id': 'u1', 'displayName': 'Test User'},
+            'challenges': [],
+            'categories': [],
+            'leaderboard': [],
+            'responses': [],
+            'items': [],
+          },
+        }),
+        200,
+      );
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill(code: '123456')),
+    ));
+    await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.text('Get OTP'));
+    await tester.pump(); // requestOtp resolves
+    await tester.pump(); // waitForCode resolves -> fills field, calls _verifyOtp
+    await tester.pump(); // verifyOtp resolves
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump(const Duration(milliseconds: 500)); // nav transition
+  }
+
+  testWidgets('a returning user lands on MainShell (bottom-nav tabs work)',
+      (tester) async {
+    await pumpAndVerifyOtp(tester, isNewUser: false);
+
+    expect(find.byType(MainShell), findsOneWidget,
+        reason: 'tab taps go through MainShellController, which is only wired '
+            'up while a MainShell is mounted — a bare Dashboard here means all '
+            'four bottom-nav tabs are dead');
+    // Dashboard is still present, but embedded inside the shell.
+    expect(find.byType(Dashboard, skipOffstage: false), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  });
+
+  testWidgets(
+      'a new user whose profile is already complete also lands on MainShell',
+      (tester) async {
+    await pumpAndVerifyOtp(tester, isNewUser: true, isProfileComplete: true);
+
+    expect(find.byType(MainShell), findsOneWidget);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
   });

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/utils/nav_diag.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../account/screens/my_account_screen.dart';
 import '../challenges/screens/all_general_challenges_screen.dart';
@@ -42,6 +43,9 @@ class _MainShellState extends State<MainShell> {
     AppNavTab.profile,
   ];
 
+  static int _instanceSeq = 0;
+  final int _instanceId = ++_instanceSeq;
+
   late int _tab = widget.initialTab;
   StreamSubscription<int>? _selectSub;
 
@@ -56,21 +60,31 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _selectSub = MainShellController.instance.onSelect.listen(_selectTab);
+    navDiag('MainShell#$_instanceId initState: subscribed, tab=$_tab');
   }
 
   @override
   void dispose() {
+    navDiag('MainShell#$_instanceId dispose: cancelling subscription');
     _selectSub?.cancel();
     super.dispose();
   }
 
   void _selectTab(int i) {
-    if (i < 0 || i >= _pages.length || i == _tab) return;
+    navDiag('MainShell#$_instanceId._selectTab($i): current tab=$_tab '
+        'mounted=$mounted');
+    if (i < 0 || i >= _pages.length || i == _tab) {
+      navDiag('  -> ignored (out of range or same tab)');
+      return;
+    }
     setState(() => _tab = i);
+    navDiag('  -> setState: tab is now $i');
   }
 
   @override
   Widget build(BuildContext context) {
+    navDiag('MainShell#$_instanceId build: tab=$_tab '
+        'activeTab=${_tabs[_tab]} textScale=${MediaQuery.textScalerOf(context)}');
     return Scaffold(
       backgroundColor: const Color(0xFF080810),
       // A plain IndexedStack, switched instantly: all four pages stay
