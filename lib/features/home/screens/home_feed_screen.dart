@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -298,9 +300,17 @@ class _FeaturedHeroCard extends StatefulWidget {
   State<_FeaturedHeroCard> createState() => _FeaturedHeroCardState();
 }
 
+/// The admin-curated Featured carousel (backend ADR 092). Auto-advances every
+/// [_interval]; each new card slides in from the left. Hidden entirely when
+/// nothing is featured.
 class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
-  Map<String, dynamic>? _challenge;
+  static const _interval = Duration(seconds: 4);
+  static const accent = Color(0xFF7B2CBF);
+
+  List<Map<String, dynamic>> _items = const [];
   bool _loaded = false;
+  int _index = 0;
+  Timer? _timer;
 
   @override
   void initState() {
@@ -308,30 +318,92 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    final c = await HomeService().fetchFeatured();
-    if (mounted) setState(() { _challenge = c; _loaded = true; });
-    // The most prominent card on the whole screen — almost certainly the
-    // first thing a user taps. Start loading its reference video now so
-    // ChallengeDetail's own player has nothing left to wait on when it
-    // opens. mixWithOthers:true matches what ChallengeDetail's player
-    // itself uses — see VideoPrewarmCache.prewarm's doc comment on why
-    // this has to match the eventual consumer.
-    final videoUrl = c != null
-        ? normaliseHomeSummary(c)['videoUrl'] as String? ?? ''
-        : '';
-    if (videoUrl.isNotEmpty) {
-      VideoPrewarmCache.prewarm(videoUrl, mixWithOthers: true);
+    final items = await HomeService().fetchFeatured();
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _loaded = true;
+      _index = 0;
+    });
+    _prewarmCurrent();
+    _timer?.cancel();
+    if (_items.length > 1) {
+      _timer = Timer.periodic(_interval, (_) => _advance());
+    }
+  }
+
+  void _advance() {
+    if (!mounted || _items.length < 2) return;
+    setState(() => _index = (_index + 1) % _items.length);
+    _prewarmCurrent();
+  }
+
+  void _prewarmCurrent() {
+    if (_index >= _items.length) return;
+    final url =
+        normaliseHomeSummary(_items[_index])['videoUrl'] as String? ?? '';
+    if (url.isNotEmpty) {
+      VideoPrewarmCache.prewarm(url, mixWithOthers: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded || _challenge == null) return const SizedBox.shrink();
-    final c = normaliseHomeSummary(_challenge!);
-    const accent = Color(0xFF7B2CBF);
+    if (!_loaded || _items.isEmpty) return const SizedBox.shrink();
 
+    return Column(
+      children: [
+        SizedBox(
+          height: 204, // 180 card + 24 bottom margin
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 450),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(-1, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: _card(_items[_index], key: ValueKey(_index)),
+          ),
+        ),
+        if (_items.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_items.length, (i) {
+                final on = i == _index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: on ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: on ? accent : Colors.white24,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _card(Map<String, dynamic> raw, {required Key key}) {
+    final c = normaliseHomeSummary(raw);
     return GestureDetector(
+      key: key,
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
@@ -401,24 +473,13 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
                           fontWeight: FontWeight.w800,
                           height: 1.3),
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.diamond, color: accent, size: 13),
-                        const SizedBox(width: 4),
-                        Text('${c['starsCount']} Aura',
-                            style: const TextStyle(
-                                color: Color(0xFFD4A8FF),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700)),
-                        const SizedBox(width: 12),
-                        if ((c['category'] as String).isNotEmpty)
-                          Text(c['category'] as String,
-                              style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.55),
-                                  fontSize: 12)),
-                      ],
-                    ),
+                    if ((c['category'] as String).isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(c['category'] as String,
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 12)),
+                    ],
                   ],
                 ),
               ),
