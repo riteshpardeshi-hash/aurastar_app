@@ -11,20 +11,21 @@ import 'api_client.dart';
 /// [ADR 090](../../../docs — see backend repo); mobile ADR 012 → 018 → 019;
 /// canonical: `docs/features/engagement-reporting.md`):
 ///
-/// * **Impression** — the challenge video appeared on the user's screen, in
-///   any feed. `POST /challenges/{id}/impression`. Fired **every time** a
-///   sighting happens — there is no per-session de-dup here anymore; the
-///   backend counts raw sightings (a scroll away and back is a new
-///   impression). Also consumes a paid Campaign's impression pool when the
-///   challenge is in an `ACTIVE` campaign (unchanged, backend-side).
-/// * **View** — a play session in which ≥ 1s of the video was watched.
-///   `POST /challenges/{id}/watch-progress` carrying a stable `sessionId`
-///   per play. The backend records **one view per `sessionId`** once
-///   `watchedDuration ≥ 1` (`SET NX`), so the same user replaying counts
-///   again. This service just needs to (a) send a fresh `sessionId` per play
-///   — see [endWatchSession] — and (b) get the first ping out as soon as 1s
-///   is watched, so a short view still lands without waiting on the
-///   dispose-time flush.
+/// * **Impression** — the challenge appeared on the user's screen: a card /
+///   thumbnail scrolled into any feed, a reel became the active page, the
+///   detail screen opened. `POST /challenges/{id}/impression`, fired **every
+///   time** a sighting happens (no per-session de-dup — scroll away and back
+///   is a new impression). Also consumes a paid Campaign's impression pool
+///   when the challenge is in an `ACTIVE` campaign (unchanged, backend-side).
+/// * **View** — the challenge's **video was shown** to the user (a player
+///   mounted and played it). Call [recordVideoView] the instant that
+///   happens; it sends the session's first `watch-progress` ping, which the
+///   backend records as one view (`SET NX` on the play `sessionId`). Seeing
+///   the same challenge's video again — scroll a reel away and back, reopen
+///   the detail page, replay — is a fresh player mount, a fresh `sessionId`
+///   (see [endWatchSession]), and another view. One user → many views.
+///   [recordWatchProgress] additionally reports how far in they got, for the
+///   separate watch-depth analytics.
 /// * **Share** — `POST /challenges/{id}/share`, bumps the lifetime + daily
 ///   `shares` counters (still a synchronous backend write — shares are not
 ///   buffered).
@@ -50,13 +51,6 @@ class ChallengeAnalyticsService {
   /// Per-challenge watch-progress bookkeeping, keyed by challenge id.
   final Map<String, _WatchState> _watch = <String, _WatchState>{};
 
-  /// A `view` is ≥ 1s of watch time (backend ADR 090). The first
-  /// watch-progress ping of a session is sent as soon as this much has been
-  /// watched, bypassing the [_minGrowth] / [_minResendGap] throttle below —
-  /// otherwise a genuine short view (scroll a reel, watch 2s, scroll on)
-  /// would only ever reach the backend via the dispose-time `flush`.
-  static const _firstPingThreshold = Duration(seconds: 1);
-
   /// At most one watch-progress request per challenge per this interval...
   static const _minResendGap = Duration(seconds: 5);
 
@@ -81,32 +75,41 @@ class ChallengeAnalyticsService {
         )));
   }
 
+  /// Call the instant a challenge's video starts playing anywhere (a reel
+  /// becoming the active page, the detail-screen player starting). This sends
+  /// the session's first `watch-progress` ping immediately, which the backend
+  /// records as **one view** (ADR 090: "the video was shown to the user").
+  /// Idempotent within a play — safe to call more than once; the backend
+  /// de-dupes on the session's `sessionId`. A fresh player mount (see
+  /// [endWatchSession]) mints a new session, so seeing the same challenge
+  /// again is another view.
+  void recordVideoView(String challengeId) =>
+      recordWatchProgress(challengeId, watched: Duration.zero);
+
   /// Report how far into a challenge's reference video the viewer has
   /// watched. Safe to call on every player tick — it throttles internally
-  /// (see [_minResendGap] / [_minGrowth]). The **first** ping of a session is
-  /// sent as soon as [_firstPingThreshold] (1s) is watched so a short view
-  /// still registers; pass `flush: true` from the player's dispose() or
-  /// on-complete handler to force the final position past the throttle.
+  /// (see [_minResendGap] / [_minGrowth]). The **first** ping of a session
+  /// always goes out immediately (that is the view — see [recordVideoView]);
+  /// pass `flush: true` from the player's dispose()/on-complete handler to
+  /// force the final position past the throttle.
   void recordWatchProgress(
     String challengeId, {
     required Duration watched,
     Duration? total,
     bool flush = false,
   }) {
-    if (challengeId.isEmpty || watched <= Duration.zero) return;
+    if (challengeId.isEmpty || watched < Duration.zero) return;
 
     final st = _watch.putIfAbsent(challengeId, _WatchState.new);
-    if (watched <= st.lastSent && !flush) return;
+    final firstPing = st.lastSentAt == null;
+    if (!firstPing && watched <= st.lastSent && !flush) return;
 
     final now = DateTime.now();
-    final firstPing = st.lastSentAt == null;
     final grownEnough = watched - st.lastSent >= _minGrowth;
     final gapElapsed =
         st.lastSentAt == null || now.difference(st.lastSentAt!) >= _minResendGap;
-    // The first ping goes out the moment ≥1s has been watched (that is the
-    // `view` threshold server-side); every later ping keeps the throttle.
-    final firstPingReady = firstPing && watched >= _firstPingThreshold;
-    if (!flush && !firstPingReady && !(grownEnough && gapElapsed)) return;
+    // The first ping of a session is always sent right away — it's the view.
+    if (!firstPing && !flush && !(grownEnough && gapElapsed)) return;
 
     st.lastSent = watched;
     st.lastSentAt = now;

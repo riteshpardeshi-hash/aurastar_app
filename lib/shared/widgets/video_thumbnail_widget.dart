@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+import '../../core/services/challenge_analytics_service.dart';
 import '../../core/utils/asset_cache_key.dart';
+import 'impression_tracker.dart';
 
 /// Shared in-memory cache of extracted JPEG bytes, keyed by [assetCacheKey] of
 /// the video URL (NOT the raw URL — the backend re-signs presigned URLs on
@@ -53,11 +55,19 @@ class VideoThumbnailWidget extends StatefulWidget {
 
   final BoxFit fit;
 
+  /// When set, this thumbnail is a challenge card: it reports a challenge
+  /// **impression** (backend ADR 090) each time it becomes ≥50% visible, and
+  /// again after scrolling fully off-screen — so a challenge seen anywhere in
+  /// the app counts, every time. Leave null for non-challenge thumbnails
+  /// (user submission videos, etc.).
+  final String? impressionChallengeId;
+
   const VideoThumbnailWidget({
     super.key,
     required this.videoUrl,
     this.thumbnailUrl,
     this.fit = BoxFit.cover,
+    this.impressionChallengeId,
   });
 
   @override
@@ -184,6 +194,17 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _content(context);
+    final id = widget.impressionChallengeId;
+    if (id == null || id.isEmpty) return content;
+    return ImpressionTracker(
+      detectorKey: ValueKey('imp-thumb-$id'),
+      onImpression: () => ChallengeAnalyticsService().recordImpression(id),
+      child: content,
+    );
+  }
+
+  Widget _content(BuildContext context) {
     if (_loading) return const VideoThumbnailSkeleton();
 
     if (_useNetwork) {

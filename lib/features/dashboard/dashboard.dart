@@ -811,6 +811,7 @@ class _DashboardState extends State<Dashboard> {
                     VideoThumbnailWidget(
                       videoUrl: videoUrl,
                       thumbnailUrl: thumbnailUrl,
+                      impressionChallengeId: challengeId,
                     ),
                     // Bottom-to-top dark gradient for text readability
                     Container(
@@ -960,6 +961,7 @@ class _DashboardState extends State<Dashboard> {
                                         VideoThumbnailWidget(
                                           videoUrl: videoUrl,
                                           thumbnailUrl: thumbnailUrl,
+                                          impressionChallengeId: challengeId,
                                         ),
                                         Positioned(
                                           left: 0,
@@ -1043,6 +1045,7 @@ class _DashboardState extends State<Dashboard> {
                                             VideoThumbnailWidget(
                                               videoUrl: videoUrl,
                                               thumbnailUrl: thumbnailUrl,
+                                              impressionChallengeId: challengeId,
                                             ),
                                             Container(
                                               color: Colors.black.withValues(
@@ -1169,6 +1172,7 @@ class _DashboardState extends State<Dashboard> {
                                     VideoThumbnailWidget(
                                       videoUrl: videoUrl,
                                       thumbnailUrl: thumbnailUrl,
+                                      impressionChallengeId: challengeId,
                                     ),
                                     Positioned(
                                       left: 0,
@@ -1501,6 +1505,7 @@ class _EndlessChallengeCard extends StatelessWidget {
             VideoThumbnailWidget(
               videoUrl: videoUrl,
               thumbnailUrl: thumbnailUrl,
+              impressionChallengeId: challengeId,
             ),
             Positioned(
               left: 0,

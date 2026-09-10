@@ -174,6 +174,7 @@ Widget _challengeCard(
             VideoThumbnailWidget(
                 videoUrl: videoUrl,
                 thumbnailUrl: thumbnailUrl,
+                impressionChallengeId: challengeId,
                 fit: BoxFit.cover),
             Container(
               decoration: const BoxDecoration(
@@ -333,6 +334,7 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
               VideoThumbnailWidget(
                   videoUrl: c['videoUrl'] as String,
                   thumbnailUrl: c['thumbnailUrl'] as String?,
+                  impressionChallengeId: c['id'] as String,
                   fit: BoxFit.cover),
               Container(
                 decoration: const BoxDecoration(

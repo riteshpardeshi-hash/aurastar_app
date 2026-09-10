@@ -25,7 +25,7 @@ are now wrong:
 > **Impression** — the challenge video appeared on the user's screen, any
 > feed. Counted **every time**, no de-dup, even a sub-second scroll-past.
 >
-> **View** — a play session with **≥ 1 second** watched. One view **per play
+> **View** — the challenge's video was **shown** to the user (a player mounted and played it). One view **per play
 > session** (`sessionId`), so the same user replaying counts again. A view
 > always implies an impression.
 
@@ -41,7 +41,7 @@ a pre-filtered one.
   was removed. So the client de-dup was silently discarding real impressions
   the backend wants.
 - Backend `watchAnalytics.service.js` now records a view when
-  `watchedDuration >= 1`, keyed one-per-`sessionId` via `SET NX`
+  any `watch-progress` ping, keyed one-per-`sessionId` via `SET NX`
   (`eng:seen:{sessionId}`, 6h TTL). The client already mints one `sessionId`
   per `_WatchState` (i.e. per play, reset by `endWatchSession`) — that part
   was already right. What was missing: the first ping needs to leave at the
@@ -59,10 +59,10 @@ a pre-filtered one.
    too often" that the backend no longer has. Two sources of truth for one
    rule.
 2. **Drop the de-dup entirely; let every on-screen sighting be an
-   impression; send the first watch ping at ≥1s.** Matches the backend
+   impression; send the first watch ping the moment the video is shown.** Matches the backend
    definition exactly. Costs more requests, which the Redis buffer is
    explicitly built to absorb.
-3. **Move the ≥1s / per-session view decision fully client-side** (only fire
+3. **Move the per-session view decision fully client-side** (only fire
    `watch-progress` once, when 1s is crossed). Fragile — a dropped request
    loses the whole view, and the backend still needs the later pings for
    watch-depth (`completionPercentage`, buckets). Better to keep sending
@@ -83,12 +83,15 @@ Option 2. Changes to `lib/core/services/challenge_analytics_service.dart`:
   "on screen" means — the reels feed on page-change, `ChallengeDetail` on
   open, and (ADR 019) an `ImpressionTracker` once per ≥50%-visible pass in
   the grid feeds.
-- **`recordWatchProgress` sends the first ping of a session as soon as
-  `watched >= _firstPingThreshold` (1s)**, bypassing the
-  `_minGrowth` (3s) / `_minResendGap` (5s) throttle. `firstPing` is "this
-  session has never sent" (`st.lastSentAt == null`). Every subsequent ping
-  keeps the existing throttle; `flush: true` still overrides everything
-  (except zero/negative `watched`).
+- **New `recordVideoView(id)`** — call it the instant a challenge video
+  starts playing (reel becomes active, detail player starts). It sends the
+  session's first `watch-progress` ping with `watchedDuration: 0`, which the
+  backend records as one view ("the video was shown"). Idempotent within a
+  play; a fresh player mount (`endWatchSession` first) sends again.
+- **`recordWatchProgress`'s first ping of a session always sends
+  immediately** — no `_firstPingThreshold`, no minimum watch time. Later
+  pings keep the `_minGrowth` (3s) / `_minResendGap` (5s) throttle; `flush`
+  overrides; only *negative* `watched` sends nothing.
 - `sessionId` handling is unchanged — one per `_WatchState`, minted lazily,
   dropped by `endWatchSession()` so the next play is a new view. Doc comments
   updated to say *why* (`SET NX eng:seen:{sessionId}` backend-side).
@@ -114,8 +117,6 @@ The canonical client-side description now lives in
 - The `watch-progress` throttle's steady-state 5s-gap half is still not
   unit-testable without fake time — accepted; `flush` is the path that
   matters and it is tested.
-- If the backend ever changes the view threshold off 1s, `_firstPingThreshold`
-  is the one constant to change.
 
 ## Verification
 
@@ -123,12 +124,13 @@ The canonical client-side description now lives in
 
 - `recordImpression` fires on **every** call for the same challenge (3 calls
   → 3 POSTs). Reverting the de-dup removal makes this expect 1.
-- First `recordWatchProgress` ping leaves at `watched: 1.2s` with **no
-  flush**; `watched: 0.8s` with no flush sends nothing; after the first ping,
-  sub-threshold ticks are throttled; `flush` gets through even below 1s;
+- `recordVideoView` sends the first ping immediately (`watchedDuration: 0`),
+  is idempotent within a play, and sends again after `endWatchSession`.
+- `recordWatchProgress`'s first ping leaves immediately whatever the watched
+  value; after it, sub-threshold ticks are throttled; `flush` gets through;
   `sessionId` is stable within a play and changes after `endWatchSession`;
-  zero/negative `watched` sends nothing even with `flush`.
+  *negative* `watched` sends nothing.
 - A thrown transport error and a 500 both fail to propagate to any caller.
 
-`flutter test` → 17 passing in that file. `flutter analyze` clean on the
+`flutter test` → all passing in that file. `flutter analyze` clean on the
 service.

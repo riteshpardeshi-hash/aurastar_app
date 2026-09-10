@@ -75,8 +75,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   @override
   void initState() {
     super.initState();
-    // Opening the detail page is an unambiguous view of this challenge.
+    // Opening the detail page shows the challenge and plays its video.
     ChallengeAnalyticsService().recordImpression(widget.challengeId);
+    ChallengeAnalyticsService().recordVideoView(widget.challengeId);
     _fetchChallengeData();
     _fetchSubmissions();
     // Start warming the reference-video cache immediately — by the time the

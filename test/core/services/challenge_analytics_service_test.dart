@@ -96,36 +96,60 @@ void main() {
     });
   });
 
-  group('recordWatchProgress', () {
-    test('first ping leaves as soon as ≥1s is watched — no flush needed',
+  group('recordVideoView', () {
+    test('fires the session\'s first ping immediately (watchedDuration 0 = the video was shown)',
         () async {
-      ChallengeAnalyticsService().recordWatchProgress(
-        'chal-1',
-        watched: const Duration(milliseconds: 1200),
-        total: const Duration(seconds: 15),
-      );
+      ChallengeAnalyticsService().recordVideoView('chal-1');
       await settle();
 
       expect(sent, hasLength(1));
       expect(sent.single.url.path, endsWith('/challenges/chal-1/watch-progress'));
       final body = bodyOf(sent.single);
-      expect(body['watchedDuration'], closeTo(1.2, 1e-9));
+      expect(body['watchedDuration'], 0.0);
+      expect(body['sessionId'], isNotEmpty);
+    });
+
+    test('is idempotent within one play — a repeat call does not re-send',
+        () async {
+      ChallengeAnalyticsService().recordVideoView('chal-1');
+      ChallengeAnalyticsService().recordVideoView('chal-1');
+      await settle();
+      expect(sent, hasLength(1));
+    });
+
+    test('a fresh play (after endWatchSession) sends again — one user, many views',
+        () async {
+      ChallengeAnalyticsService().recordVideoView('chal-1');
+      await settle();
+      ChallengeAnalyticsService().endWatchSession('chal-1');
+      ChallengeAnalyticsService().recordVideoView('chal-1');
+      await settle();
+
+      expect(sent, hasLength(2));
+      expect(bodyOf(sent[0])['sessionId'], isNot(bodyOf(sent[1])['sessionId']));
+    });
+  });
+
+  group('recordWatchProgress', () {
+    test('first ping of a session leaves immediately, whatever the watched value',
+        () async {
+      ChallengeAnalyticsService().recordWatchProgress(
+        'chal-1',
+        watched: const Duration(milliseconds: 300),
+        total: const Duration(seconds: 15),
+      );
+      await settle();
+
+      expect(sent, hasLength(1));
+      final body = bodyOf(sent.single);
+      expect(body['watchedDuration'], closeTo(0.3, 1e-9));
       expect(body['videoDuration'], 15.0);
       expect(body['sessionId'], isNotEmpty);
     });
 
-    test('under 1s and not flushed → nothing (below the view threshold)',
-        () async {
-      ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(milliseconds: 800));
-      await settle();
-      expect(sent, isEmpty);
-    });
-
     test('after the first ping, sub-threshold ticks are throttled', () async {
-      // 1.0s → first ping (view threshold).
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 1));
+          watched: const Duration(seconds: 1)); // first ping → sends
       // +1.0s and +1.8s: inside both the 3s growth and the 5s gap window → dropped.
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: 2));
@@ -142,7 +166,7 @@ void main() {
     // not unit-tested here; `flush` (below) is the escape hatch that matters
     // for correctness (the dispose-time final position).
 
-    test('flush always gets through, even right after a throttled send and even below 1s',
+    test('flush always gets through, even right after a throttled send',
         () async {
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: 1));
@@ -174,9 +198,7 @@ void main() {
       expect(bodyOf(sent[2])['sessionId'], isNot(s1));
     });
 
-    test('zero / negative watched time sends nothing even with flush', () async {
-      ChallengeAnalyticsService()
-          .recordWatchProgress('chal-1', watched: Duration.zero, flush: true);
+    test('negative watched time sends nothing even with flush', () async {
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: -1), flush: true);
       await settle();

@@ -64,7 +64,9 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
       // onPageChanged never fires for the page the feed opens on, so the
       // first reel's impression has to be recorded here.
       if (_reels.isNotEmpty) {
-        ChallengeAnalyticsService().recordImpression(_reels.first['id'] as String);
+        final id = _reels.first['id'] as String;
+        ChallengeAnalyticsService().recordImpression(id);
+        ChallengeAnalyticsService().recordVideoView(id); // the first reel's video plays
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -98,9 +100,21 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
   }
 
   void _onPageChanged(int index) {
+    // End the play session of the reel we're leaving, so scrolling back to it
+    // later starts a fresh session = another view (ADR 090: one user, many
+    // views).
+    if (_currentIndex >= 0 &&
+        _currentIndex < _reels.length &&
+        _currentIndex != index) {
+      ChallengeAnalyticsService()
+          .endWatchSession(_reels[_currentIndex]['id'] as String);
+    }
     setState(() => _currentIndex = index);
     if (index >= 0 && index < _reels.length) {
-      ChallengeAnalyticsService().recordImpression(_reels[index]['id'] as String);
+      final id = _reels[index]['id'] as String;
+      ChallengeAnalyticsService().recordImpression(id);
+      // This reel is now the active, playing page → its video is shown.
+      ChallengeAnalyticsService().recordVideoView(id);
     }
     if (index >= _reels.length - 3) _loadMore();
   }
