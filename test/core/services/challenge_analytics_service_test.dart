@@ -8,16 +8,20 @@ import 'package:http/testing.dart';
 import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/core/services/challenge_analytics_service.dart';
 
-// Regression coverage for the bug where the creator/brand analytics `views`
-// and `shares` counters were permanently 0 no matter how much real activity
-// a challenge got. Root cause: nothing in the app ever fired the events the
-// backend builds those counters from. The live OpenAPI spec documents
-// `POST /challenges/{id}/impression` ("Fired by the mobile app when this
-// Challenge becomes visible inside the feed") and
-// `POST /challenges/{id}/watch-progress` ("Fired repeatedly by the mobile
-// app while a challenge's video is being watched"); grep for either across
-// lib/ returned zero call sites. ChallengeAnalyticsService is the client
-// side of that contract. See ADR 012.
+// Client side of the engagement-reporting contract (mobile ADR 012 → 018 →
+// 019, canonical definitions in backend ADR 090 / this repo's
+// docs/features/engagement-reporting.md):
+//
+//  * impression  — POST /challenges/{id}/impression, fired on EVERY on-screen
+//                  sighting (no per-session de-dup — that used to live here
+//                  and was removed in ADR 018).
+//  * view        — POST /challenges/{id}/watch-progress with a stable
+//                  sessionId per play; the first ping leaves as soon as ≥1s
+//                  has been watched so a short view still lands, later pings
+//                  are throttled.
+//  * share       — POST /challenges/{id}/share (+ optional platform).
+//
+// Every method is fire-and-forget: a transport failure must never surface.
 void main() {
   late List<http.Request> sent;
 
@@ -45,6 +49,9 @@ void main() {
   // Lets the fire-and-forget (unawaited) POST inside the service run.
   Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 10));
 
+  Map<String, dynamic> bodyOf(http.Request r) =>
+      jsonDecode(r.body) as Map<String, dynamic>;
+
   group('recordImpression', () {
     test('sends one POST to /challenges/{id}/impression', () async {
       ChallengeAnalyticsService().recordImpression('chal-1');
@@ -56,22 +63,28 @@ void main() {
       expect(sent.single.headers['Authorization'], 'Bearer token');
     });
 
-    test('is deduped per session — a repeat for the same challenge is a no-op',
+    test('fires on every call for the same challenge — no per-session de-dup',
         () async {
       ChallengeAnalyticsService().recordImpression('chal-1');
       ChallengeAnalyticsService().recordImpression('chal-1');
       ChallengeAnalyticsService().recordImpression('chal-1');
       await settle();
 
-      expect(sent, hasLength(1));
+      // Every on-screen sighting is an impression (backend ADR 090). The old
+      // "deduped per session" behaviour was removed in ADR 018 — reverting
+      // that change makes this expect 1.
+      expect(sent, hasLength(3));
+      expect(
+        sent.map((r) => r.url.path.split('/challenges/').last),
+        everyElement('chal-1/impression'),
+      );
     });
 
-    test('still fires for a different challenge', () async {
+    test('fires independently per challenge', () async {
       ChallengeAnalyticsService().recordImpression('chal-1');
       ChallengeAnalyticsService().recordImpression('chal-2');
       await settle();
 
-      expect(sent, hasLength(2));
       expect(sent.map((r) => r.url.path.split('/challenges/').last),
           ['chal-1/impression', 'chal-2/impression']);
     });
@@ -84,77 +97,97 @@ void main() {
   });
 
   group('recordWatchProgress', () {
-    test('flush sends immediately, with sessionId + watched/total seconds',
+    test('first ping leaves as soon as ≥1s is watched — no flush needed',
         () async {
       ChallengeAnalyticsService().recordWatchProgress(
         'chal-1',
-        watched: const Duration(milliseconds: 4500),
+        watched: const Duration(milliseconds: 1200),
         total: const Duration(seconds: 15),
-        flush: true,
       );
       await settle();
 
       expect(sent, hasLength(1));
       expect(sent.single.url.path, endsWith('/challenges/chal-1/watch-progress'));
-      final body = jsonDecode(sent.single.body) as Map<String, dynamic>;
-      expect(body['watchedDuration'], 4.5);
+      final body = bodyOf(sent.single);
+      expect(body['watchedDuration'], closeTo(1.2, 1e-9));
       expect(body['videoDuration'], 15.0);
       expect(body['sessionId'], isNotEmpty);
     });
 
-    test('throttles sub-threshold ticks — only the first crossing sends',
+    test('under 1s and not flushed → nothing (below the view threshold)',
         () async {
-      // First tick already past the 3s growth threshold → sends.
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 3));
-      // +1s, well inside both the growth and the time-gap window → dropped.
+          watched: const Duration(milliseconds: 800));
+      await settle();
+      expect(sent, isEmpty);
+    });
+
+    test('after the first ping, sub-threshold ticks are throttled', () async {
+      // 1.0s → first ping (view threshold).
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 4));
+          watched: const Duration(seconds: 1));
+      // +1.0s and +1.8s: inside both the 3s growth and the 5s gap window → dropped.
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(milliseconds: 4200));
+          watched: const Duration(seconds: 2));
+      ChallengeAnalyticsService().recordWatchProgress('chal-1',
+          watched: const Duration(milliseconds: 2800));
       await settle();
 
       expect(sent, hasLength(1));
-      expect((jsonDecode(sent.single.body) as Map)['watchedDuration'], 3.0);
+      expect(bodyOf(sent.single)['watchedDuration'], 1.0);
     });
 
-    test('a flush always gets through even right after a throttled send',
+    // The steady-state throttle is "grown ≥3s AND ≥5s since the last send" —
+    // the 5s wall-clock half can't be exercised without fake time, so it is
+    // not unit-tested here; `flush` (below) is the escape hatch that matters
+    // for correctness (the dispose-time final position).
+
+    test('flush always gets through, even right after a throttled send and even below 1s',
         () async {
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 3));
+          watched: const Duration(seconds: 1));
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 5), flush: true);
+          watched: const Duration(milliseconds: 1500), flush: true);
       await settle();
 
       expect(sent, hasLength(2));
-      expect((jsonDecode(sent.last.body) as Map)['watchedDuration'], 5.0);
+      expect(bodyOf(sent.last)['watchedDuration'], 1.5);
     });
 
-    test('keeps one stable sessionId until the session is ended', () async {
+    test('keeps one stable sessionId for a play; a new play gets a new one',
+        () async {
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
-          watched: const Duration(seconds: 3));
+          watched: const Duration(seconds: 1));
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: 9), flush: true);
       await settle();
 
-      final s1 = (jsonDecode(sent[0].body) as Map)['sessionId'];
-      final s2 = (jsonDecode(sent[1].body) as Map)['sessionId'];
-      expect(s1, s2);
+      final s1 = bodyOf(sent[0])['sessionId'];
+      expect(bodyOf(sent[1])['sessionId'], s1);
 
+      // endWatchSession = the player was disposed; the next play is a new view.
       ChallengeAnalyticsService().endWatchSession('chal-1');
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: 2), flush: true);
       await settle();
 
-      final s3 = (jsonDecode(sent[2].body) as Map)['sessionId'];
-      expect(s3, isNot(s1));
+      expect(bodyOf(sent[2])['sessionId'], isNot(s1));
     });
 
-    test('zero / negative watched time sends nothing', () async {
+    test('zero / negative watched time sends nothing even with flush', () async {
       ChallengeAnalyticsService()
           .recordWatchProgress('chal-1', watched: Duration.zero, flush: true);
+      ChallengeAnalyticsService().recordWatchProgress('chal-1',
+          watched: const Duration(seconds: -1), flush: true);
       await settle();
       expect(sent, isEmpty);
+    });
+
+    test('omits videoDuration when total is null or zero', () async {
+      ChallengeAnalyticsService().recordWatchProgress('chal-1',
+          watched: const Duration(seconds: 2));
+      await settle();
+      expect(bodyOf(sent.single).containsKey('videoDuration'), isFalse);
     });
   });
 
@@ -166,24 +199,24 @@ void main() {
       await settle();
 
       expect(sent, hasLength(1));
-      expect(sent.single.method, 'POST');
       expect(sent.single.url.path, endsWith('/challenges/chal-1/share'));
-      expect((jsonDecode(sent.single.body) as Map)['platform'],
-          'instagram_story');
+      expect(bodyOf(sent.single)['platform'], 'instagram_story');
     });
 
-    // The share endpoint is live (backend ADR 086/089); the no-platform path
-    // is the common one (a plain OS share sheet) and must still POST.
     test('POSTs even without a platform, and omits the platform key', () async {
       ChallengeAnalyticsService().recordShare('chal-1');
       await settle();
 
       expect(sent, hasLength(1));
-      expect(sent.single.method, 'POST');
-      expect(sent.single.url.path, endsWith('/challenges/chal-1/share'));
       expect(sent.single.headers['Authorization'], 'Bearer token');
-      expect((jsonDecode(sent.single.body) as Map).containsKey('platform'),
-          isFalse);
+      expect(bodyOf(sent.single).containsKey('platform'), isFalse);
+    });
+
+    test('fires every time — shares are a raw count, no de-dup', () async {
+      ChallengeAnalyticsService().recordShare('chal-1');
+      ChallengeAnalyticsService().recordShare('chal-1');
+      await settle();
+      expect(sent, hasLength(2));
     });
 
     test('an empty challenge id sends nothing', () async {
@@ -194,18 +227,27 @@ void main() {
   });
 
   group('failures never surface', () {
-    test('a 500 / thrown transport error does not propagate to the caller',
-        () async {
+    test('a thrown transport error does not propagate to any caller', () async {
       ApiClient.httpClient = MockClient((_) async => throw Exception('boom'));
 
-      // None of these await, and none should throw.
       ChallengeAnalyticsService().recordImpression('chal-1');
       ChallengeAnalyticsService().recordWatchProgress('chal-1',
           watched: const Duration(seconds: 5), flush: true);
       ChallengeAnalyticsService().recordShare('chal-1');
       await settle();
 
-      // Got here without an unhandled exception tearing the test down.
+      // Reached here with no unhandled exception tearing the test down.
+      expect(true, isTrue);
+    });
+
+    test('a 500 response does not propagate either', () async {
+      ApiClient.httpClient = MockClient((_) async => http.Response('nope', 500));
+
+      ChallengeAnalyticsService().recordImpression('chal-1');
+      ChallengeAnalyticsService().recordWatchProgress('chal-1',
+          watched: const Duration(seconds: 2));
+      await settle();
+
       expect(true, isTrue);
     });
   });

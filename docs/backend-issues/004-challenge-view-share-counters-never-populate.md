@@ -1,7 +1,7 @@
 # Backend gap: challenge Views / Shares / Attempts analytics counters never populate
 
 **Reported:** 2026-09-07
-**Status:** RESOLVED (2026-09-09) — backend shipped all three writers; see [Resolution](#resolution-2026-09-09).
+**Status:** RESOLVED (2026-09-09), then **definitions finalized (2026-09-10)** — the backend replaced the ad-hoc "views" rule with a canonical definition + a Redis-buffered counter pipeline ([backend ADR 090](http://144.91.79.237:5173/decisions/090-engagement-metrics-and-redis-buffered-counters)); the client realigned in [ADR 018](../decisions/018-engagement-reporting-realigned-to-backend-adr-090.md) / [ADR 019](../decisions/019-feed-impression-instrumentation-visibilitydetector.md). See [Definitions finalized](#definitions-finalized-2026-09-10).
 **Severity:** Medium — creator & brand analytics are unusable; every challenge reads 0 views / 0 shares / 0 attempts regardless of real activity
 **Affected endpoints:**
 - `GET /creator/challenges/{id}/analytics` (`views`, `shares`, `totalAttempts`)
@@ -144,3 +144,30 @@ repo (`aura-arena/backend`) + the live OpenAPI spec.
 - Per-platform share attribution (`platformDistribution`).
 - Grid-feed scroll impressions on the client (needs a visibility detector);
   opening a challenge still records a view via `ChallengeDetail`.
+
+## Definitions finalized (2026-09-10)
+
+The 2026-09-09 fix wired *writers* but left "what is a view" ad hoc (it meant
+"a distinct player's first watch, ever" — the same number as "distinct
+watchers"). The product owner set canonical definitions and the backend
+rebuilt the counters around them — [backend ADR 090](http://144.91.79.237:5173/decisions/090-engagement-metrics-and-redis-buffered-counters):
+
+- **Impression** = the video appeared on screen, any feed. Every sighting,
+  no de-dup. `POST /challenges/{id}/impression` now records one for **every**
+  challenge (organic included), on top of any campaign-pool bookkeeping.
+- **View** = a play session with ≥ 1s watched. **One per `sessionId`** (so a
+  user replaying counts again) — not per user, not "first ever". Recorded
+  from `POST /challenges/{id}/watch-progress` when `watchedDuration ≥ 1`.
+- `CreatorChallengeStats` / `CreatorDailyAnalytics` gain an `impressions`
+  field. Views + impressions are counted in **Redis** and flushed to Mongo
+  ~every 60s, so analytics lag activity by up to a minute.
+- The "an impression is also a view" 1:1 line was removed from
+  `impression.service.js`; the campaign billing engine is otherwise
+  untouched.
+
+**Client realignment** — [ADR 018](../decisions/018-engagement-reporting-realigned-to-backend-adr-090.md)
+(drop the per-session impression de-dup; send the first `watch-progress` ping
+at the 1s mark) and [ADR 019](../decisions/019-feed-impression-instrumentation-visibilitydetector.md)
+(`ImpressionTracker` — a `VisibilityDetector` wrapper — for the grid feeds
+that previously fired nothing). Client contract:
+[`docs/features/engagement-reporting.md`](../features/engagement-reporting.md).
