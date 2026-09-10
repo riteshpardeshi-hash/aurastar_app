@@ -1587,9 +1587,10 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
 
 // ── Featured carousel ────────────────────────────────────────────────────────
 // The admin-curated Featured strip on the home screen (backend ADR 092).
-// Shows ONLY challenges an admin has flagged `isFeatured`. Auto-advances every
-// [_interval]; each new card slides in from the left. Renders nothing at all
-// when the list is empty, so the home feed simply closes the gap.
+// Shows ONLY challenges an admin has flagged `isFeatured`, in the original
+// full-bleed 320px hero-card style. Swipe left/right through them, and it also
+// auto-advances every [_interval]. Renders nothing at all when the list is
+// empty, so the home feed just closes the gap.
 class _FeaturedCarousel extends StatefulWidget {
   const _FeaturedCarousel({super.key});
 
@@ -1601,6 +1602,7 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
   static const _interval = Duration(seconds: 4);
   static const _accent = Color(0xFF7B2CBF);
 
+  final PageController _pageController = PageController();
   List<Map<String, dynamic>> _items = const [];
   bool _loaded = false;
   int _index = 0;
@@ -1615,6 +1617,7 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
   @override
   void dispose() {
     _timer?.cancel();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -1626,23 +1629,36 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
       _loaded = true;
       _index = 0;
     });
-    _prewarmCurrent();
+    _prewarm(0);
+    _startAutoAdvance();
+  }
+
+  void _startAutoAdvance() {
     _timer?.cancel();
     if (_items.length > 1) {
-      _timer = Timer.periodic(_interval, (_) => _advance());
+      _timer = Timer.periodic(_interval, (_) {
+        if (!mounted || !_pageController.hasClients || _items.length < 2) return;
+        final next = (_index + 1) % _items.length;
+        _pageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      });
     }
   }
 
-  void _advance() {
-    if (!mounted || _items.length < 2) return;
-    setState(() => _index = (_index + 1) % _items.length);
-    _prewarmCurrent();
+  void _onPageChanged(int i) {
+    setState(() => _index = i);
+    _prewarm(i);
+    // A manual swipe resets the auto-advance clock so it doesn't yank the
+    // card away right after the user lands on one.
+    _startAutoAdvance();
   }
 
-  void _prewarmCurrent() {
-    if (_index >= _items.length) return;
-    final url =
-        normaliseHomeSummary(_items[_index])['videoUrl'] as String? ?? '';
+  void _prewarm(int i) {
+    if (i < 0 || i >= _items.length) return;
+    final url = normaliseHomeSummary(_items[i])['videoUrl'] as String? ?? '';
     if (url.isNotEmpty) {
       VideoPrewarmCache.prewarm(url, mixWithOthers: true);
     }
@@ -1655,19 +1671,15 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 204, // 180 card + 24 bottom margin
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 450),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) => SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(-1, 0),
-                end: Offset.zero,
-              ).animate(animation),
-              child: FadeTransition(opacity: animation, child: child),
-            ),
-            child: _card(_items[_index], key: ValueKey(_index)),
+          height: 344, // 320 card + 24 bottom padding (matches the old hero)
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _items.length,
+            onPageChanged: _onPageChanged,
+            physics: _items.length > 1
+                ? const BouncingScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, i) => _heroCard(_items[i]),
           ),
         ),
         if (_items.length > 1)
@@ -1694,90 +1706,106 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
     );
   }
 
-  Widget _card(Map<String, dynamic> raw, {required Key key}) {
+  // The original full-bleed 320px hero card, now one page of the carousel.
+  Widget _heroCard(Map<String, dynamic> raw) {
     final c = normaliseHomeSummary(raw);
-    return GestureDetector(
-      key: key,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChallengeDetail(
-            title: c['title'] as String,
-            instructions: c['instructions'] as String,
-            videoUrl: c['videoUrl'] as String,
-            challengeId: c['id'] as String,
-          ),
-        ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 0, 14, 24),
-        height: 180,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: const Color(0xFF0D0D20),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              VideoThumbnailWidget(
-                  videoUrl: c['videoUrl'] as String,
-                  thumbnailUrl: c['thumbnailUrl'] as String?,
-                  impressionChallengeId: c['id'] as String,
-                  fit: BoxFit.cover),
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: [0.2, 1.0],
-                    colors: [Colors.transparent, Colors.black],
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 10,
-                left: 12,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text('FEATURED', style: AppTextStyles.eyebrow),
-                ),
-              ),
-              Positioned(
-                bottom: 14,
-                left: 14,
-                right: 14,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      c['title'] as String,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          height: 1.3),
+    final title = c['title'] as String;
+    final videoUrl = c['videoUrl'] as String;
+    final thumbnailUrl = c['thumbnailUrl'] as String;
+    final instructions = c['instructions'] as String;
+    final challengeId = c['id'] as String;
+    final participants = c['submissionsCount'] as int? ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+      child: GestureDetector(
+        onTap: challengeId.isEmpty
+            ? null
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChallengeDetail(
+                      title: title,
+                      instructions: instructions,
+                      videoUrl: videoUrl,
+                      challengeId: challengeId,
                     ),
-                    if ((c['category'] as String).isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(c['category'] as String,
-                          style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.55),
-                              fontSize: 12)),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+        child: Container(
+          height: 320,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF4B3EAA), width: 1.5),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(19),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                VideoThumbnailWidget(
+                  videoUrl: videoUrl,
+                  thumbnailUrl: thumbnailUrl,
+                  impressionChallengeId: challengeId,
+                ),
+                // Bottom-to-top dark gradient for text readability
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.2, 1.0],
+                      colors: [Colors.transparent, Colors.black],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 6,
+                  right: 6,
+                  bottom: 4,
+                  child: ThumbnailStatsBadge(participants: participants),
+                ),
+                // Featured tag
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFD4A8FF),
+                          size: 14,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Featured',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'SpaceGrotesk',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

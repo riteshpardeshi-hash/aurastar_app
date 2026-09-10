@@ -59,11 +59,16 @@ Three home-screen items reported broken from testing:
     (`onRefresh: _refresh`) with `AlwaysScrollableScrollPhysics`. The first
     sliver is a plain box (no `SliverAppBar`), so the pull gesture reaches the
     indicator cleanly.
-  - `_buildHeroSection` is replaced by `_FeaturedCarousel` (ported from
-    `home_feed_screen.dart`'s `_FeaturedHeroCard`): `HomeService().fetchFeatured()`,
-    auto-advances every 4s, each card `SlideTransition`s in from the left,
-    dots indicator, prewarms the current video, renders `SizedBox.shrink()`
-    when nothing is featured. Keyed on `_refreshTick`.
+  - `_buildHeroSection` is replaced by `_FeaturedCarousel`:
+    `HomeService().fetchFeatured()` rendered as a **swipeable `PageView`** of
+    the original full-bleed 320px hero card (`_buildHeroSection`'s exact
+    markup — purple border, gradient, `ThumbnailStatsBadge`, "Featured"
+    pill), auto-advancing every 4s (a manual swipe resets that clock), dots
+    indicator, prewarms the current video, renders `SizedBox.shrink()` when
+    nothing is featured. Keyed on `_refreshTick`.
+    (An earlier cut of this used a small 180px card in an `AnimatedSwitcher`;
+    reverted to the hero card + `PageView` per feedback — it must look like
+    the pre-existing hero and be swipeable, not just auto-play.)
 - `lib/features/home/screens/home_feed_screen.dart` **deleted**.
 - `ChallengeAnalyticsService`: a `_clientPlatform` getter
   (`kIsWeb ? 'web' : switch (defaultTargetPlatform) android/iOS → 'android'/'ios'`,
@@ -93,5 +98,6 @@ Three home-screen items reported broken from testing:
   impression-tracker suites pass.
 - Manual: pull down on Home → spinner + shelves re-fetch; with an
   `isFeatured` challenge set via the admin panel, the Featured carousel shows
-  and auto-advances; Challenge 360° Device Distribution shows Android after a
+  in the hero-card style, auto-advances, and can be swiped; Challenge 360°
+  Device Distribution shows Android after a
   watch.
