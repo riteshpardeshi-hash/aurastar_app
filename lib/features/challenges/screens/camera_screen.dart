@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/globals.dart';
 import '../../../core/services/video_cache_service.dart';
+import '../../../core/utils/selfie_preview.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../video/screens/preview_screen.dart';
 
@@ -503,7 +504,9 @@ class _CameraScreenState extends State<CameraScreen>
             child: SizedBox(
               width: _cam!.value.previewSize!.height,
               height: _cam!.value.previewSize!.width,
-              child: CameraPreview(_cam!),
+              // Un-mirror the front-camera preview so what the user frames
+              // matches the recorded file / the feed (ADR 020).
+              child: unmirroredIfFront(_cam!, CameraPreview(_cam!)),
             ),
           ),
         ),
