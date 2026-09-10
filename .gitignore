@@ -51,3 +51,4 @@ app.*.map.json
 
 # iOS build artifacts
 ios/build/
+navlog.txt
