@@ -44,6 +44,7 @@ because it's three pages long isn't documented, it's buried.
 | 017 | [Tab shell reveals the tapped tab immediately; drop the ready-gate](017-tab-shell-reveals-immediately-no-ready-gate.md) | Accepted (amends 011) |
 | 018 | [Engagement reporting realigned to the backend's view/impression definitions](018-engagement-reporting-realigned-to-backend-adr-090.md) | Accepted (amends 012) |
 | 019 | [Feed-card impressions via a shared `VisibilityDetector` wrapper](019-feed-impression-instrumentation-visibilitydetector.md) | Accepted (extends 012 / 018) |
+| 020 | [Home is `dashboard.dart`: pull-to-refresh, Featured carousel, device on engagement pings](020-home-screen-is-dashboard-pull-to-refresh-featured-carousel-device-pings.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).

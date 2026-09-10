@@ -107,6 +107,9 @@ void main() {
       final body = bodyOf(sent.single);
       expect(body['watchedDuration'], 0.0);
       expect(body['sessionId'], isNotEmpty);
+      // Platform is reported so Device Distribution can attribute the view
+      // (backend ADR 093) — on the test host this resolves to 'android'.
+      expect(body['device'], isIn(['android', 'ios', 'web', 'unknown']));
     });
 
     test('is idempotent within one play — a repeat call does not re-send',
