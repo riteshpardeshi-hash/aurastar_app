@@ -167,6 +167,22 @@ class AuthApiService {
     await _client.clearSession();
   }
 
+  /// Permanently deletes the signed-in user's account (ADR 095 on the
+  /// backend). Soft-deletes and scrubs display fields server-side, revokes
+  /// every refresh token, then clears the local session — the caller should
+  /// navigate to [PhoneAuthScreen] immediately after this returns.
+  ///
+  /// Required by App Store Guideline 5.1.1(v) and Google Play's account
+  /// deletion policy: in-app self-service deletion, no support ticket.
+  Future<void> deleteAccount() async {
+    await PushNotificationService().deregisterCurrentDevice();
+    final res = await _client.delete('/profile', auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to delete account';
+    }
+    await _client.clearSession();
+  }
+
   Future<void> updateProfile({
     required String gender,
     String? displayName,
