@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/apple_sign_in_error.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -444,6 +445,20 @@ class _PrivacySheet extends StatelessWidget {
   static const _bg = Color(0xFF100A20);
   static const _accent = Color(0xFF7B2CBF);
 
+  // Hosted Privacy Policy / Terms of Service (single page, tab-switched).
+  // Required by App Store Guideline 5.1.1(v) and Google Play's privacy
+  // policy requirement — must be a real, reachable URL, not a dead link.
+  static const _privacyPolicyUrl =
+      'https://claude.ai/code/artifact/a778dcb3-4398-4fe3-97a3-075e0ffa2098#privacy';
+  static const _termsOfServiceUrl =
+      'https://claude.ai/code/artifact/a778dcb3-4398-4fe3-97a3-075e0ffa2098#terms';
+
+  static Future<void> _openPolicy(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  }
+
   static const _points = [
     (Icons.videocam_outlined, 'Video submissions', 'Videos you record are stored to enable AI scoring and the public leaderboard.'),
     (Icons.bar_chart_rounded, 'Performance data', 'Your scores, Aura Points, and activity are used to power rankings and personalised challenges.'),
@@ -560,10 +575,7 @@ class _PrivacySheet extends StatelessWidget {
                       decoration: TextDecoration.underline,
                       decorationColor: _accent),
                   recognizer: TapGestureRecognizer()
-                    ..onTap = () {
-                      // Deep-link or in-app WebView would go here.
-                      // For now, acknowledge with a snack.
-                    },
+                    ..onTap = () => _openPolicy(_privacyPolicyUrl),
                 ),
                 const TextSpan(text: ' and '),
                 TextSpan(
@@ -572,7 +584,8 @@ class _PrivacySheet extends StatelessWidget {
                       color: _accent,
                       decoration: TextDecoration.underline,
                       decorationColor: _accent),
-                  recognizer: TapGestureRecognizer()..onTap = () {},
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => _openPolicy(_termsOfServiceUrl),
                 ),
                 const TextSpan(text: '.'),
               ],
