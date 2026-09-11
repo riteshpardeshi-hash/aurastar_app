@@ -145,6 +145,13 @@ class SettingsScreen extends StatelessWidget {
             color: Colors.redAccent,
             onTap: () => _logoutAll(context),
           ),
+          _tile(
+            context,
+            icon: Icons.delete_forever_rounded,
+            label: 'Delete Account',
+            color: Colors.redAccent,
+            onTap: () => _deleteAccount(context),
+          ),
         ],
       ),
     );
@@ -297,6 +304,43 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  // Required by App Store Guideline 5.1.1(v) and Google Play's account
+  // deletion policy: self-service, in-app, no support ticket required.
+  // Two steps — an explanation of what's kept vs. removed (mirrors the
+  // hosted Privacy Policy §5), then a typed "DELETE" confirmation — since
+  // unlike Logout this is irreversible.
+  Future<void> _deleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await AuthApiService().deleteAccount();
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t delete account: $e')),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+      (route) => false,
+    );
+  }
+
   void _showHelpSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -424,6 +468,93 @@ class _HelpItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Two-step "are you sure" for account deletion: an explanation of what's
+/// kept vs. removed, then a typed "DELETE" to unlock the confirm button —
+/// this is the one destructive action in Settings that can't be undone.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _ctrl = TextEditingController();
+  bool _canConfirm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(() {
+      final ok = _ctrl.text.trim().toUpperCase() == 'DELETE';
+      if (ok != _canConfirm) setState(() => _canConfirm = ok);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF12102A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('Delete Account',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This permanently removes your profile — name, photo, gender, '
+            'and date of birth — and signs you out everywhere. Your videos '
+            'and submissions are removed from public view.\n\n'
+            'Your phone number is retained in a scrubbed record to prevent '
+            'abuse of referrals and rewards, as described in our Privacy '
+            'Policy.\n\nThis can\'t be undone.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.45),
+          ),
+          const SizedBox(height: 16),
+          Text('Type DELETE to confirm',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ctrl,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.characters,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: const InputDecoration(
+              hintText: 'DELETE',
+              hintStyle: TextStyle(color: Colors.white24),
+              enabledBorder:
+                  UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              focusedBorder:
+                  UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+        ),
+        TextButton(
+          onPressed: _canConfirm ? () => Navigator.pop(context, true) : null,
+          child: Text('Delete Forever',
+              style: TextStyle(
+                  color: _canConfirm ? Colors.redAccent : Colors.white24,
+                  fontWeight: FontWeight.bold)),
+        ),
+      ],
     );
   }
 }
