@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/apple_sign_in_error.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/deletion_cancelled_dialog.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
@@ -61,7 +62,15 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
     );
   }
 
-  void _navigateAfterAuth(bool isNewUser, Map<String, dynamic> user) {
+  Future<void> _navigateAfterAuth(
+    bool isNewUser,
+    Map<String, dynamic> user, {
+    bool deletionCancelled = false,
+  }) async {
+    if (deletionCancelled) {
+      await showDeletionCancelledDialog(context);
+      if (!mounted) return;
+    }
     final isProfileComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
     Navigator.pushReplacement(
       context,
@@ -89,7 +98,8 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
 
       final result = await AuthApiService().signInWithGoogle(idToken);
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user);
+      await _navigateAfterAuth(result.isNewUser, result.user,
+          deletionCancelled: result.deletionCancelled);
     } catch (e) {
       if (mounted) setState(() => _loading = null);
       _showError('Google sign-in failed. Please try again.');
@@ -117,7 +127,8 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         authorizationCode: authCode,
       );
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user);
+      await _navigateAfterAuth(result.isNewUser, result.user,
+          deletionCancelled: result.deletionCancelled);
     } catch (e) {
       // The user dismissing the Apple sheet throws canceled here instead of
       // returning null the way GoogleSignIn().signIn() does — treat it the
