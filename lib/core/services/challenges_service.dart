@@ -216,6 +216,30 @@ class ChallengesService {
     } catch (_) {}
     return null;
   }
+
+  /// POST /challenges/{id}/report — the previous implementation wrote
+  /// straight to a Firestore `reports` collection, a leftover from before
+  /// this app moved to the REST backend. That collection is never read by
+  /// anything: the backend's Trust & Safety Moderation Queue only reads its
+  /// own `ChallengeReport` model, so reports "submitted" successfully in the
+  /// app silently never reached an admin. `reason` must be one of the
+  /// backend's enum values (`inappropriate|spam|dangerous|misleading|
+  /// copyright|other` — see `challengeReportReasonCode` for the UI-label
+  /// mapping); idempotent per (challenge, user) on the backend, so a second
+  /// report while the first is still pending just returns the existing one.
+  Future<void> reportChallenge(
+    String challengeId,
+    String reasonCode, {
+    String? remarks,
+  }) async {
+    final res = await _client.post('/challenges/$challengeId/report', {
+      'reason': reasonCode,
+      if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
+    }, auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to submit report';
+    }
+  }
 }
 
 // `creatorId`/`category` come back as a plain ID string for most challenges,
@@ -225,6 +249,27 @@ String _extractRefId(dynamic v) {
   if (v is String) return v;
   if (v is Map) return v['_id'] as String? ?? v['name'] as String? ?? '';
   return '';
+}
+
+// Maps the Report Challenge sheet's human-readable reason label to the
+// backend's `CHALLENGE_REPORT_REASONS` enum
+// (inappropriate|spam|dangerous|misleading|copyright|other — see backend
+// utilities/enums/challengeReport.js). Falls back to 'other' for anything
+// unrecognised rather than sending an invalid enum value the backend's Joi
+// validation would 422 on.
+String challengeReportReasonCode(String uiLabel) {
+  switch (uiLabel) {
+    case 'Inappropriate content':
+      return 'inappropriate';
+    case 'Misleading or false challenge':
+      return 'misleading';
+    case 'Spam or duplicate':
+      return 'spam';
+    case 'Dangerous or unsafe activity':
+      return 'dangerous';
+    default:
+      return 'other';
+  }
 }
 
 // Maps a Submission's backend `status`/`verdict` to the four-value

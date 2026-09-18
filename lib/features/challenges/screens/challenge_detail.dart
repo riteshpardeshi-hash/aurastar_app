@@ -1327,15 +1327,11 @@ class _ReportSheetState extends State<_ReportSheet> {
     setState(() => _submitting = true);
 
     try {
-      final uid = await ApiClient().userId;
-      await FirebaseFirestore.instance.collection('reports').add({
-        'challengeId': widget.challengeId,
-        'challengeTitle': widget.challengeTitle,
-        'reportedBy': uid ?? 'anonymous',
-        'reason': _selected,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await ChallengesService().reportChallenge(
+        widget.challengeId,
+        challengeReportReasonCode(_selected!),
+        remarks: _selected,
+      );
 
       if (!mounted) return;
       Navigator.pop(context);
