@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/services/auth_api_service.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
@@ -77,6 +79,12 @@ class SettingsScreen extends StatelessWidget {
                   builder: (_) => const NotificationPreferencesScreen()),
             ),
           ),
+          _tile(
+            context,
+            icon: Icons.download_outlined,
+            label: 'Export My Data',
+            onTap: () => _exportMyData(context),
+          ),
           const SizedBox(height: 24),
           _section('Support'),
           _tile(
@@ -144,6 +152,13 @@ class SettingsScreen extends StatelessWidget {
             label: 'Logout of All Devices',
             color: Colors.redAccent,
             onTap: () => _logoutAll(context),
+          ),
+          _tile(
+            context,
+            icon: Icons.pause_circle_outline_rounded,
+            label: 'Deactivate Account',
+            color: Colors.redAccent,
+            onTap: () => _deactivateAccount(context),
           ),
           _tile(
             context,
@@ -304,11 +319,71 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  // Reversible any time by simply logging back in (ADR 022/098) — unlike
+  // Delete Account this has no scheduled endpoint, so a single confirm is
+  // enough, same weight as Logout/Logout of All Devices.
+  Future<void> _deactivateAccount(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF12102A),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Deactivate Account',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'Your profile and content are hidden and you\'ll be signed out '
+            'everywhere. Log back in any time to reactivate — nothing is '
+            'deleted.',
+            style: TextStyle(color: AppColors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Deactivate',
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      await AuthApiService().deactivateAccount();
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t deactivate account: $e')),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+      (route) => false,
+    );
+  }
+
   // Required by App Store Guideline 5.1.1(v) and Google Play's account
   // deletion policy: self-service, in-app, no support ticket required.
   // Two steps — an explanation of what's kept vs. removed (mirrors the
   // hosted Privacy Policy §5), then a typed "DELETE" confirmation — since
-  // unlike Logout this is irreversible.
+  // unlike Logout this is (eventually) irreversible.
   Future<void> _deleteAccount(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -321,8 +396,9 @@ class SettingsScreen extends StatelessWidget {
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+    DateTime? scheduledFor;
     try {
-      await AuthApiService().deleteAccount();
+      scheduledFor = await AuthApiService().deleteAccount();
       await FirebaseAuth.instance.signOut();
     } catch (e) {
       if (context.mounted) {
@@ -334,11 +410,105 @@ class SettingsScreen extends StatelessWidget {
       return;
     }
     if (!context.mounted) return;
+    Navigator.pop(context); // dismiss the spinner
+
+    // Shown (and dismissed) BEFORE navigating away — Settings' own context
+    // is about to be removed from the tree by pushAndRemoveUntil below, so
+    // this can't be a post-navigation SnackBar the way _deleteAccount used
+    // to assume; that context would already be unmounted by the time it ran.
+    final scheduled = scheduledFor;
+    if (scheduled != null && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF12102A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('Account Deletion Scheduled',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text(
+            'Your account will be permanently deleted on '
+            '${_formatDate(scheduled)}. Log back in before then to '
+            'cancel it.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK',
+                  style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
       (route) => false,
     );
+  }
+
+  // Downloads the signed-in user's data as an .xlsx workbook and hands it to
+  // the OS share sheet — same in-memory-bytes pattern as
+  // MyAccountScreen._shareCard(), no temp file needed.
+  Future<void> _exportMyData(BuildContext context) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final results = await Future.wait([
+        AuthApiService().exportMyData(),
+        AuthApiService().getProfileOrThrow(),
+      ]);
+      final bytes = results[0] as Uint8List;
+      final profile = results[1] as Map<String, dynamic>;
+      if (context.mounted) Navigator.pop(context); // dismiss the spinner
+      await Share.shareXFiles(
+        [
+          XFile.fromData(
+            bytes,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            // Mirrors the backend's own filename convention exactly (see
+            // profileExport.service.js#exportFilename) so the file a user shares/saves
+            // is self-identifying, not a generic/opaque name.
+            name: '${_exportFilenameSlug(profile)}_export_${_isoDate(DateTime.now())}.xlsx',
+          ),
+        ],
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t export your data: $e')),
+        );
+      }
+    }
+  }
+
+  // Mirrors backend/utilities/exportLabels.js-adjacent slug rule in
+  // profileExport.service.js#exportFilename — lowercase, non [a-z0-9_-] stripped.
+  static String _exportFilenameSlug(Map<String, dynamic> profile) {
+    final raw = (profile['profileName'] as String?) ?? 'user';
+    final slug = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    return slug.isEmpty ? 'user' : slug;
+  }
+
+  static String _isoDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   void _showHelpSheet(BuildContext context) {
@@ -513,12 +683,14 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'This permanently removes your profile — name, photo, gender, '
-            'and date of birth — and signs you out everywhere. Your videos '
-            'and submissions are removed from public view.\n\n'
-            'Your phone number is retained in a scrubbed record to prevent '
-            'abuse of referrals and rewards, as described in our Privacy '
-            'Policy.\n\nThis can\'t be undone.',
+            'Your account is deactivated immediately and signed out '
+            'everywhere. It\'s then permanently deleted after a grace '
+            'period set by Aura Arena — you\'ll see the exact date after '
+            'confirming below.\n\n'
+            'Logging back in at any point before that date cancels the '
+            'deletion and reactivates your account automatically — nothing '
+            'is lost until the grace period actually ends.\n\n'
+            'Once the grace period ends, this can\'t be undone.',
             style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.45),
           ),
           const SizedBox(height: 16),

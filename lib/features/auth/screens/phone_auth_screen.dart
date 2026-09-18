@@ -9,6 +9,7 @@ import '../../../core/services/sms_otp_autofill.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
+import '../../../shared/widgets/deletion_cancelled_dialog.dart';
 import 'profile_setup_screen.dart';
 import '../../dashboard/dashboard.dart';
 
@@ -124,6 +125,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       _resendTimer?.cancel();
       _smsAutofill.cancel();
       setState(() => _isLoading = false);
+
+      if (result.deletionCancelled) {
+        await showDeletionCancelledDialog(context);
+        if (!mounted) return;
+      }
 
       if (!result.isNewUser) {
         // Returning user — mark complete locally and go straight to Dashboard.

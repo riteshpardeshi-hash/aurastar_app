@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'api_client.dart';
 import 'push_notification_service.dart';
 
@@ -6,6 +7,10 @@ typedef AuthResult = ({
   String refreshToken,
   Map<String, dynamic> user,
   bool isNewUser,
+  // True when this login just cancelled a pending self-service
+  // deactivation/deletion request (ADR 022 on this repo, ADR 098 on the
+  // backend) — the account is fully active again as of this login.
+  bool deletionCancelled,
 });
 
 /// Outcome of a successful `/auth/otp/request`. The raw OTP is deliberately
@@ -74,6 +79,7 @@ class AuthApiService {
       refreshToken: data['refreshToken'] as String,
       user: user,
       isNewUser: data['isNewUser'] as bool,
+      deletionCancelled: data['deletionCancelled'] as bool? ?? false,
     );
   }
 
@@ -139,6 +145,7 @@ class AuthApiService {
       refreshToken: data['refreshToken'] as String,
       user: user,
       isNewUser: data['isNewUser'] as bool? ?? false,
+      deletionCancelled: data['deletionCancelled'] as bool? ?? false,
     );
   }
 
@@ -167,20 +174,58 @@ class AuthApiService {
     await _client.clearSession();
   }
 
-  /// Permanently deletes the signed-in user's account (ADR 095 on the
-  /// backend). Soft-deletes and scrubs display fields server-side, revokes
-  /// every refresh token, then clears the local session — the caller should
-  /// navigate to [PhoneAuthScreen] immediately after this returns.
+  /// Requests deletion of the signed-in user's account (ADR 098 on the
+  /// backend, superseding ADR 095 — no longer an instant erasure). The
+  /// account is deactivated immediately and permanently hard-deleted after
+  /// an admin-configured grace period (the returned [DateTime]) unless the
+  /// user logs back in before then, which auto-cancels it, or calls
+  /// [cancelPendingDeletion] explicitly. Revokes every refresh token
+  /// server-side and clears the local session either way — the caller
+  /// should navigate to [PhoneAuthScreen] immediately after this returns.
   ///
   /// Required by App Store Guideline 5.1.1(v) and Google Play's account
   /// deletion policy: in-app self-service deletion, no support ticket.
-  Future<void> deleteAccount() async {
+  Future<DateTime?> deleteAccount() async {
     await PushNotificationService().deregisterCurrentDevice();
     final res = await _client.delete('/profile', auth: true);
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to delete account';
     }
+    final raw = res['deletionScheduledFor'] as String?;
     await _client.clearSession();
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  /// Deactivates the signed-in user's account with no deletion scheduled
+  /// (ADR 022/098) — reversible any time by simply logging back in, which
+  /// auto-reactivates it. Revokes every refresh token server-side and
+  /// clears the local session — the caller should navigate to
+  /// [PhoneAuthScreen] immediately after this returns.
+  Future<void> deactivateAccount() async {
+    await PushNotificationService().deregisterCurrentDevice();
+    final res = await _client.post('/profile/deactivate', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to deactivate account';
+    }
+    await _client.clearSession();
+  }
+
+  /// Cancels a pending deactivation/deletion request without requiring a
+  /// fresh login — only meaningful while the caller's current access token
+  /// is still valid (i.e. called right after [deleteAccount]/
+  /// [deactivateAccount], before the app navigates away and the token
+  /// naturally expires).
+  Future<void> cancelPendingDeletion() async {
+    final res = await _client.post('/profile/deletion/cancel', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to cancel account deletion';
+    }
+  }
+
+  /// Downloads the signed-in user's data as an `.xlsx` workbook (profile,
+  /// submissions, challenges authored, Aura transactions, follows).
+  Future<Uint8List> exportMyData() {
+    return _client.getBytes('/profile/export', auth: true);
   }
 
   Future<void> updateProfile({
