@@ -4,7 +4,7 @@ import '../theme/app_colors.dart';
 /// Shown once, right after a login whose response carried
 /// `deletionCancelled: true` — i.e. this login just cancelled a pending
 /// self-service deactivation/deletion request and the account is fully
-/// active again (ADR 021, mirrors the backend's ADR 098). Shared by every
+/// active again (ADR 022, mirrors the backend's ADR 098). Shared by every
 /// login entry point (phone OTP, Google, Apple) so the copy/styling can't
 /// drift between them.
 Future<void> showDeletionCancelledDialog(BuildContext context) {

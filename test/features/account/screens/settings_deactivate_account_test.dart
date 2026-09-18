@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aura_app/features/account/screens/settings_screen.dart';
 
 // Regression coverage for the "Deactivate Account" tile added under
-// Settings → Danger Zone (ADR 021 — reversible any time by logging back in,
+// Settings → Danger Zone (ADR 022 — reversible any time by logging back in,
 // unlike Delete Account, so it's a single confirm dialog rather than a
 // typed-confirmation flow).
 //

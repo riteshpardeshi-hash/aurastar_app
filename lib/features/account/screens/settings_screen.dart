@@ -319,7 +319,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // Reversible any time by simply logging back in (ADR 021/098) — unlike
+  // Reversible any time by simply logging back in (ADR 022/098) — unlike
   // Delete Account this has no scheduled endpoint, so a single confirm is
   // enough, same weight as Logout/Logout of All Devices.
   Future<void> _deactivateAccount(BuildContext context) async {

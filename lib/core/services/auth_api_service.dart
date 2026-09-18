@@ -8,7 +8,7 @@ typedef AuthResult = ({
   Map<String, dynamic> user,
   bool isNewUser,
   // True when this login just cancelled a pending self-service
-  // deactivation/deletion request (ADR 021 on this repo, ADR 098 on the
+  // deactivation/deletion request (ADR 022 on this repo, ADR 098 on the
   // backend) — the account is fully active again as of this login.
   bool deletionCancelled,
 });
@@ -197,7 +197,7 @@ class AuthApiService {
   }
 
   /// Deactivates the signed-in user's account with no deletion scheduled
-  /// (ADR 021/098) — reversible any time by simply logging back in, which
+  /// (ADR 022/098) — reversible any time by simply logging back in, which
   /// auto-reactivates it. Revokes every refresh token server-side and
   /// clears the local session — the caller should navigate to
   /// [PhoneAuthScreen] immediately after this returns.
