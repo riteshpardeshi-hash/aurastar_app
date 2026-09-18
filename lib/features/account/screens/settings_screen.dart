@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
@@ -458,7 +459,12 @@ class SettingsScreen extends StatelessWidget {
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
     try {
-      final bytes = await AuthApiService().exportMyData();
+      final results = await Future.wait([
+        AuthApiService().exportMyData(),
+        AuthApiService().getProfileOrThrow(),
+      ]);
+      final bytes = results[0] as Uint8List;
+      final profile = results[1] as Map<String, dynamic>;
       if (context.mounted) Navigator.pop(context); // dismiss the spinner
       await Share.shareXFiles(
         [
@@ -466,7 +472,10 @@ class SettingsScreen extends StatelessWidget {
             bytes,
             mimeType:
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            name: 'aura_arena_my_data.xlsx',
+            // Mirrors the backend's own filename convention exactly (see
+            // profileExport.service.js#exportFilename) so the file a user shares/saves
+            // is self-identifying, not a generic/opaque name.
+            name: '${_exportFilenameSlug(profile)}_export_${_isoDate(DateTime.now())}.xlsx',
           ),
         ],
       );
@@ -478,6 +487,20 @@ class SettingsScreen extends StatelessWidget {
         );
       }
     }
+  }
+
+  // Mirrors backend/utilities/exportLabels.js-adjacent slug rule in
+  // profileExport.service.js#exportFilename — lowercase, non [a-z0-9_-] stripped.
+  static String _exportFilenameSlug(Map<String, dynamic> profile) {
+    final raw = (profile['profileName'] as String?) ?? 'user';
+    final slug = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    return slug.isEmpty ? 'user' : slug;
+  }
+
+  static String _isoDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
   }
 
   static String _formatDate(DateTime d) {
