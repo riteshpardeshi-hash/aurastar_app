@@ -58,6 +58,9 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // See my_account_screen.dart's _normaliseSubmission — the Video
+      // document's own async-processing state (ADR 099).
+      'processingStatus': s['processingStatus'] as String?,
       'status': submissionStatusFromApi(submission),
       // See my_account_screen.dart's _normaliseSubmission: `/profile/videos`'s
       // nested `submission` omits `auraPoints`; openapi.yaml defines it as
@@ -171,6 +174,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
         final data = _videos[i];
         final videoUrl = data['videoUrl'] as String;
         final thumbnailUrl = data['thumbnailUrl'] as String;
+        final processingStatus = data['processingStatus'] as String?;
         final status = data['status'] as String;
         final auraPoints = data['auraPoints'] as int;
         final aiScore = data['aiScore'];
@@ -209,6 +213,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                 VideoThumbnailWidget(
                     videoUrl: videoUrl,
                     thumbnailUrl: thumbnailUrl,
+                    processingStatus: processingStatus,
                     fit: BoxFit.cover),
                 Positioned(
                   top: 6,

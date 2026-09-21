@@ -412,6 +412,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // The Video document's own async-processing state (ADR 099) — a
+      // "failed" video has nothing servable and the thumbnail widget uses
+      // this to skip straight to an unavailable placeholder.
+      'processingStatus': s['processingStatus'] as String?,
       'status': submissionStatusFromApi(submission),
       // `/profile/videos`'s nested `submission` object omits `auraPoints`
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
@@ -1411,6 +1415,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               final data = preview[i];
               final videoUrl = data['videoUrl'] as String;
               final thumbnailUrl = data['thumbnailUrl'] as String;
+              final processingStatus = data['processingStatus'] as String?;
               final status = data['status'] as String;
               final auraPoints = data['auraPoints'] as int;
               final aiScore = data['aiScore'];
@@ -1450,6 +1455,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       VideoThumbnailWidget(
                           videoUrl: videoUrl,
                           thumbnailUrl: thumbnailUrl,
+                          processingStatus: processingStatus,
                           fit: BoxFit.cover),
                       Positioned(
                         top: 6,
@@ -1708,6 +1714,7 @@ class _SavedChallengesGrid extends StatelessWidget {
           children: challenges.map((c) {
             final videoUrl = c['videoUrl'] as String? ?? '';
             final thumbnailUrl = c['thumbnailUrl'] as String?;
+            final processingStatus = c['processingStatus'] as String?;
             final title    = c['title']    as String? ?? '';
             return ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -1717,6 +1724,7 @@ class _SavedChallengesGrid extends StatelessWidget {
                   VideoThumbnailWidget(
                       videoUrl: videoUrl,
                       thumbnailUrl: thumbnailUrl,
+                      processingStatus: processingStatus,
                       fit: BoxFit.cover),
                   Positioned(
                     bottom: 0,
