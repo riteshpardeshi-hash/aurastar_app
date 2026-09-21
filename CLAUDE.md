@@ -146,3 +146,28 @@ These apply to every change, not just ones Claude Code makes:
   there), not this one.
 - **PRs explain "why," not "what."** The diff already shows what changed —
   see `.github/pull_request_template.md`.
+- **The bottom nav / tab shell must work after every change, no exceptions.**
+  This has broken (or been reported broken) multiple times — it's the single
+  most frequently recurring regression in this app. Before marking ANY
+  mobileApp task complete, whether or not the change looks nav-related:
+  1. Run `flutter test test/shared/widgets/app_bottom_nav_test.dart
+     test/features/shell/main_shell_test.dart` — both must pass.
+  2. If the change touches the shell, a tab screen, or anything pushed on
+     top of the shell (a drill-down screen, a dialog, a new route), also do
+     a live tap check on a running instance (simulator/device) — tap
+     through all four tabs (Home, Search, Leaderboard, Profile) from at
+     least one drill-down screen, not just from the shell's own tabs
+     directly. The widget tests have passed while a live device still
+     failed to navigate before; treat a live check as required
+     confirmation, not optional extra diligence, whenever the change is
+     anywhere near navigation.
+  3. When diagnosing a live "nav isn't responding" report (from a user or
+     from testing), do not trust blind `adb shell input tap` coordinates
+     against a screenshot — the screen can scroll or change state between
+     the screenshot and the tap, and a tap landing on the wrong element
+     easily looks identical to "nav is broken" when it isn't. Get the exact
+     repro from whoever hit it (which screen, which tab, what happened —
+     no visual feedback at all vs. it visually responds but doesn't
+     navigate vs. a delay) before concluding it's a real bug, and prefer
+     reading `AppBottomNav`/`MainShellController`/`MainShell` and the
+     existing regression tests over more blind taps.

@@ -8,7 +8,6 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
-import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/account/screens/my_account_screen.dart';
 
 // Regression coverage: the profile screen used to recompute level/tier from
@@ -25,7 +24,6 @@ void main() {
       'api_user_id': 'user-1',
     });
     SharedPreferences.setMockInitialValues({});
-    VideosService.resetLocallyDeletedForTest();
 
     ApiClient.httpClient = MockClient((request) async {
       if (request.method == 'GET' && request.url.path.endsWith('/profile')) {
