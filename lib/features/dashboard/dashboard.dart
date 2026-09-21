@@ -7,7 +7,6 @@ import '../../core/services/challenges_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/services/video_prewarm_cache.dart';
-import '../../core/services/videos_service.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart';
@@ -204,11 +203,9 @@ class _DashboardState extends State<Dashboard> {
         (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
-    // The backend doesn't debit Aura when a video is deleted; VideosService
-    // holds the lost points locally and we subtract them here. Level/tier
-    // below stay on the server's own values.
-    await VideosService.hydrate();
-    final points = VideosService.adjustBalanceForDeletedVideos(serverPoints);
+    // Server-authoritative — the backend now debits Aura on video delete
+    // itself, so the raw balance is already correct (no client offset).
+    final points = serverPoints;
     // Server-computed and authoritative — do not recompute level/tier from
     // `points` locally (see aura_tier.dart's auraTierForName).
     final level = (profile['level'] as num?)?.toInt() ?? 1;

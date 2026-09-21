@@ -8,7 +8,6 @@ import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../../core/services/rewards_service.dart';
 import '../../../core/services/screen_cache.dart';
-import '../../../core/services/videos_service.dart';
 import '../../../core/utils/error_message.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/models/aura_tier.dart';
@@ -333,10 +332,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
     try {
       final uid = await ApiClient().userId;
-      // Restores ids deleted on earlier launches before the grid filter
-      // below runs — /profile/videos keeps listing soft-deleted videos, so a
-      // cold start would otherwise un-hide every previously deleted one.
-      await VideosService.hydrate();
       final results = await Future.wait<dynamic>([
         AuthApiService().getProfile(),
         AuthApiService().fetchMyVideos(limit: 10),
@@ -346,24 +341,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         AuthApiService().fetchReferralStatsDetail(),
         RewardsService().fetchRewards(),
       ]);
-      // The backend doesn't debit Aura when a video is deleted; VideosService
-      // carries the lost points locally and the Aura balance below subtracts
-      // them via adjustBalanceForDeletedVideos (hydrate() above loaded it).
       if (!mounted) return;
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
-        // /profile/videos keeps returning a video after DELETE /videos/{id}
-        // soft-deletes it — the list endpoint never drops it. Without this
-        // filter a deleted video reappears in the grid on the next refresh,
-        // and re-tapping Delete on it then 404s ("video not found") since
-        // it's already gone server-side. VideosService.isDeletedVideo also
-        // covers ids deleted this session, since the server-side marker has
-        // proven unreliable (see that method).
-        _videos = (results[1] as List)
-            .cast<Map<String, dynamic>>()
-            .where((v) => !VideosService.isDeletedVideo(v))
-            .toList();
+        // /profile/videos excludes soft-deleted videos at the source now
+        // (backend fix — see docs/backend-issues/002-*, resolved).
+        _videos = (results[1] as List).cast<Map<String, dynamic>>();
         _savedChallenges = (results[2] as List)
             .cast<Map<String, dynamic>>()
             .map(normaliseChallenge)
@@ -428,6 +412,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // The Video document's own async-processing state (ADR 099) — a
+      // "failed" video has nothing servable and the thumbnail widget uses
+      // this to skip straight to an unavailable placeholder.
+      'processingStatus': s['processingStatus'] as String?,
       'status': submissionStatusFromApi(submission),
       // `/profile/videos`'s nested `submission` object omits `auraPoints`
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
@@ -1427,6 +1415,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               final data = preview[i];
               final videoUrl = data['videoUrl'] as String;
               final thumbnailUrl = data['thumbnailUrl'] as String;
+              final processingStatus = data['processingStatus'] as String?;
               final status = data['status'] as String;
               final auraPoints = data['auraPoints'] as int;
               final aiScore = data['aiScore'];
@@ -1466,6 +1455,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       VideoThumbnailWidget(
                           videoUrl: videoUrl,
                           thumbnailUrl: thumbnailUrl,
+                          processingStatus: processingStatus,
                           fit: BoxFit.cover),
                       Positioned(
                         top: 6,
@@ -1583,11 +1573,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final serverRewards = (_profile['auraPoints'] as num?)?.toInt() ??
         (_profile['totalRewards'] as num?)?.toInt() ??
         0;
-    // Subtract Aura from videos the user deleted that the backend hasn't
-    // debited yet (see VideosService). Only the displayed points move —
-    // level and tier stay on the server's authoritative values.
-    final totalRewards =
-        VideosService.adjustBalanceForDeletedVideos(serverRewards);
+    // Server-authoritative — the backend now debits Aura on video delete
+    // itself, so the raw balance is already correct (no client offset).
+    final totalRewards = serverRewards;
     // Server-computed and authoritative — do not recompute locally.
     final level = (_profile['level'] as num?)?.toInt() ?? 1;
     final tierName = _profile['tier'] as String?;
@@ -1726,6 +1714,7 @@ class _SavedChallengesGrid extends StatelessWidget {
           children: challenges.map((c) {
             final videoUrl = c['videoUrl'] as String? ?? '';
             final thumbnailUrl = c['thumbnailUrl'] as String?;
+            final processingStatus = c['processingStatus'] as String?;
             final title    = c['title']    as String? ?? '';
             return ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -1735,6 +1724,7 @@ class _SavedChallengesGrid extends StatelessWidget {
                   VideoThumbnailWidget(
                       videoUrl: videoUrl,
                       thumbnailUrl: thumbnailUrl,
+                      processingStatus: processingStatus,
                       fit: BoxFit.cover),
                   Positioned(
                     bottom: 0,

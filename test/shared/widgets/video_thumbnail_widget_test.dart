@@ -229,4 +229,83 @@ void main() {
     expect(img.imageUrl, endsWith('Signature=zzzz'),
         reason: 'still fetches with a currently-valid signature if needed');
   });
+
+  // ADR 099: a video the backend has given up on (processingStatus:"failed")
+  // has no thumbnailUrl and, in practice, an almost-certainly-dead raw video
+  // URL — the widget must not spend 30s discovering that via a failed
+  // extraction attempt.
+  group('processingStatus:"failed"', () {
+    testWidgets('skips extraction entirely and shows the unavailable state',
+        (tester) async {
+      var extractCalled = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+        extractCalled = true;
+        return _fakeImageBytes();
+      });
+
+      await tester.pumpWidget(const MaterialApp(
+        home: SizedBox(
+          width: 50,
+          height: 50,
+          child: VideoThumbnailWidget(
+            videoUrl: 'https://example.com/orphaned.mp4',
+            processingStatus: 'failed',
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(extractCalled, isFalse,
+          reason: 'a failed video must never trigger the extraction fallback');
+      expect(find.byIcon(Icons.videocam_off_rounded), findsOneWidget);
+      expect(find.byType(VideoThumbnailSkeleton), findsNothing);
+    });
+
+    testWidgets('a non-empty thumbnailUrl still wins even if processingStatus is failed',
+        (tester) async {
+      // Shouldn't normally co-occur (a failed video has no thumbnailUrl per
+      // the backend's own resolution logic), but the widget's priority order
+      // should still be thumbnailUrl-first defensively.
+      await tester.pumpWidget(const MaterialApp(
+        home: SizedBox(
+          width: 50,
+          height: 50,
+          child: VideoThumbnailWidget(
+            videoUrl: 'https://example.com/orphaned.mp4',
+            thumbnailUrl: 'https://example.com/thumb.jpg',
+            processingStatus: 'failed',
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(find.byType(CachedNetworkImage), findsOneWidget);
+      expect(find.byIcon(Icons.videocam_off_rounded), findsNothing);
+    });
+
+    testWidgets('a pending (not failed) video still attempts extraction as before',
+        (tester) async {
+      var extractCalled = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(_channel, (call) async {
+        extractCalled = true;
+        return _fakeImageBytes();
+      });
+
+      await tester.pumpWidget(const MaterialApp(
+        home: SizedBox(
+          width: 50,
+          height: 50,
+          child: VideoThumbnailWidget(
+            videoUrl: 'https://example.com/still-processing.mp4',
+            processingStatus: 'pending',
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(extractCalled, isTrue);
+    });
+  });
 }

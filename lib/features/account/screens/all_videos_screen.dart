@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
-import '../../../core/services/videos_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
@@ -28,24 +27,13 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
   }
 
   Future<void> _load() async {
-    // Restores ids deleted on earlier launches — /profile/videos still lists
-    // them, so without this a cold start un-hides every previously deleted
-    // video.
-    await VideosService.hydrate();
+    // /profile/videos excludes soft-deleted videos at the source now
+    // (backend fix — see docs/backend-issues/002-*, resolved), so no
+    // client-side id-tracking/filtering is needed here anymore.
     final data = await AuthApiService().fetchMyVideos(limit: 100);
     if (mounted) {
       setState(() {
-        // /profile/videos keeps returning a video after DELETE /videos/{id}
-        // soft-deletes it — the list endpoint never drops it. Without this
-        // filter a deleted video reappears on the next refresh, and
-        // re-tapping Delete on it then 404s ("video not found") since it's
-        // already gone server-side. VideosService.isDeletedVideo also covers
-        // ids deleted this session (the server-side marker is unreliable —
-        // see that method).
-        _videos = data
-            .where((v) => !VideosService.isDeletedVideo(v))
-            .map(_normaliseSubmission)
-            .toList();
+        _videos = data.map(_normaliseSubmission).toList();
         _loading = false;
       });
     }
@@ -70,6 +58,9 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // See my_account_screen.dart's _normaliseSubmission — the Video
+      // document's own async-processing state (ADR 099).
+      'processingStatus': s['processingStatus'] as String?,
       'status': submissionStatusFromApi(submission),
       // See my_account_screen.dart's _normaliseSubmission: `/profile/videos`'s
       // nested `submission` omits `auraPoints`; openapi.yaml defines it as
@@ -183,6 +174,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
         final data = _videos[i];
         final videoUrl = data['videoUrl'] as String;
         final thumbnailUrl = data['thumbnailUrl'] as String;
+        final processingStatus = data['processingStatus'] as String?;
         final status = data['status'] as String;
         final auraPoints = data['auraPoints'] as int;
         final aiScore = data['aiScore'];
@@ -221,6 +213,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                 VideoThumbnailWidget(
                     videoUrl: videoUrl,
                     thumbnailUrl: thumbnailUrl,
+                    processingStatus: processingStatus,
                     fit: BoxFit.cover),
                 Positioned(
                   top: 6,

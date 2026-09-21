@@ -131,8 +131,22 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         if (!mounted) return;
       }
 
-      if (!result.isNewUser) {
-        // Returning user — mark complete locally and go straight to Dashboard.
+      // Root cause of a recurring "bottom nav doesn't respond" report: a
+      // returning user used to be sent straight to Dashboard unconditionally
+      // and had `isProfileComplete` force-written `true` locally regardless
+      // of what the server actually said — e.g. someone who created an
+      // account, backed out of onboarding without finishing it, then logged
+      // in again later (isNewUser is only true on account *creation*, not on
+      // every login). Every backend endpoint the Dashboard's tabs call is
+      // gated by requireProfileComplete and 403s for an incomplete profile,
+      // so the tab bar itself still worked — it was switching IndexedStack
+      // pages exactly as designed — but every tab's content silently failed
+      // to load, which reads identically to "tapping the nav does nothing."
+      // `isProfileComplete` is present on `result.user` for both new and
+      // returning users (same sanitizeUser(...) shape backend-side), so
+      // there's no reason to special-case which branch trusts it.
+      final isComplete = result.user['isProfileComplete'] as bool? ?? false;
+      if (isComplete) {
         final uid = await ApiClient().userId;
         if (uid != null) {
           final prefs = await SharedPreferences.getInstance();
@@ -140,11 +154,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         }
         _navigateTo(const Dashboard());
       } else {
-        // Brand-new user — send through onboarding.
-        final isComplete =
-            result.user['isProfileComplete'] as bool? ?? false;
-        _navigateTo(
-            isComplete ? const Dashboard() : const ProfileSetupScreen());
+        _navigateTo(const ProfileSetupScreen());
       }
     } catch (e) {
       if (!mounted) return;

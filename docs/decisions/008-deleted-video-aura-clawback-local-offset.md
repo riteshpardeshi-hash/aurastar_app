@@ -1,6 +1,7 @@
 # 008 — Deleted-video Aura clawback via a persisted local offset
 
-Status: Accepted
+Status: Superseded by the backend shipping the real fix (see "Resolution" at
+the bottom)
 
 ## Problem
 
@@ -175,3 +176,35 @@ Tests: `videos_service_test.dart` — the two `reconcileServerBalance` tests
 were removed (they pinned the buggy behavior); added "offset is stable
 across balance swings and relaunches" and "hydrate clears the retired
 reconcile-baseline pref key".
+
+## Resolution (2026-09-21): backend-issues 002 and 003 shipped
+
+The backend now:
+- Excludes soft-deleted videos from every listing endpoint at the source
+  (`GET /profile/videos`, `GET /creators/:id/videos`, `GET /feed`) —
+  resolves `docs/backend-issues/002-profile-videos-returns-soft-deleted-videos.md`.
+- Reverses the Aura a deleted video's submission contributed — the full
+  score if it was the challenge's best submission and none remain, only the
+  difference down to the next-best remaining submission if one does
+  (promoting it), or nothing if it wasn't the best — via `deleteVideo`'s own
+  `awardAura` call, writing a `deleted_video_deduction` `AuraTransaction`.
+  Resolves `docs/backend-issues/003-video-delete-does-not-reverse-aura-points.md`.
+
+Removed from this repo accordingly (per this ADR's own "when issue 003
+ships" instruction, extended to cover 002 the same way since both landed
+together): `VideosService._locallyDeleted`/`hydrate`/`isDeletedVideo`/
+`resetLocallyDeletedForTest`, `_deletedVideoAura`/`deletedVideoAuraOffset`/
+`adjustBalanceForDeletedVideos`/`applyDeletedVideoOffsetToLeaderboard`, and
+every call site (`my_account_screen.dart`, `all_videos_screen.dart`,
+`dashboard.dart`, `wallet_screen.dart`, `leaderboard_screen.dart`).
+`VideosService.deleteVideo` is now just the `DELETE /videos/{id}` call plus
+its existing "404 means already-gone" idempotency handling — no local
+tracking, no offset. Both `docs/backend-issues/002-*.md` and `003-*.md` were
+deleted.
+
+The delete confirmation dialog (`user_video_detail_screen.dart`) still names
+the video's own score as an upper bound, but now says "up to N points" and
+notes a better remaining submission would reduce the actual deduction —
+the exact amount depends on server-side state (whether this was the
+challenge's best submission, and what the next-best scores) that the client
+doesn't have a way to preview before confirming.

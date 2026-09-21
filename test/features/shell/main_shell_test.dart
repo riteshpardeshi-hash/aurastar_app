@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/core/services/screen_cache.dart';
-import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/account/screens/my_account_screen.dart';
 import 'package:aura_app/features/challenges/screens/all_general_challenges_screen.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
@@ -40,7 +39,6 @@ void main() {
     });
     SharedPreferences.setMockInitialValues({});
     ScreenCache.clear();
-    VideosService.resetLocallyDeletedForTest();
     leaderboardCalls = 0;
     gateLeaderboard = null;
 
