@@ -124,7 +124,13 @@ void main() {
 
     expect(find.byType(MyAccountScreen), findsOneWidget,
         reason: 'the already-loaded Profile tab appears immediately');
-    expect(find.byType(CircularProgressIndicator), findsNothing,
+    // Not a bare CircularProgressIndicator check: MyAccountScreen's aura
+    // points card permanently hosts one (key: levelProgressRing) as a
+    // progress-ring visual, not a loading state — it's present even once
+    // the tab is fully ready. ScreenSkeleton is this app's actual
+    // full-screen "still loading" placeholder (see screen_skeleton.dart),
+    // so that's the one a ready tab must never show.
+    expect(find.byType(ScreenSkeleton), findsNothing,
         reason: 'a tab switch must never show a loading spinner');
   });
 
