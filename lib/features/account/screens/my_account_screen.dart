@@ -847,8 +847,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   // ── Aura points card ─────────────────────────────────────────────────────────
-  Widget _buildAuraPointsCard(int points, int level, String? tierName) {
+  Widget _buildAuraPointsCard(
+    int points,
+    int level,
+    String? tierName,
+    Map<String, dynamic>? levelProgressData,
+  ) {
     final tier = auraTierForName(tierName, level: level);
+    // Server-computed (GET /profile#levelProgress) — never derive this from a
+    // hardcoded step locally, the level.aura_step App Setting is admin-tunable.
+    // Falls back to an empty ring (not a guess) if an older cached profile
+    // response predates this field.
+    final pct = ((levelProgressData?['pct'] as num?) ?? 0).toDouble().clamp(0.0, 1.0);
+    final auraToNextLevel = (levelProgressData?['auraToNextLevel'] as num?)?.toInt();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -906,49 +917,68 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         ],
                       ),
                     ),
-                    Container(
+                    SizedBox(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            tier.color.withValues(alpha: 0.35),
-                            tier.color.withValues(alpha: 0.08),
-                          ],
-                        ),
-                        border: Border.all(
-                            color: tier.color.withValues(alpha: 0.70),
-                            width: 2.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: tier.color.withValues(alpha: 0.35),
-                            blurRadius: 14,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Text('LEVEL',
-                              style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
-                          Text(
-                            '$level',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              height: 1.0,
+                          // The circle's own edge IS the progress bar — how much of
+                          // the current level's Aura the user has earned so far.
+                          SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              key: const Key('levelProgressRing'),
+                              value: pct,
+                              strokeWidth: 3.5,
+                              backgroundColor: tier.color.withValues(alpha: 0.18),
+                              valueColor: AlwaysStoppedAnimation<Color>(tier.color),
                             ),
                           ),
-                          Text(
-                            tier.name,
-                            style: TextStyle(
-                              color: tier.color,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
+                          Container(
+                            width: 68,
+                            height: 68,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  tier.color.withValues(alpha: 0.35),
+                                  tier.color.withValues(alpha: 0.08),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: tier.color.withValues(alpha: 0.35),
+                                  blurRadius: 14,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('LEVEL',
+                                    style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
+                                Text(
+                                  '$level',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                Text(
+                                  tier.name,
+                                  style: TextStyle(
+                                    color: tier.color,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -956,6 +986,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     ),
                   ],
                 ),
+                if (auraToNextLevel != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    auraToNextLevel > 0
+                        ? '$auraToNextLevel Aura to Level ${level + 1}'
+                        : 'Ready to level up!',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1579,6 +1618,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     // Server-computed and authoritative — do not recompute locally.
     final level = (_profile['level'] as num?)?.toInt() ?? 1;
     final tierName = _profile['tier'] as String?;
+    final levelProgressData = _profile['levelProgress'] as Map<String, dynamic>?;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1634,7 +1674,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ] else ...[
                 _buildBecomeCreatorBanner(context, totalRewards),
               ],
-              _buildAuraPointsCard(totalRewards, level, tierName),
+              _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
               _buildStreakCard(),
               _buildRewardsRow(context),
               const SizedBox(height: 8),
