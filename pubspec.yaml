@@ -50,6 +50,19 @@ dev_dependencies:
   camera_platform_interface: ^2.11.0
   permission_handler_platform_interface: ^4.2.0
   url_launcher_platform_interface: ^2.3.2
+  flutter_launcher_icons: ^0.14.4
+
+# Run `dart run flutter_launcher_icons` after changing either source image to
+# regenerate the platform icon files. This only affects builds made *after*
+# regenerating — it does not retroactively change icons on already-uploaded
+# TestFlight/Play Store builds.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#080810"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
