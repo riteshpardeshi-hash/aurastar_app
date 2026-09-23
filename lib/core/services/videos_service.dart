@@ -27,6 +27,38 @@ class VideosService {
   static final Set<String> _locallyDeleted = {};
   static Future<void>? _hydration;
 
+  // Fires once per successful (or already-satisfied) delete. MyAccountScreen
+  // — the Profile tab — is kept mounted forever inside MainShell's
+  // IndexedStack (ADR 011), so its `initState`/first load only ever runs
+  // once per app session; it has no way to know a video was deleted from a
+  // *different* screen holding its own copy of the list (AllVideosScreen —
+  // "VIEW ALL" — is a plain Navigator.push with no callback on return). That
+  // left the Profile preview grid showing already-deleted videos until the
+  // next pull-to-refresh or app relaunch. Any screen that keeps its own
+  // video list alive across navigation should listen to this and re-filter
+  // with [isDeletedVideo] instead of waiting for its next full reload.
+  static final ValueNotifier<int> deletionTick = ValueNotifier<int>(0);
+
+  // ── Front-camera Android mirror flag ───────────────────────────────────
+  // ADR 020: on Android, a front-camera take is recorded un-mirrored (the
+  // camera plugin's platform default), so the review screen right after
+  // recording flips playback locally to match what the user saw framing
+  // themselves. The uploaded file itself is deliberately left un-mirrored —
+  // the feed/reels/AI scorer need the true orientation. But that means any
+  // *other* screen that plays the user's own video back to them (My Videos,
+  // the video detail screen) shows the same true-but-"backwards"-looking
+  // file, with nothing in the `/profile/videos` response to say it needs the
+  // same flip.
+  //
+  // There is no server field for this (see ADR 020's "Consequences": the
+  // flag "rides on the local navigation/queue only... derived fresh each
+  // recording"). So PreviewScreen records which video ids it mirrored,
+  // keyed by the Video document id (the same `videoId` /profile/videos
+  // returns), and every other own-video playback surface looks it up here.
+  // Same device only — a reinstall or a second device won't have it.
+  static const _prefsMirroredKey = 'videos_service.locally_mirrored_ids';
+  static final Set<String> _locallyMirrored = {};
+
   // ── Deleted-video Aura offset ──────────────────────────────────────────
   // The backend does NOT reverse Aura points when a user deletes their own
   // video. Verified against openapi.yaml on 2026-09-04: `DELETE /videos/{id}`
@@ -125,6 +157,8 @@ class VideosService {
       try {
         final prefs = await SharedPreferences.getInstance();
         _locallyDeleted.addAll(prefs.getStringList(_prefsKey) ?? const []);
+        _locallyMirrored
+            .addAll(prefs.getStringList(_prefsMirroredKey) ?? const []);
         _deletedVideoAura = prefs.getInt(_prefsAuraKey) ?? 0;
         if (prefs.containsKey(_prefsAuraBaselineKey)) {
           await prefs.remove(_prefsAuraBaselineKey);
@@ -162,8 +196,47 @@ class VideosService {
   @visibleForTesting
   static void resetLocallyDeletedForTest() {
     _locallyDeleted.clear();
+    _locallyMirrored.clear();
     _hydration = null;
     _deletedVideoAura = 0;
+    deletionTick.value = 0;
+  }
+
+  /// Records that [videoId] (the Video document id `/profile/videos` and the
+  /// presign step both use) needs its playback horizontally flipped on any
+  /// own-video screen. Call once, right after a front-camera Android upload
+  /// succeeds — see PreviewScreen._doUpload.
+  static Future<void> markMirrored(String videoId) async {
+    if (videoId.isEmpty) return;
+    await hydrate();
+    _locallyMirrored.add(videoId);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Merge with what's already stored, same reasoning as _persist above.
+      _locallyMirrored
+          .addAll(prefs.getStringList(_prefsMirroredKey) ?? const []);
+      var ids = _locallyMirrored.toList();
+      if (ids.length > _maxPersistedIds) {
+        ids = ids.sublist(ids.length - _maxPersistedIds);
+      }
+      _locallyMirrored
+        ..clear()
+        ..addAll(ids);
+      await prefs.setStringList(_prefsMirroredKey, ids);
+    } catch (_) {
+      // Best-effort — the in-memory set still covers the current session.
+    }
+  }
+
+  /// True if [video] — a raw `/profile/videos` list item — was recorded on
+  /// the front camera on Android and needs its playback mirrored to match
+  /// what the user saw while recording. See ADR 020 and [markMirrored].
+  static bool isMirroredVideo(Map<String, dynamic> video) {
+    final id = video['videoId'] as String? ??
+        video['_id'] as String? ??
+        video['id'] as String? ??
+        '';
+    return id.isNotEmpty && _locallyMirrored.contains(id);
   }
 
   /// True if [video] — a raw `/profile/videos` list item — is one the user
@@ -211,6 +284,7 @@ class VideosService {
         _deletedVideoAura += auraPoints;
         await _persistAura();
       }
+      deletionTick.value++;
       return;
     }
     throw res['message'] as String? ?? 'Failed to delete video';

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/brands_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -10,7 +11,11 @@ import '../../challenges/screens/challenge_detail.dart';
 class BrandProfileScreen extends StatefulWidget {
   final String brandId;
 
-  const BrandProfileScreen({super.key, required this.brandId});
+  /// Where the user came from (explore_brands, search, ...), analytics only.
+  final String source;
+
+  const BrandProfileScreen(
+      {super.key, required this.brandId, this.source = 'unknown'});
 
   @override
   State<BrandProfileScreen> createState() => _BrandProfileScreenState();
@@ -30,6 +35,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
   @override
   void initState() {
     super.initState();
+    AnalyticsService().logBrandPageView(widget.brandId, widget.source);
     _load();
   }
 
@@ -394,6 +400,7 @@ class _ChallengeCard extends StatelessWidget {
             MaterialPageRoute(
               builder:
                   (_) => ChallengeDetail(
+                    source: 'brand_page',
                     title: title,
                     instructions: instructions,
                     videoUrl: videoUrl,

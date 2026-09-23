@@ -39,6 +39,22 @@ workflows:
             --config Release \
             --archive-xcargs "ENABLE_USER_SCRIPT_SANDBOXING=NO COMPILER_INDEX_STORE_ENABLE=NO"
 
+      # Crashlytics can only symbolicate iOS crashes with the build's dSYMs.
+      # Never fails the build: a missing dSYM or upload error just means that
+      # release's iOS crashes show unsymbolicated addresses (ADR 023).
+      - name: Upload dSYMs to Crashlytics
+        ignore_failure: true
+        script: |
+          UPLOADER=ios/Pods/FirebaseCrashlytics/upload-symbols
+          if [ ! -x "$UPLOADER" ]; then echo "upload-symbols not found, skipping"; exit 0; fi
+          found=0
+          while IFS= read -r dsym; do
+            found=1
+            echo "Uploading $dsym"
+            "$UPLOADER" -gsp ios/Runner/GoogleService-Info.plist -p ios "$dsym"
+          done < <(find "$CM_BUILD_DIR/build" -name "*.dSYM" -type d)
+          [ "$found" = 1 ] || echo "No dSYMs found, skipping"
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -110,3 +126,38 @@ workflows:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY
         key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
         issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+
+  android-playstore:
+    name: Android Play Store
+    max_build_duration: 60
+    environment:
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.onadsgroup.auraapp"
+      flutter: stable
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Write release keystore and key.properties
+        script: |
+          echo "$CM_KEYSTORE" | base64 --decode > /tmp/upload-keystore.jks
+          cat > "$CM_BUILD_DIR/android/key.properties" <<KEYPROPS
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=/tmp/upload-keystore.jks
+          KEYPROPS
+
+      - name: Flutter build appbundle
+        script: flutter build appbundle --release --build-number=$BUILD_NUMBER
+
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true

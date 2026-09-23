@@ -130,6 +130,7 @@ class _TrendingScreenState extends State<TrendingScreen> {
             MaterialPageRoute(
               builder:
                   (_) => ChallengeDetail(
+                    source: 'trending',
                     title: title,
                     instructions: instructions,
                     videoUrl: videoUrl,

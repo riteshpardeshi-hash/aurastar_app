@@ -841,6 +841,7 @@ class _SuggestedChallengeTile extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => ChallengeDetail(
+          source: 'creator_preview',
           title: normalised?['title'] as String? ?? fallbackTitle,
           instructions: normalised?['instructions'] as String? ?? '',
           videoUrl: normalised?['videoUrl'] as String? ?? '',

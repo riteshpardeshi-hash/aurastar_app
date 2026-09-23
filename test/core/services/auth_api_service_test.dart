@@ -135,4 +135,74 @@ void main() {
 
   // Rewards / leaderboard-voucher coverage moved to
   // test/core/services/rewards_service_test.dart alongside RewardsService.
+
+  // Regression coverage for the missing App Store / Play Store account-
+  // deletion requirement (Apple Guideline 5.1.1(v)): there was no client
+  // method at all for `DELETE /profile` even though the backend has
+  // supported it since ADR 098.
+  group('deleteAccount', () {
+    test(
+        'DELETEs /profile with the reason, clears the session, and returns '
+        'the scheduled hard-delete date', () async {
+      String? requestedMethod;
+      String? requestedPath;
+      Map<String, dynamic>? requestedBody;
+      ApiClient.httpClient = MockClient((request) async {
+        requestedMethod = request.method;
+        requestedPath = request.url.path;
+        requestedBody =
+            request.body.isEmpty ? null : jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'deletionScheduledFor': '2026-10-07T00:00:00.000Z',
+          }),
+          200,
+        );
+      });
+
+      final result =
+          await AuthApiService().deleteAccount(reason: 'Taking a break');
+
+      expect(requestedMethod, 'DELETE');
+      expect(requestedPath!.endsWith('/profile'), isTrue,
+          reason: 'expected DELETE /profile, got $requestedPath');
+      expect(requestedBody?['reason'], 'Taking a break');
+      expect(result, DateTime.utc(2026, 10, 7));
+      expect(await ApiClient().isLoggedIn(), isFalse,
+          reason: 'a successful deletion request must clear the local '
+              'session — the backend has already revoked every refresh '
+              'token server-side');
+    });
+
+    test('omits the request body entirely when no reason is given', () async {
+      String? sentBody;
+      ApiClient.httpClient = MockClient((request) async {
+        sentBody = request.body;
+        return http.Response(jsonEncode({'status': 'success'}), 200);
+      });
+
+      final result = await AuthApiService().deleteAccount();
+
+      expect(sentBody, isEmpty);
+      expect(result, isNull);
+    });
+
+    test('throws the backend message and leaves the session intact on failure',
+        () async {
+      ApiClient.httpClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'status': 'fail', 'message': 'Cannot delete an admin account'}),
+          403,
+        );
+      });
+
+      await expectLater(
+        () => AuthApiService().deleteAccount(),
+        throwsA('Cannot delete an admin account'),
+      );
+      expect(await ApiClient().isLoggedIn(), isTrue,
+          reason: 'a failed deletion request must not sign the user out');
+    });
+  });
 }

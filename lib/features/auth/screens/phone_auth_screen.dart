@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/sms_otp_autofill.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
+import '../../../shared/widgets/legal_consent_text.dart';
 import 'profile_setup_screen.dart';
 import '../../shell/main_shell.dart';
 
@@ -124,6 +126,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       _resendTimer?.cancel();
       _smsAutofill.cancel();
       setState(() => _isLoading = false);
+      result.isNewUser
+          ? AnalyticsService().logSignUp('phone')
+          : AnalyticsService().logLogin('phone');
 
       if (!result.isNewUser) {
         // Returning user — mark complete locally and go straight to the app.
@@ -358,7 +363,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         ),
                       ),
 
-                      SizedBox(height: size.height * 0.055),
+                      const SizedBox(height: 20),
+
+                      const Center(child: LegalConsentText(accent: _accent)),
+
+                      SizedBox(height: size.height * 0.04),
 
                       const SizedBox(height: 40),
                     ],

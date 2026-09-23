@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -181,7 +182,8 @@ class _CouponRewardCardState extends State<_CouponRewardCard> {
 
   Future<void> _claim(String id) async {
     setState(() => _claiming = true);
-    await RewardsService().claimReward(id);
+    final claimed = await RewardsService().claimReward(id);
+    if (claimed != null) AnalyticsService().logCouponClaimed(id);
     await widget.onClaimed();
     if (mounted) setState(() => _claiming = false);
   }

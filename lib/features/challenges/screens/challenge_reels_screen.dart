@@ -122,6 +122,7 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ChallengeDetail(
+          source: 'reels',
           title: c['title'] as String,
           instructions: c['instructions'] as String,
           videoUrl: c['videoUrl'] as String,

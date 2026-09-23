@@ -1,3 +1,4 @@
+import '../../core/services/analytics_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
@@ -111,6 +112,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _hasMore = _moreAvailable(data, type);
         _searching = false;
       });
+      AnalyticsService().logSearch(q, results: _results.length, type: type);
     } catch (_) {
       if (mounted && token == _searchToken) {
         setState(() { _results = []; _searching = false; });
@@ -230,6 +232,7 @@ class _SearchScreenState extends State<SearchScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => ChallengeDetail(
+            source: 'search',
             title: item.title,
             instructions: '',
             videoUrl: '',
@@ -249,14 +252,14 @@ class _SearchScreenState extends State<SearchScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => BrandProfileScreen(brandId: item.id),
+          builder: (_) => BrandProfileScreen(source: 'search', brandId: item.id),
         ),
       );
     } else if (item.type == 'Creator') {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CreatorProfileScreen(creatorId: item.id),
+          builder: (_) => CreatorProfileScreen(source: 'search', creatorId: item.id),
         ),
       );
     }

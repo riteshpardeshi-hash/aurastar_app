@@ -109,7 +109,7 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
           ? null
           : () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => CreatorProfileScreen(creatorId: row['id'] as String)),
+                MaterialPageRoute(builder: (_) => CreatorProfileScreen(source: 'follow_list', creatorId: row['id'] as String)),
               ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),

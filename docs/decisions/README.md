@@ -45,3 +45,4 @@ because it's three pages long isn't documented, it's buried.
 | 018 | [Bottom nav row can't overflow; full-slot hit targets; clamped text scale](018-bottom-nav-row-cannot-overflow-full-height-hit-targets.md) | Accepted |
 | 019 | [Post-login navigation must land on MainShell, not a bare Dashboard](019-post-login-navigation-must-land-on-mainshell.md) | Accepted |
 | 020 | [Mirror the front-camera review playback, not the recording or the file](020-front-camera-review-playback-mirrored-not-the-file.md) | Accepted |
+| 021 | [Extend the front-camera mirror flag past the review screen to every own-video playback surface](021-mirror-own-video-playback-outside-review-too.md) | Accepted (amends 020) |

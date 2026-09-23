@@ -52,3 +52,11 @@ app.*.map.json
 # iOS build artifacts
 ios/build/
 navlog.txt
+
+# Android signing secrets - never commit the release keystore or its passwords
+android/key.properties
+*.jks
+*.keystore
+# android/app/google-services.json is intentionally NOT ignored: it holds
+# client identifiers (not secrets) and the Google Services Gradle plugin
+# needs it in CI. See docs/decisions/022.

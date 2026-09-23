@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "811866690532",
-    "project_id": "aura-app-efae1",
-    "storage_bucket": "aura-app-efae1.firebasestorage.app"
+    "project_number": "25395482877",
+    "project_id": "aura-arena-81e92",
+    "storage_bucket": "aura-arena-81e92.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:811866690532:android:62e310bfbc8874febeadf1",
+        "mobilesdk_app_id": "1:25395482877:android:e94031b57d65c8ff7cee94",
         "android_client_info": {
-          "package_name": "com.example.aura_app"
+          "package_name": "com.onadsgroup.auraapp"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDVmwdSSseDJmzzlByIkxoVU_ntDHtBqv4"
+          "current_key": "AIzaSyB-lb81HJelY2OgRuFkZzy4cU8WIl9t9BA"
         }
       ],
       "services": {

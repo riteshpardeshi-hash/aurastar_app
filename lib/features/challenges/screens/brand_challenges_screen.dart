@@ -113,6 +113,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
       MaterialPageRoute(
         builder:
             (_) => ChallengeDetail(
+              source: 'brand_page',
               title: data['title'] as String? ?? '',
               instructions: data['instructions'] as String? ?? '',
               videoUrl: data['videoUrl'] as String? ?? '',
@@ -127,7 +128,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CreatorProfileScreen(creatorId: creatorId),
+        builder: (_) => CreatorProfileScreen(source: 'brand_page', creatorId: creatorId),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -200,6 +201,8 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       }
 
       ChallengeAnalyticsService().recordShare(widget.challengeId);
+      AnalyticsService()
+          .logShare(contentType: 'challenge_result', itemId: widget.challengeId);
       final challengeLink = '$kChallengeBaseUrl/${widget.challengeId}';
       final message =
           'I just completed "${widget.challengeTitle}" on Aura and earned $_auraPoints Aura Points! 🏆\n\n'
@@ -237,6 +240,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
       if (bytes != null) {
         ChallengeAnalyticsService()
             .recordShare(widget.challengeId, platform: 'instagram_story');
+        AnalyticsService().logShare(
+            contentType: 'challenge_result',
+            itemId: widget.challengeId,
+            method: 'instagram_story');
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
         );

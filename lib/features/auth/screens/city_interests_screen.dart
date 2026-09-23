@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/auth_api_service.dart';
@@ -158,6 +159,7 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
       Navigator.pop(context, true);
       return;
     }
+    AnalyticsService().logOnboardingStep('city', 2);
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const InterestsScreen()),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/services/auth_api_service.dart';
 import 'review_screen.dart';
 import 'creator_review_screen.dart';
 import 'challenge_submissions_screen.dart';
@@ -16,48 +17,84 @@ class AdminScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 6,
-      child: Scaffold(
-        backgroundColor: _bg,
-        appBar: AppBar(
-          backgroundColor: _bg,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          title: const Text('Admin Panel',
-              style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'ClashDisplay')),
-          bottom: TabBar(
-            indicatorColor: _accent,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white38,
-            labelStyle:
-                const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: const [
-              Tab(text: 'Pending'),
-              Tab(text: 'Requests'),
-              Tab(text: 'Live'),
-              Tab(text: 'Offers'),
-              Tab(text: 'All Subs'),
-              Tab(text: 'Reports'),
-            ],
+    // The Dashboard button that leads here already checks the backend
+    // `role`, but that's the only thing gating this screen (it has no
+    // check of its own) — and on older/other entry points into this widget
+    // that same visibility check has been implemented against a stale
+    // Firestore `isAdmin` flag tied to a Firebase Auth identity real users
+    // no longer sign into (auth is REST-based). Re-checking the real
+    // backend role here, every time this screen actually opens, means a
+    // wrong or stale caller can never reach the tabs below regardless of
+    // how they got here.
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: AuthApiService().getProfile(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Scaffold(
+            backgroundColor: _bg,
+            body: Center(child: CircularProgressIndicator(color: _accent)),
+          );
+        }
+        if (snap.data!['role'] != 'admin') {
+          return Scaffold(
+            backgroundColor: _bg,
+            appBar: AppBar(
+              backgroundColor: _bg,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            body: const Center(
+              child: Text(
+                'Admin access required',
+                style: TextStyle(color: Colors.white70, fontSize: 15),
+              ),
+            ),
+          );
+        }
+        return DefaultTabController(
+          length: 6,
+          child: Scaffold(
+            backgroundColor: _bg,
+            appBar: AppBar(
+              backgroundColor: _bg,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              title: const Text('Admin Panel',
+                  style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'ClashDisplay')),
+              bottom: TabBar(
+                indicatorColor: _accent,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white38,
+                labelStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: const [
+                  Tab(text: 'Pending'),
+                  Tab(text: 'Requests'),
+                  Tab(text: 'Live'),
+                  Tab(text: 'Offers'),
+                  Tab(text: 'All Subs'),
+                  Tab(text: 'Reports'),
+                ],
+              ),
+            ),
+            body: const TabBarView(
+              children: [
+                _PendingSubmissionsTab(),
+                _CreatorRequestTab(),
+                _LiveChallengesTab(),
+                AdminOffersScreen(),
+                ChallengeSubmissionsTab(),
+                _ReportsTab(),
+              ],
+            ),
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            _PendingSubmissionsTab(),
-            _CreatorRequestTab(),
-            _LiveChallengesTab(),
-            AdminOffersScreen(),
-            ChallengeSubmissionsTab(),
-            _ReportsTab(),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

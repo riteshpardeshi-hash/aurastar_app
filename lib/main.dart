@@ -9,9 +9,11 @@ import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/globals.dart';
+import 'core/services/analytics_service.dart';
 import 'core/services/api_client.dart';
 import 'core/services/auth_api_service.dart';
 import 'core/services/boot_gate.dart';
+import 'core/services/crash_reporter.dart';
 import 'core/services/challenges_service.dart';
 import 'core/utils/deep_link_validation.dart';
 import 'core/utils/push_message_text.dart';
@@ -44,6 +46,7 @@ void main() async {
     // running yet to recover from it).
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .timeout(const Duration(seconds: 10));
+    await CrashReporter.init();
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
@@ -79,8 +82,11 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _initDeepLinks();
-    _initPushTapHandling();
+    // Cold start: a link beats a push, which beats a plain launch.
+    Future.wait([_initDeepLinks(), _initPushTapHandling()]).then((r) {
+      final source = r[0] ? 'deeplink' : (r[1] ? 'push' : 'organic');
+      AnalyticsService().logAppOpen(source);
+    }, onError: (_) => AnalyticsService().logAppOpen('organic'));
     _sessionExpiredSub =
         ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
   }
@@ -100,15 +106,20 @@ class _MyAppState extends State<MyApp> {
   // safely branch on (NudgeTemplate.deepLinkScreen is admin-editable copy,
   // not a client contract — see ADR 042 in the backend repo), so guessing a
   // destination would be fragile.
-  Future<void> _initPushTapHandling() async {
+  // Returns whether the app was cold-started from a notification tap.
+  Future<bool> _initPushTapHandling() async {
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _openNotifications());
     }
     _notificationTapSub =
-        FirebaseMessaging.onMessageOpenedApp.listen((_) => _openNotifications());
+        FirebaseMessaging.onMessageOpenedApp.listen((_) {
+      AnalyticsService().logAppOpen('push');
+      _openNotifications();
+    });
     _foregroundMsgSub =
         FirebaseMessaging.onMessage.listen(_showForegroundMessage);
+    return initial != null;
   }
 
   void _showForegroundMessage(RemoteMessage message) {
@@ -153,14 +164,19 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  Future<void> _initDeepLinks() async {
+  // Returns whether the app was cold-started from a link.
+  Future<bool> _initDeepLinks() async {
     // Cold-start: app was opened via a link
     final initial = await _appLinks.getInitialLink();
     if (initial != null && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _handleLink(initial));
     }
     // Warm: app was already running when user tapped a link
-    _linkSub = _appLinks.uriLinkStream.listen(_handleLink, onError: (_) {});
+    _linkSub = _appLinks.uriLinkStream.listen((uri) {
+      AnalyticsService().logAppOpen('deeplink');
+      _handleLink(uri);
+    }, onError: (_) {});
+    return initial != null;
   }
 
   Future<void> _handleLink(Uri uri) async {
@@ -169,6 +185,7 @@ class _MyAppState extends State<MyApp> {
       return;
     }
     final segments = uri.pathSegments;
+    AnalyticsService().logDeepLinkOpen(target: segments[0], id: segments[1]);
 
     if (segments[0] == 'challenge') {
       final challengeId = segments[1];
@@ -178,16 +195,11 @@ class _MyAppState extends State<MyApp> {
         return;
       }
       final data = normaliseChallenge(raw);
-      // Wait for the boot screen's own post-boot navigation to land first
-      // (see BootGate) — otherwise its pushReplacement, which always
-      // replaces whatever is currently on top of the navigator stack, would
-      // silently discard this push if it happened to fire after us. The
-      // timeout is just a safety net (e.g. a force-update dialog blocking
-      // boot forever) so a deep link can never hang indefinitely.
       await BootGate.done.timeout(const Duration(seconds: 20), onTimeout: () {});
       if (!mounted) return;
       _navigatorKey.currentState?.push(MaterialPageRoute(
         builder: (_) => ChallengeDetail(
+          source: 'deep_link',
           challengeId: challengeId,
           title: data['title'] as String,
           instructions: data['instructions'] as String,
@@ -223,6 +235,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [AnalyticsRouteObserver()],
       scaffoldMessengerKey: _scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -261,9 +274,6 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-// Decides where the app lands (Dashboard/ProfileSetup/PhoneAuth) and gates
-// that decision on a force/soft update check, without a dedicated
-// onboarding screen — just a brief branded frame while the checks resolve.
 class _BootScreen extends StatefulWidget {
   const _BootScreen();
 
@@ -276,11 +286,6 @@ enum _VersionStatus { ok, softUpdate, forceUpdate }
 class _BootScreenState extends State<_BootScreen> {
   static const _currentBuild = 12;
 
-  // TEMPORARY diagnostics for the "stuck on boot" field report — some
-  // affected devices can't be reproduced under adb (remote tester, no
-  // physical/USB access), so this surfaces which await is still pending
-  // directly on-screen instead. Shown only after a 3s grace period so a
-  // normal fast boot never flashes it. Remove once the report is resolved.
   final _bootStopwatch = Stopwatch()..start();
   String _bootStep = 'starting';
   Timer? _diagTicker;
@@ -340,7 +345,8 @@ class _BootScreenState extends State<_BootScreen> {
           return const PhoneAuthScreen();
         },
       );
-    } catch (e) {
+    } catch (e, st) {
+      CrashReporter.recordError(e, st, reason: 'boot destination failed');
       // Safety net #2: .timeout() only guards against slowness — it does
       // nothing if a call throws outright instead of hanging (e.g. a
       // corrupted-Keystore PlatformException from secure storage on some
@@ -370,6 +376,7 @@ class _BootScreenState extends State<_BootScreen> {
 
     _setStep('reading local user id');
     final uid = await ApiClient().userId;
+    AnalyticsService().setUserId(uid);
     _setStep('loading local preferences');
     final prefs = await SharedPreferences.getInstance();
 

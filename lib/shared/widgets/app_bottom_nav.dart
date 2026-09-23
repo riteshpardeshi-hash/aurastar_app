@@ -1,3 +1,4 @@
+import '../../core/services/analytics_service.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/auth_api_service.dart';
 import '../../core/utils/nav_diag.dart';
@@ -69,13 +70,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     });
   }
 
-  // The four tab screens are kept permanently alive inside [MainShell]'s
-  // IndexedStack, so a tab switch is never a route push/rebuild — it's just
-  // asking the shell to reveal an already-built screen (no reload, no
-  // spinner). Any drill-down screen pushed on top of the shell renders its
-  // own AppBottomNav too; from there we first pop back down to the shell so
-  // it's on screen to receive the request. On the shell's own screens
-  // `popUntil(isFirst)` is a no-op.
   void _switchTab(BuildContext context, AppNavTab tab) {
     navDiag('AppBottomNav._switchTab: tap tab=$tab activeTab=${widget.activeTab} '
         'shellIndex=${tab.shellIndex}');
@@ -95,10 +89,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     navDiag('  -> MainShellController.select(${tab.shellIndex}) returned');
   }
 
-  // Width reserved in the centre of the row for the floating action button.
-  // The FAB's opaque hit box is [_fabSize] wide and sits inside this gap, so
-  // keeping the gap wider than the FAB stops the FAB from stealing taps that
-  // belong to the Search / Leaderboard slots on either side.
   static const _fabGap = 64.0;
   static const _fabSize = 56.0;
   static const _pillHeight = 62.0;
@@ -109,11 +99,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     navDiag('AppBottomNav.build: activeTab=${widget.activeTab} '
         'size=${mq.size} padding.bottom=${mq.padding.bottom} '
         'viewInsets.bottom=${mq.viewInsets.bottom} textScaler=${mq.textScaler}');
-    // Clamp text scaling for the bar only. The labels are 9px and the row has
-    // no room to grow: at the OS's larger font sizes the un-clamped row is
-    // wider than the pill, Flutter clips the overflow, and — the actual bug —
-    // pointer events are not delivered to the clipped-out region, so the last
-    // items (Leaderboard, Profile) stop responding to taps on some devices.
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.2,
       child: SafeArea(
@@ -148,12 +133,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
                         ),
                       ],
                     ),
-                    // Equal-width Expanded slots (not spaceAround) so the row
-                    // can never overflow the pill however narrow the device or
-                    // large the font — each slot just gets tighter and its
-                    // label ellipsises. Every slot is also full pill height, so
-                    // the tap target is the whole slot, not the ~36px glyph +
-                    // label stack it used to be (below the 48px min target).
                     child: Row(
                       children: [
                         Expanded(
@@ -187,11 +166,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
                     ),
                   ),
                 ),
-                // Floating centre button — opens the full-screen vertical
-                // challenge-video reel feed, for every role. Stretched full
-                // width and centred so its opaque hit box stays a fixed
-                // [_fabSize] square inside [_fabGap] and cannot overlap the
-                // slots on either side.
                 Positioned(
                   top: 0,
                   left: 0,
@@ -200,6 +174,7 @@ class _AppBottomNavState extends State<AppBottomNav> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
+                        AnalyticsService().logCenterFabClick();
                         navDiag('AppBottomNav: centre FAB tapped -> push reels');
                         Navigator.push(
                           context,

@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -189,6 +190,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         dateOfBirth: _dob,
       );
 
+      AnalyticsService().logOnboardingStep('profile', 1);
       if (!mounted) return;
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => const CityInterestsScreen()));

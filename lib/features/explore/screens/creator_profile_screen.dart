@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
+import '../../../core/services/analytics_service.dart';
+import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creators_service.dart';
 import '../../../core/services/screen_cache.dart';
@@ -13,7 +15,11 @@ import '../../video/widgets/video_player_widget.dart';
 class CreatorProfileScreen extends StatefulWidget {
   final String creatorId;
 
-  const CreatorProfileScreen({super.key, required this.creatorId});
+  /// Where the user came from (search, follow_list, ...), analytics only.
+  final String source;
+
+  const CreatorProfileScreen(
+      {super.key, required this.creatorId, this.source = 'unknown'});
 
   @override
   State<CreatorProfileScreen> createState() => _CreatorProfileScreenState();
@@ -41,9 +47,17 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   // count / follow state converge on that background refresh.
   String get _cacheKey => 'creator.${widget.creatorId}';
 
+  // Own-profile views are excluded (the sheet's viewer != profile rule).
+  Future<void> _logProfileView() async {
+    final me = await ApiClient().userId;
+    if (me == widget.creatorId) return;
+    AnalyticsService().logProfileView(widget.creatorId, widget.source);
+  }
+
   @override
   void initState() {
     super.initState();
+    _logProfileView();
     final cached = ScreenCache.read<Map<String, dynamic>>(_cacheKey);
     if (cached != null) {
       _creator = cached['creator'] as Map<String, dynamic>?;
@@ -185,6 +199,7 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
               context,
               MaterialPageRoute(
                 builder: (_) => ChallengeDetail(
+                  source: 'creator_page',
                   challengeId: c['id'] as String,
                   title: c['title'] as String? ?? '',
                   // ChallengeDetail fills these in from its own fetch.

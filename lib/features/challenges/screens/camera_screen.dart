@@ -6,7 +6,9 @@ import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/globals.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/video_cache_service.dart';
+import '../../../core/utils/video_diag.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../video/screens/preview_screen.dart';
 
@@ -56,6 +58,9 @@ class _CameraScreenState extends State<CameraScreen>
   // PreviewScreen so the review matches the selfie-mirrored camera preview.
   bool _lastRecordingWasFront = false;
   int _elapsed = 0; // seconds elapsed while recording
+  // A take was started and hasn't yet been carried to the review screen.
+  // If the screen is disposed in that state the user abandoned it.
+  bool _takeAwaitingReview = false;
   Timer? _timer;
 
   // Post-ghost auto-stop: once the ghost (reference) clip has played through
@@ -218,7 +223,15 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       await _ghostCtrl!.initialize();
     } catch (e) {
-      debugPrint('CameraScreen: ghost reference video failed to load: $e');
+      // Logged (not shown to the user) via debugPrint inside
+      // describeVideoFailure — grep device logs for `[videodiag]`.
+      describeVideoFailure(
+        e,
+        where: 'CameraScreen ghost',
+        url: widget.referenceVideoUrl,
+        fromCache: cachedPath != null,
+        playerError: _ghostCtrl?.value.errorDescription,
+      );
       if (mounted) setState(() => _ghostFailed = true);
       return;
     }
@@ -289,6 +302,8 @@ class _CameraScreenState extends State<CameraScreen>
 
   Future<void> _startRecording() async {
     await _cam!.startVideoRecording();
+    _takeAwaitingReview = true;
+    AnalyticsService().logRecordingStarted(widget.challengeId);
     // Re-assert mute right before playback starts: startVideoRecording()
     // just activated the device's audio-recording session (enableAudio:
     // true), which is a system-level audio route change. On both ExoPlayer
@@ -363,6 +378,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   void _goToPreview() {
     if (_videoFile == null) return;
+    _takeAwaitingReview = false;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -383,6 +399,9 @@ class _CameraScreenState extends State<CameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (_takeAwaitingReview) {
+      AnalyticsService().logRecordingCancelled(widget.challengeId, _elapsed);
+    }
     _timer?.cancel();
     _countdownTimer?.cancel();
     _cam?.dispose();
@@ -810,7 +829,10 @@ class _CameraScreenState extends State<CameraScreen>
                           active: !_ghostFailed && _ghostOn,
                           faded: _ghostFailed,
                           onTap: _ghostFailed
-                              ? null
+                              ? () => ScaffoldMessenger.of(context)
+                                  .showSnackBar(const SnackBar(
+                                      content: Text(
+                                          "The reference video overlay couldn't be loaded on this device.")))
                               : () => setState(() => _ghostOn = !_ghostOn),
                         ),
                       ),

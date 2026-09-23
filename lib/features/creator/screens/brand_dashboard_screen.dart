@@ -266,7 +266,7 @@ class BrandDashboardScreen extends StatelessWidget {
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => CreatorProfileScreen(creatorId: uid)),
+                  MaterialPageRoute(builder: (_) => CreatorProfileScreen(source: 'brand_dashboard', creatorId: uid)),
                 ),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),

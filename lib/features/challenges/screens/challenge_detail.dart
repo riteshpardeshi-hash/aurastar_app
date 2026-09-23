@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/api_client.dart';
@@ -10,6 +11,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/services/video_cache_service.dart';
 import '../../../core/services/video_prewarm_cache.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
+import '../../../core/utils/video_diag.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/app_text_styles.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
@@ -23,12 +25,17 @@ class ChallengeDetail extends StatefulWidget {
   final String videoUrl;
   final String challengeId;
 
+  /// Where the user opened this from (home, search, deep_link, ...), for
+  /// analytics only.
+  final String source;
+
   const ChallengeDetail({
     super.key,
     required this.title,
     required this.instructions,
     required this.videoUrl,
     required this.challengeId,
+    this.source = 'unknown',
   });
 
   @override
@@ -72,12 +79,24 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // Submissions
   Map<String, dynamic>? _mySubmission;
 
+  // Owner info for the challenge_view event, filled by _fetchChallengeData.
+  String? _ownerType;
+  String? _ownerId;
+
   @override
   void initState() {
     super.initState();
     // Opening the detail page is an unambiguous view of this challenge.
     ChallengeAnalyticsService().recordImpression(widget.challengeId);
-    _fetchChallengeData();
+    // Logged once the challenge fetch settles (success or failure) so the
+    // event can carry owner_type / owner_id; deliberately not gated on
+    // `mounted` — the view happened even if the user already backed out.
+    _fetchChallengeData().whenComplete(() => AnalyticsService().logChallengeView(
+          widget.challengeId,
+          source: widget.source,
+          ownerType: _ownerType,
+          ownerId: _ownerId,
+        ));
     _fetchSubmissions();
     // Start warming the reference-video cache immediately — by the time the
     // user reads the challenge, opens the rules sheet, and taps Record,
@@ -110,6 +129,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         return;
       }
       final c = normaliseChallenge(data);
+      _ownerType = c['sourceType'] as String?;
+      _ownerId = c['creatorId'] as String?;
       setState(() {
         // POST /challenges/{id}/submissions requires `status: approved`
         // (openapi.yaml) — anything else (pending/rejected/flagged) fails
@@ -186,6 +207,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   void _share() {
     ChallengeAnalyticsService().recordShare(widget.challengeId);
+    AnalyticsService().logShare(contentType: 'challenge', itemId: widget.challengeId);
     final link = '$kChallengeBaseUrl/${widget.challengeId}';
     Share.share(
       'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
@@ -233,7 +255,21 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
             videoPlayerOptions: options)
         : VideoPlayerController.networkUrl(Uri.parse(url),
             videoPlayerOptions: options);
-    await controller.initialize();
+    try {
+      await controller.initialize();
+    } catch (e) {
+      // Logged (not shown to the user) via debugPrint inside
+      // describeVideoFailure — grep device logs for `[videodiag]`.
+      describeVideoFailure(
+        e,
+        where: 'ChallengeDetail preview',
+        url: url,
+        fromCache: cachedPath != null,
+        playerError: controller.value.errorDescription,
+      );
+      controller.dispose();
+      rethrow;
+    }
     return controller;
   }
 
@@ -289,6 +325,18 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       try {
         _videoController = await _buildController(_videoUrl);
       } catch (_) {
+        // Previously left _videoStarted true / _videoInitialized false, i.e.
+        // an endless spinner with no way out. Reset so the play button comes
+        // back, and show a friendly message instead of the raw diagnostic
+        // dump (still logged via debugPrint inside describeVideoFailure —
+        // grep device logs for `[videodiag]`).
+        if (!mounted) return;
+        setState(() => _videoStarted = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  "This video couldn't be played on your device. Please try again.")),
+        );
         return;
       }
       if (!mounted) return;
@@ -1321,26 +1369,36 @@ class _ReportSheetState extends State<_ReportSheet> {
   String? _selected;
   bool _submitting = false;
 
+  // Maps the UI's display copy to the backend's `reason` enum for
+  // POST /challenges/{id}/report (see openapi.yaml).
+  static const _reasonCodes = {
+    'Inappropriate content': 'inappropriate',
+    'Misleading or false challenge': 'misleading',
+    'Spam or duplicate': 'spam',
+    'Dangerous or unsafe activity': 'dangerous',
+    'Other': 'other',
+  };
+
   Future<void> _submit() async {
     if (_selected == null || _submitting) return;
     setState(() => _submitting = true);
 
     try {
-      final uid = await ApiClient().userId;
-      await FirebaseFirestore.instance.collection('reports').add({
-        'challengeId': widget.challengeId,
-        'challengeTitle': widget.challengeTitle,
-        'reportedBy': uid ?? 'anonymous',
-        'reason': _selected,
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      final res = await ApiClient().post(
+        '/challenges/${widget.challengeId}/report',
+        {'reason': _reasonCodes[_selected] ?? 'other'},
+        auth: true,
+      );
+      final alreadyReported =
+          (res['data'] as Map<String, dynamic>?)?['alreadyReported'] == true;
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Report submitted. Thank you for your feedback.'),
+          content: Text(alreadyReported
+              ? "You've already reported this challenge. We're reviewing it."
+              : 'Report submitted. Thank you for your feedback.'),
           backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

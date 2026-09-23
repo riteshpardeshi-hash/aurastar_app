@@ -70,6 +70,8 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // See VideosService.isMirroredVideo / ADR 020.
+      'mirrored': VideosService.isMirroredVideo(s),
       'status': submissionStatusFromApi(submission),
       // See my_account_screen.dart's _normaliseSubmission: `/profile/videos`'s
       // nested `submission` omits `auraPoints`; openapi.yaml defines it as
@@ -189,6 +191,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
         final aiReason = data['aiReason'] as String;
         final reviewedByAI = data['reviewedByAI'] as bool;
         final videoId = data['videoId'] as String;
+        final mirrored = data['mirrored'] as bool? ?? false;
 
         final statusColor = _statusColor(status);
         final statusLabel = _statusLabel(status);
@@ -208,6 +211,7 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                   aiReason: aiReason,
                   reviewedByAI: reviewedByAI,
                   videoId: videoId,
+                  mirrored: mirrored,
                 ),
               ),
             );
@@ -221,7 +225,8 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                 VideoThumbnailWidget(
                     videoUrl: videoUrl,
                     thumbnailUrl: thumbnailUrl,
-                    fit: BoxFit.cover),
+                    fit: BoxFit.cover,
+                    mirrored: mirrored),
                 Positioned(
                   top: 6,
                   right: 6,

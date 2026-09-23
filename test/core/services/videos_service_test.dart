@@ -350,4 +350,68 @@ void main() {
       );
     });
   });
+
+  group('mirrored front-camera Android uploads (ADR 020)', () {
+    // Regression: My Videos / the video detail screen played a front-camera
+    // Android upload un-mirrored (the file's true orientation), which looks
+    // "backwards" next to what the user saw in the mirrored live preview and
+    // the mirrored review screen. There's no server field for this, so
+    // PreviewScreen calls markMirrored(videoId) right after a mirrored
+    // upload succeeds, and every other own-video screen checks
+    // isMirroredVideo before it existed — this covers that lookup surviving
+    // a relaunch and not false-positiving on an unrelated video.
+
+    test('markMirrored makes isMirroredVideo true for that id', () async {
+      await VideosService.markMirrored('vid-1');
+
+      expect(VideosService.isMirroredVideo({'videoId': 'vid-1'}), isTrue);
+      expect(VideosService.isMirroredVideo({'_id': 'vid-1'}), isTrue);
+      expect(VideosService.isMirroredVideo({'_id': 'other'}), isFalse);
+    });
+
+    test('a video never marked mirrored is not flagged', () {
+      expect(VideosService.isMirroredVideo({'videoId': 'vid-unmirrored'}),
+          isFalse);
+    });
+
+    test('an empty id is never flagged', () async {
+      await VideosService.markMirrored('');
+      expect(VideosService.isMirroredVideo({'videoId': ''}), isFalse);
+    });
+
+    test('the mirrored flag survives an app relaunch (persisted, not '
+        'session-only)', () async {
+      await VideosService.markMirrored('vid-relaunch');
+      expect(VideosService.isMirroredVideo({'_id': 'vid-relaunch'}), isTrue);
+
+      // Simulate a cold start: in-memory set + hydration future are gone,
+      // but SharedPreferences (the mock store) persists across the
+      // "relaunch".
+      VideosService.resetLocallyDeletedForTest();
+      expect(VideosService.isMirroredVideo({'_id': 'vid-relaunch'}), isFalse,
+          reason: 'nothing in memory yet before hydrate()');
+
+      await VideosService.hydrate();
+      expect(VideosService.isMirroredVideo({'_id': 'vid-relaunch'}), isTrue,
+          reason: 'hydrate() must restore the id marked before the relaunch');
+    });
+
+    test('marking mirrored before the grid is opened keeps ids persisted '
+        'earlier', () async {
+      // First launch: mark A, then relaunch.
+      await VideosService.markMirrored('vid-A');
+      VideosService.resetLocallyDeletedForTest();
+
+      // Second launch: mark B straight from PreviewScreen, without ever
+      // opening the grid (so hydrate() wasn't called first by a caller).
+      await VideosService.markMirrored('vid-B');
+
+      VideosService.resetLocallyDeletedForTest();
+      await VideosService.hydrate();
+      expect(VideosService.isMirroredVideo({'_id': 'vid-A'}), isTrue,
+          reason: 'markMirrored must not overwrite ids from an earlier '
+              'launch');
+      expect(VideosService.isMirroredVideo({'_id': 'vid-B'}), isTrue);
+    });
+  });
 }

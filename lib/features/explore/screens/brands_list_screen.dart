@@ -140,7 +140,7 @@ class _BrandsListScreenState extends State<BrandsListScreen> {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => BrandProfileScreen(brandId: brand['id'] as String),
+              builder: (_) => BrandProfileScreen(source: 'explore_brands', brandId: brand['id'] as String),
             ),
           ),
         );

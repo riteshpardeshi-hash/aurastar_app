@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -172,6 +173,8 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
           'Think you can beat me? Now it\'s your turn! 💪\n\n'
           '👉 $link';
 
+      AnalyticsService()
+          .logShare(contentType: 'challenge_result', itemId: widget.challengeId);
       if (bytes != null) {
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
@@ -305,6 +308,29 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted) setState(() => _isCreator = v);
     });
+    // This screen stays mounted forever inside MainShell's IndexedStack
+    // (ADR 011) — a delete from AllVideosScreen ("VIEW ALL", a fresh push
+    // with no callback on return) never touches our `_videos` state, so the
+    // Profile preview grid kept showing already-deleted videos until the
+    // next pull-to-refresh or app relaunch. Re-filter in place whenever any
+    // screen deletes a video instead.
+    VideosService.deletionTick.addListener(_onVideoDeletedElsewhere);
+  }
+
+  @override
+  void dispose() {
+    VideosService.deletionTick.removeListener(_onVideoDeletedElsewhere);
+    super.dispose();
+  }
+
+  void _onVideoDeletedElsewhere() {
+    if (!mounted) return;
+    final filtered =
+        _videos.where((v) => !VideosService.isDeletedVideo(v)).toList();
+    if (filtered.length != _videos.length) {
+      setState(() => _videos = filtered);
+      _cacheBundle();
+    }
   }
 
   void _cacheBundle() {
@@ -428,6 +454,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
+      // See VideosService.isMirroredVideo / ADR 020.
+      'mirrored': VideosService.isMirroredVideo(s),
       'status': submissionStatusFromApi(submission),
       // `/profile/videos`'s nested `submission` object omits `auraPoints`
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
@@ -654,6 +682,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           _showCreatorGateSheet(context, points);
           return;
         }
+        AnalyticsService().logAuraCreatorJoinClick('profile_banner');
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
@@ -982,7 +1011,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final current = (_streak!['currentStreak'] as num?)?.toInt() ?? 0;
     final longest = (_streak!['longestStreak'] as num?)?.toInt() ?? 0;
     final completed = (_streak!['completedStreaks'] as num?)?.toInt() ?? 0;
-    if (current == 0 && longest == 0) return const SizedBox.shrink();
 
     // Streaks run in 7-day cycles (completing one grants the bonus), so show
     // progress toward 7 — "0/7" when the streak has lapsed.
@@ -1256,12 +1284,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           ],
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () => Share.share(
+            onTap: () {
+              AnalyticsService().logShare(contentType: 'referral');
+              Share.share(
               '🎯 Join Aura Arena — copy viral challenges and earn real rewards!\n\n'
               'Use my referral code: $referralCode\n\n'
               '👉 $link\n\n'
               'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
-            ),
+              );
+            },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1433,6 +1464,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               final aiReason = data['aiReason'] as String;
               final reviewedByAI = data['reviewedByAI'] as bool;
               final videoId = data['videoId'] as String;
+              final mirrored = data['mirrored'] as bool? ?? false;
 
               final statusColor = _statusColor(status);
               final statusLabel = _statusLabel(status);
@@ -1453,6 +1485,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         aiReason: aiReason,
                         reviewedByAI: reviewedByAI,
                         videoId: videoId,
+                        mirrored: mirrored,
                       ),
                     ),
                   );
@@ -1466,7 +1499,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       VideoThumbnailWidget(
                           videoUrl: videoUrl,
                           thumbnailUrl: thumbnailUrl,
-                          fit: BoxFit.cover),
+                          fit: BoxFit.cover,
+                          mirrored: mirrored),
                       Positioned(
                         top: 6,
                         right: 6,

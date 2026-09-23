@@ -1,12 +1,13 @@
+import '../../../core/services/analytics_service.dart';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/apple_sign_in_error.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/legal_consent_text.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../shell/main_shell.dart';
@@ -60,7 +61,11 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
     );
   }
 
-  void _navigateAfterAuth(bool isNewUser, Map<String, dynamic> user) {
+  void _navigateAfterAuth(
+      bool isNewUser, Map<String, dynamic> user, String method) {
+    isNewUser
+        ? AnalyticsService().logSignUp(method)
+        : AnalyticsService().logLogin(method);
     final isProfileComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
     Navigator.pushReplacement(
       context,
@@ -91,7 +96,7 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
 
       final result = await AuthApiService().signInWithGoogle(idToken);
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user);
+      _navigateAfterAuth(result.isNewUser, result.user, 'google');
     } catch (e) {
       if (mounted) setState(() => _loading = null);
       _showError('Google sign-in failed. Please try again.');
@@ -119,7 +124,7 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         authorizationCode: authCode,
       );
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user);
+      _navigateAfterAuth(result.isNewUser, result.user, 'apple');
     } catch (e) {
       // The user dismissing the Apple sheet throws canceled here instead of
       // returning null the way GoogleSignIn().signIn() does — treat it the
@@ -549,38 +554,7 @@ class _PrivacySheet extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Policy link
-          RichText(
-            textAlign: TextAlign.center,
-            text: TextSpan(
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.40), fontSize: 12),
-              children: [
-                const TextSpan(text: 'By continuing you agree to our '),
-                TextSpan(
-                  text: 'Privacy Policy',
-                  style: const TextStyle(
-                      color: _accent,
-                      decoration: TextDecoration.underline,
-                      decorationColor: _accent),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () {
-                      // Deep-link or in-app WebView would go here.
-                      // For now, acknowledge with a snack.
-                    },
-                ),
-                const TextSpan(text: ' and '),
-                TextSpan(
-                  text: 'Terms of Service',
-                  style: const TextStyle(
-                      color: _accent,
-                      decoration: TextDecoration.underline,
-                      decorationColor: _accent),
-                  recognizer: TapGestureRecognizer()..onTap = () {},
-                ),
-                const TextSpan(text: '.'),
-              ],
-            ),
-          ),
+          const LegalConsentText(accent: _accent),
 
           const SizedBox(height: 20),
 

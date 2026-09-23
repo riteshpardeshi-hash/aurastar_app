@@ -1,6 +1,11 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import '../../../core/services/crash_reporter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/utils/error_message.dart';
+import '../../../core/utils/legal_links.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import 'notification_preferences_screen.dart';
@@ -14,6 +19,10 @@ class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   static const _bg = Color(0xFF080810);
+
+  // Release builds only show the test-crash tile when built with
+  // `--dart-define=CRASH_TEST=true`, so it never ships to real users.
+  static const _crashTestEnabled = bool.fromEnvironment('CRASH_TEST');
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +94,24 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _showHelpSheet(context),
           ),
           const SizedBox(height: 24),
+          _section('Legal'),
+          for (final doc in LegalLinks.all)
+            _tile(
+              context,
+              icon: Icons.description_outlined,
+              label: doc.title,
+              onTap: () async {
+                final ok = await LegalLinks.open(doc);
+                if (!ok && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content:
+                            Text('Could not open the page. Try again later.')),
+                  );
+                }
+              },
+            ),
+          const SizedBox(height: 24),
           _section('Debug'),
           _tile(
             context,
@@ -116,6 +143,14 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (kDebugMode || _crashTestEnabled)
+            _tile(
+              context,
+              icon: Icons.warning_amber_rounded,
+              label: 'Send test crash (Crashlytics)',
+              color: Colors.orangeAccent,
+              onTap: CrashReporter.testCrash,
+            ),
           const SizedBox(height: 24),
           _section('Danger Zone'),
           _tile(
@@ -131,6 +166,13 @@ class SettingsScreen extends StatelessWidget {
             label: 'Logout of All Devices',
             color: Colors.redAccent,
             onTap: () => _logoutAll(context),
+          ),
+          _tile(
+            context,
+            icon: Icons.delete_forever_rounded,
+            label: 'Delete Account',
+            color: Colors.redAccent,
+            onTap: () => _deleteAccount(context),
           ),
         ],
       ),
@@ -220,6 +262,7 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
+    AnalyticsService().logLogout();
     await Future.wait([
       AuthApiService().logout(),
       FirebaseAuth.instance.signOut(),
@@ -273,12 +316,215 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  // `DELETE /profile` (ADR 098) — required for App Store / Play Store
+  // compliance whenever an app supports account creation (Apple Guideline
+  // 5.1.1(v)). The dialog pops the typed reason (possibly empty string) on
+  // confirm, or null on cancel/dismiss — enough to tell "confirmed with a
+  // blank reason" apart from "backed out" without a dedicated result type.
+  Future<void> _deleteAccount(BuildContext context) async {
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (reason == null || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+    );
+
+    DateTime? scheduledFor;
+    Object? error;
+    try {
+      scheduledFor =
+          await AuthApiService().deleteAccount(reason: reason.isEmpty ? null : reason);
+    } catch (e) {
+      error = e;
+    }
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss the spinner
+
+    if (error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(humanizeError(error))));
+      return;
+    }
+
+    AnalyticsService().logAccountDeletionRequested();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AccountDeletedScreen(scheduledFor: scheduledFor),
+      ),
+      (route) => false,
+    );
+  }
+
   void _showHelpSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => const _HelpSheet(),
+    );
+  }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _reasonController = TextEditingController();
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF12102A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('Delete Account',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "This signs you out and deactivates your account right away. "
+              "Your account and data are then permanently deleted after a "
+              "short grace period — logging back in before then cancels the "
+              "deletion and restores everything. After the grace period "
+              "ends, this can't be undone.",
+              style: TextStyle(color: AppColors.textMuted, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _reasonController,
+              maxLength: 500,
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Tell us why (optional)',
+                hintStyle: const TextStyle(color: AppColors.textFaint),
+                counterStyle: const TextStyle(color: AppColors.textFaint),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel',
+              style: TextStyle(color: AppColors.textMuted)),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, _reasonController.text.trim()),
+          child: const Text('Delete Account',
+              style: TextStyle(
+                  color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+}
+
+class _AccountDeletedScreen extends StatelessWidget {
+  final DateTime? scheduledFor;
+  const _AccountDeletedScreen({this.scheduledFor});
+
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  String _formatDate(DateTime d) {
+    final local = d.toLocal();
+    return '${_months[local.month - 1]} ${local.day}, ${local.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final date = scheduledFor;
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF080810),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle_outline_rounded,
+                    color: AppColors.accent, size: 64),
+                const SizedBox(height: 20),
+                const Text(
+                  'Account deletion requested',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  date == null
+                      ? "You've been signed out. Your account will be "
+                          'permanently deleted after a short grace period '
+                          'unless you log back in before then.'
+                      : "You've been signed out. Your account will be "
+                          'permanently deleted on ${_formatDate(date)} '
+                          'unless you log back in before then — logging in '
+                          'cancels the deletion.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: AppColors.textMuted, height: 1.5, fontSize: 14),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () => Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+                      (route) => false,
+                    ),
+                    child: const Text('Done',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

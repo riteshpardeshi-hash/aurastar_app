@@ -517,6 +517,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                           MaterialPageRoute(
                             builder:
                                 (_) => ChallengeDetail(
+                                  source: 'leaderboard',
                                   title: _challengeTitle,
                                   instructions: _challengeInstructions,
                                   videoUrl: _challengeVideoUrl,

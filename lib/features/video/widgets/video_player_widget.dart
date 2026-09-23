@@ -18,11 +18,19 @@ class VideoPlayerWidget extends StatefulWidget {
   /// videos (reels, challenge reference clips) that may genuinely be landscape.
   final bool forcePortrait;
 
+  /// Horizontally flips playback. Set for the current user's own
+  /// front-camera Android takes (see ADR 020 / VideosService.isMirroredVideo)
+  /// — the uploaded file is deliberately left un-mirrored so other viewers
+  /// and the AI scorer see the true orientation, but a screen playing the
+  /// video back to its owner should match what they saw while recording.
+  final bool mirrored;
+
   const VideoPlayerWidget(
     this.url, {
     super.key,
     this.thumbnailUrl,
     this.forcePortrait = false,
+    this.mirrored = false,
   });
 
   @override
@@ -82,6 +90,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             videoUrl: widget.url,
             thumbnailUrl: widget.thumbnailUrl,
             fit: BoxFit.cover,
+            mirrored: widget.mirrored,
           ),
         if (_ready)
           AnimatedOpacity(
@@ -92,7 +101,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                 aspectRatio: widget.forcePortrait
                     ? portraitPreviewAspectRatio(_ctrl.value)
                     : correctedVideoAspectRatio(_ctrl.value),
-                child: VideoPlayer(_ctrl),
+                child: widget.mirrored
+                    ? Transform.scale(scaleX: -1, child: VideoPlayer(_ctrl))
+                    : VideoPlayer(_ctrl),
               ),
             ),
           ),

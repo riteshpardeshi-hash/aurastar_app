@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/videos_service.dart';
@@ -16,6 +17,10 @@ class UserVideoDetailScreen extends StatefulWidget {
   final bool reviewedByAI;
   final String videoId;
 
+  /// See VideoPlayerWidget.mirrored / ADR 020 — set for this user's own
+  /// front-camera Android takes so playback matches what they saw recording.
+  final bool mirrored;
+
   const UserVideoDetailScreen({
     super.key,
     required this.videoNumber,
@@ -27,6 +32,7 @@ class UserVideoDetailScreen extends StatefulWidget {
     this.aiScore,
     this.aiReason = '',
     this.reviewedByAI = false,
+    this.mirrored = false,
   });
 
   @override
@@ -37,6 +43,7 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   bool _deleting = false;
 
   void _share() {
+    AnalyticsService().logShare(contentType: 'video');
     Share.share('Check out my video submission on Aura! 🌟\n${widget.videoUrl}');
   }
 
@@ -152,7 +159,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
                 height: MediaQuery.of(context).size.height * 0.65,
                 width: double.infinity,
                 color: Colors.black,
-                child: VideoPlayerWidget(widget.videoUrl, forcePortrait: true),
+                child: VideoPlayerWidget(
+                  widget.videoUrl,
+                  forcePortrait: true,
+                  mirrored: widget.mirrored,
+                ),
               ),
             ),
             const SizedBox(height: 16),

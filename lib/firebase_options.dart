@@ -16,19 +16,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDVmwdSSseDJmzzlByIkxoVU_ntDHtBqv4',
-    appId: '1:811866690532:android:62e310bfbc8874febeadf1',
-    messagingSenderId: '811866690532',
-    projectId: 'aura-app-efae1',
-    storageBucket: 'aura-app-efae1.firebasestorage.app',
+    apiKey: 'AIzaSyB-lb81HJelY2OgRuFkZzy4cU8WIl9t9BA',
+    appId: '1:25395482877:android:e94031b57d65c8ff7cee94',
+    messagingSenderId: '25395482877',
+    projectId: 'aura-arena-81e92',
+    storageBucket: 'aura-arena-81e92.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAdM2UmCmz52uqbEvsgOg9L0cDb0U9KoG8',
-    appId: '1:811866690532:ios:0d337176b241531fbeadf1',
-    messagingSenderId: '811866690532',
-    projectId: 'aura-app-efae1',
-    storageBucket: 'aura-app-efae1.firebasestorage.app',
-    iosBundleId: 'com.example.auraApp',
+    apiKey: 'AIzaSyDL0vr8SykzlmwC3SWacPWnrORJ4bhH6FE',
+    appId: '1:25395482877:ios:8eaa36c354cd511b7cee94',
+    messagingSenderId: '25395482877',
+    projectId: 'aura-arena-81e92',
+    storageBucket: 'aura-arena-81e92.firebasestorage.app',
+    iosBundleId: 'com.onadsgroup.auraapp',
   );
 }

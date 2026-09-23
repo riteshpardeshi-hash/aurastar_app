@@ -151,6 +151,7 @@ Widget _challengeCard(
       context,
       MaterialPageRoute(
         builder: (_) => ChallengeDetail(
+          source: 'community_feed',
           title: title,
           instructions: instructions,
           videoUrl: videoUrl,
@@ -311,6 +312,7 @@ class _FeaturedHeroCardState extends State<_FeaturedHeroCard> {
         context,
         MaterialPageRoute(
           builder: (_) => ChallengeDetail(
+            source: 'community_feed',
             title: c['title'] as String,
             instructions: c['instructions'] as String,
             videoUrl: c['videoUrl'] as String,
@@ -463,6 +465,7 @@ class _BannersCarouselState extends State<_BannersCarousel> {
               context,
               MaterialPageRoute(
                 builder: (_) => ChallengeDetail(
+                  source: 'community_feed',
                   title: title ?? '',
                   instructions: subtitle ?? '',
                   videoUrl: '',
@@ -475,14 +478,14 @@ class _BannersCarouselState extends State<_BannersCarousel> {
           if (linkId != null) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => BrandProfileScreen(brandId: linkId)),
+              MaterialPageRoute(builder: (_) => BrandProfileScreen(source: 'community_feed', brandId: linkId)),
             );
           }
         case 'creator':
           if (linkId != null) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => CreatorProfileScreen(creatorId: linkId)),
+              MaterialPageRoute(builder: (_) => CreatorProfileScreen(source: 'community_feed', creatorId: linkId)),
             );
           }
         case 'external':

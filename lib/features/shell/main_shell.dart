@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/services/analytics_service.dart';
 import '../../core/utils/nav_diag.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../account/screens/my_account_screen.dart';
@@ -43,6 +44,8 @@ class _MainShellState extends State<MainShell> {
     AppNavTab.profile,
   ];
 
+  static const _tabScreenNames = ['home', 'challenges', 'leaderboard', 'profile'];
+
   static int _instanceSeq = 0;
   final int _instanceId = ++_instanceSeq;
 
@@ -60,6 +63,7 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _selectSub = MainShellController.instance.onSelect.listen(_selectTab);
+    AnalyticsService().logScreen(_tabScreenNames[_tab]);
     navDiag('MainShell#$_instanceId initState: subscribed, tab=$_tab');
   }
 
@@ -78,6 +82,7 @@ class _MainShellState extends State<MainShell> {
       return;
     }
     setState(() => _tab = i);
+    AnalyticsService().logScreen(_tabScreenNames[i]);
     navDiag('  -> setState: tab is now $i');
   }
 
@@ -85,15 +90,33 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     navDiag('MainShell#$_instanceId build: tab=$_tab '
         'activeTab=${_tabs[_tab]} textScale=${MediaQuery.textScalerOf(context)}');
-    return Scaffold(
-      backgroundColor: const Color(0xFF080810),
-      // A plain IndexedStack, switched instantly: all four pages stay
-      // mounted, so revealing one is a single frame with no rebuild and no
-      // re-fetch. Wrapping this in an AnimatedSwitcher would mount two
-      // IndexedStacks over the same page elements mid-transition and lose
-      // their state — the point here is that state is never lost.
-      body: IndexedStack(index: _tab, children: _pages),
-      bottomNavigationBar: AppBottomNav(activeTab: _tabs[_tab]),
+    // The four tab roots (Home, Search, Leaderboard, Profile) have no
+    // in-app back button, and MainShell is normally the only route on the
+    // navigator stack (post-login/post-submit flows land here via
+    // pushAndRemoveUntil — see ADR 019). With no PopScope, the system back
+    // button on any tab fell straight through to the default "no route to
+    // pop -> exit the app" behavior, so switching to Search/Leaderboard/
+    // Profile and pressing back exited instead of returning to Home, the
+    // same way every other bottom-nav app behaves. Only Home itself still
+    // exits on back — that part was never broken.
+    return PopScope(
+      canPop: _tab == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        navDiag('MainShell#$_instanceId: back pressed on tab=$_tab '
+            '-> switching to Home instead of exiting');
+        _selectTab(0);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF080810),
+        // A plain IndexedStack, switched instantly: all four pages stay
+        // mounted, so revealing one is a single frame with no rebuild and no
+        // re-fetch. Wrapping this in an AnimatedSwitcher would mount two
+        // IndexedStacks over the same page elements mid-transition and lose
+        // their state — the point here is that state is never lost.
+        body: IndexedStack(index: _tab, children: _pages),
+        bottomNavigationBar: AppBottomNav(activeTab: _tabs[_tab]),
+      ),
     );
   }
 }

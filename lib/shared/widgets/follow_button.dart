@@ -1,3 +1,4 @@
+import '../../core/services/analytics_service.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/creators_service.dart';
@@ -77,6 +78,11 @@ class _FollowButtonState extends State<FollowButton> {
       await (wasFollowing
           ? unfollow(widget.targetUserId)
           : follow(widget.targetUserId));
+      AnalyticsService().logFollow(
+        targetId: widget.targetUserId,
+        targetType: widget.followFn == null ? 'creator' : 'brand',
+        following: !wasFollowing,
+      );
       if (mounted) setState(() => _following = !wasFollowing);
       widget.onChanged?.call(!wasFollowing);
     } catch (e) {

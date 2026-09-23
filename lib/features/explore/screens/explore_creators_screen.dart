@@ -103,7 +103,7 @@ class _ExploreCreatorsScreenState extends State<ExploreCreatorsScreen> {
             context,
             MaterialPageRoute(
               builder: (_) =>
-                  CreatorProfileScreen(creatorId: creator['id'] as String),
+                  CreatorProfileScreen(source: 'explore_creators', creatorId: creator['id'] as String),
             ),
           ),
         );

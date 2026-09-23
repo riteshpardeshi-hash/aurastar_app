@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/analytics_service.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'create_creator_profile_screen.dart';
@@ -155,11 +156,15 @@ class _BecomeCreatorScreenState extends State<BecomeCreatorScreen> {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const CreateCreatorProfileScreen()),
-                      ),
+                      onPressed: () {
+                        AnalyticsService()
+                            .logAuraCreatorJoinClick('become_creator');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const CreateCreatorProfileScreen()),
+                        );
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _accent,
                         foregroundColor: Colors.white,

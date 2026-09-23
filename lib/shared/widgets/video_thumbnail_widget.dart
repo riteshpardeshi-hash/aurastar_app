@@ -53,11 +53,18 @@ class VideoThumbnailWidget extends StatefulWidget {
 
   final BoxFit fit;
 
+  /// Horizontally flips the rendered frame. Set for a front-camera Android
+  /// take (see ADR 020 / VideosService.isMirroredVideo) whose stored file is
+  /// un-mirrored, so the extracted/backend thumbnail needs the same flip
+  /// PreviewScreen applies to match what the user saw while recording.
+  final bool mirrored;
+
   const VideoThumbnailWidget({
     super.key,
     required this.videoUrl,
     this.thumbnailUrl,
     this.fit = BoxFit.cover,
+    this.mirrored = false,
   });
 
   @override
@@ -191,7 +198,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
       // re-fetches) and, crucially, is keyed on `cacheKey` — the stable
       // unsigned URL — not the presigned `imageUrl`, so a re-signed URL for
       // the same image is a cache hit instead of a fresh download.
-      return CachedNetworkImage(
+      return _maybeMirror(CachedNetworkImage(
         imageUrl: widget.thumbnailUrl!,
         cacheKey: assetCacheKey(widget.thumbnailUrl!),
         fit: widget.fit,
@@ -199,15 +206,20 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         fadeInDuration: const Duration(milliseconds: 120),
         placeholder: (_, __) => const VideoThumbnailSkeleton(),
         errorWidget: (_, __, ___) => _fallback(),
-      );
+      ));
     }
 
     if (_bytes != null) {
-      return Image.memory(_bytes!, fit: widget.fit, gaplessPlayback: true);
+      return _maybeMirror(
+          Image.memory(_bytes!, fit: widget.fit, gaplessPlayback: true));
     }
 
     return _fallback();
   }
+
+  Widget _maybeMirror(Widget child) => widget.mirrored
+      ? Transform.scale(scaleX: -1, child: child)
+      : child;
 
   Widget _fallback() => Container(
         decoration: _gradient,

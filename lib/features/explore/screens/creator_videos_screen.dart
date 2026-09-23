@@ -139,7 +139,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
           () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CreatorProfileScreen(creatorId: id),
+              builder: (_) => CreatorProfileScreen(source: 'creator_videos', creatorId: id),
             ),
           ),
       child: Container(
@@ -492,6 +492,7 @@ class _CreatorVideosScreenState extends State<CreatorVideosScreen> {
       MaterialPageRoute(
         builder:
             (_) => ChallengeDetail(
+              source: 'creator_videos',
               title: title,
               instructions: instructions,
               videoUrl: videoUrl,
@@ -571,7 +572,7 @@ class _CreatorNameChip extends StatelessWidget {
               () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => CreatorProfileScreen(creatorId: creatorId),
+                  builder: (_) => CreatorProfileScreen(source: 'creator_videos', creatorId: creatorId),
                 ),
               ),
           child: Row(

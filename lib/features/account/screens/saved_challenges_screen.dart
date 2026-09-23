@@ -197,6 +197,7 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ChallengeDetail(
+          source: 'saved',
           title: title,
           instructions: instructions,
           videoUrl: videoUrl,

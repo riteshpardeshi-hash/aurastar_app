@@ -239,7 +239,7 @@ class CreatorHomeScreen extends StatelessWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => CreatorProfileScreen(creatorId: uid)),
+                      builder: (_) => CreatorProfileScreen(source: 'creator_home', creatorId: uid)),
                 ),
                 child: Container(
                   padding:

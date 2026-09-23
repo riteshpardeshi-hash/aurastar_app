@@ -472,6 +472,7 @@ class _ChallengeCard extends StatelessWidget {
             MaterialPageRoute(
               builder:
                   (_) => ChallengeDetail(
+                    source: 'challenges_tab',
                     title: title,
                     instructions: instructions,
                     videoUrl: videoUrl,

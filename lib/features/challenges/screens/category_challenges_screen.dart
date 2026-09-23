@@ -269,6 +269,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
             MaterialPageRoute(
               builder:
                   (_) => ChallengeDetail(
+                    source: 'category',
                     title: title,
                     instructions: instructions,
                     videoUrl: videoUrl,

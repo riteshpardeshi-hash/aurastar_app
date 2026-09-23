@@ -167,6 +167,36 @@ class AuthApiService {
     await _client.clearSession();
   }
 
+  /// Self-service account deletion (`DELETE /profile`, ADR 098) — the
+  /// backend's own description calls this "required for App Store / Play
+  /// Store compliance whenever an app supports account creation" (Apple
+  /// Guideline 5.1.1(v)). Deactivates the account and revokes every refresh
+  /// token immediately; the backend then hard-deletes it
+  /// `deletionScheduledFor` (a configurable grace period, 15 days by
+  /// default) later, unless the user logs back in before then — that alone
+  /// cancels the pending deletion server-side, no separate client call
+  /// needed. [reason] is optional free text kept only for the audit trail.
+  ///
+  /// Returns the scheduled hard-delete date so the UI can tell the user
+  /// when it's final, or null if the backend didn't send one.
+  Future<DateTime?> deleteAccount({String? reason}) async {
+    // Must run before clearSession() — deregistering needs the still-valid
+    // access token, same ordering as logout()/logoutAll().
+    await PushNotificationService().deregisterCurrentDevice();
+    final res = await _client.delete(
+      '/profile',
+      auth: true,
+      body: (reason == null || reason.isEmpty) ? null : {'reason': reason},
+    );
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Failed to delete account';
+    }
+    await _client.clearSession();
+    // Per the spec this sits at the envelope's top level, not under `data`.
+    final raw = res['deletionScheduledFor'] as String?;
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
   Future<void> updateProfile({
     required String gender,
     String? displayName,

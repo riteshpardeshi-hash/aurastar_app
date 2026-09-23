@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/services/analytics_service.dart';
 import '../../core/services/api_client.dart';
 import '../../core/services/auth_api_service.dart';
 import '../../core/services/connectivity_probe.dart';
@@ -29,19 +30,11 @@ import '../../core/utils/error_message.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 
-// Exponential backoff for Dashboard's profile-load auto-retry: 8s, 16s,
-// 32s, 60s (capped), for attempt numbers 1, 2, 3, 4+. Extracted as a top-
-// level function so the schedule itself is directly unit-testable without
-// having to drive a full widget test through real (fake-clock) Timers and
-// a rejecting Future, which is exactly the kind of test that's fragile in
-// this codebase's Flutter-test harness.
 int profileAutoRetryDelaySeconds(int attemptNumber) {
   return (8 * (1 << (attemptNumber - 1))).clamp(0, 60);
 }
 
 class Dashboard extends StatefulWidget {
-  /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
-  /// one shared bottom nav and the in-header back arrow is dropped.
   final bool embeddedInShell;
 
   const Dashboard({super.key, this.embeddedInShell = false});
@@ -54,8 +47,6 @@ class _DashboardState extends State<Dashboard> {
   String? _lastKnownTier;
   bool _atRiskAlertShown = false;
 
-  // Shared across the Hero/Brand Videos/Trending/Banners sections so they
-  // don't each fire their own REST call (and re-fetch on every rebuild).
   late final Future<List<Map<String, dynamic>>> _challengesFuture =
       ChallengesService()
           .fetchChallenges(limit: 20)
@@ -68,22 +59,7 @@ class _DashboardState extends State<Dashboard> {
   String? _profileUserId;
   Future<Map<String, dynamic>>? _profileFuture;
   Timer? _profilePollTimer;
-  // Cold-start network hiccups (e.g. connectivity not fully up yet right as
-  // the app launches) can make the very first profile fetch fail with no
-  // underlying persistent problem. Retry automatically so that doesn't
-  // strand the user on an error screen.
-  //
-  // This used to be a single fixed 2s retry — fine for a one-off blip, but
-  // on a connection that's persistently bad (confirmed: users see this even
-  // on strong wifi, not just flaky mobile data) it meant the error screen
-  // flashed away and back every ~2s, on top of the unrelated 20s freshness
-  // poll below also re-triggering a fetch — making the app feel like it was
-  // "constantly popping up" this screen rather than quietly waiting out a
-  // bad stretch. Exponential backoff (8s, 16s, 32s, capped at 60s) capped at
-  // a handful of automatic attempts is far less naggy; past that, the user's
-  // own Retry tap takes over. Reset whenever a new user session starts or a
-  // load actually succeeds, so a later transient failure gets the full
-  // budget again instead of starting already-maxed-out.
+
   int _autoRetryCount = 0;
   static const _maxAutoRetries = 4;
   Timer? _autoRetryTimer;
@@ -94,20 +70,10 @@ class _DashboardState extends State<Dashboard> {
   @override
   void initState() {
     super.initState();
-    // There's no REST equivalent of Firestore's live `users/{uid}` stream,
-    // so poll periodically to keep points/level-up detection reasonably
-    // fresh (e.g. after a challenge is scored while this screen is open).
     _profilePollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       final uid = _profileUserId;
-      // Skip while an error-driven backoff retry is already scheduled —
-      // firing both would double up two retries on the same failing
-      // request instead of the one, gentler cadence backoff is meant to be.
       if (uid != null && _autoRetryTimer == null) _loadProfile(uid);
     });
-    // Fire-and-forget: requests OS push permission and registers/refreshes
-    // the device token with the backend. Dashboard is only ever reached
-    // once authenticated, so this doubles as "run once per session start"
-    // for both a cold-start already-logged-in user and a fresh login.
     PushNotificationService().initialize();
   }
 
@@ -130,11 +96,6 @@ class _DashboardState extends State<Dashboard> {
     try {
       return await _fetchDashboardProfileOnce(userId);
     } catch (e) {
-      // A single failed request isn't reliable evidence the backend is
-      // actually unreachable — see ConnectivityProbe's doc comment. Only
-      // commit to the "couldn't reach servers" error once repeated pings
-      // confirm it; a false alarm gets one immediate silent retry instead
-      // of ever surfacing that screen for what was really just a blip.
       if (isNetworkError(e) && !(await ConnectivityProbe.confirmUnreachable())) {
         return _fetchDashboardProfileOnce(userId);
       }
@@ -144,11 +105,6 @@ class _DashboardState extends State<Dashboard> {
 
   Future<Map<String, dynamic>> _fetchDashboardProfileOnce(
       String userId) async {
-    // fetchStreak() still swallows its own failures to null (streak is
-    // decorative — default to day 0 rather than fail the whole screen over
-    // it). The profile leg uses getProfileOrThrow() so a real failure
-    // reason survives to the error screen below instead of collapsing into
-    // a generic "no internet" message regardless of cause.
     final results = await Future.wait([
       AuthApiService().getProfileOrThrow(),
       AuthApiService().fetchStreak(),
@@ -176,9 +132,6 @@ class _DashboardState extends State<Dashboard> {
         (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
-    // The backend doesn't debit Aura when a video is deleted; VideosService
-    // holds the lost points locally and we subtract them here. Level/tier
-    // below stay on the server's own values.
     await VideosService.hydrate();
     final points = VideosService.adjustBalanceForDeletedVideos(serverPoints);
     // Server-computed and authoritative — do not recompute level/tier from
@@ -187,6 +140,9 @@ class _DashboardState extends State<Dashboard> {
     final tierName = profile['tier'] as String?;
     final streakDay = (streak?['currentStreak'] as num?)?.toInt() ?? 0;
     final lastStreakDate = deriveLastStreakDate(streak);
+    AnalyticsService()
+      ..setUserProperty('user_level', '$level')
+      ..setUserProperty('account_type', role ?? 'player');
 
     return {
       'points': points,
@@ -220,8 +176,6 @@ class _DashboardState extends State<Dashboard> {
             displayName: 'Guest',
             username: '',
             photoUrl: '',
-            streakDay: 0,
-            lastStreakDate: '',
           );
         }
         if (_profileUserId != userId) {
@@ -270,11 +224,6 @@ class _DashboardState extends State<Dashboard> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      // Only the connectivity-flavored exceptions get the
-                      // generic "couldn't reach servers" copy — anything
-                      // else (a real backend error, a bad response shape,
-                      // etc.) shows its actual reason instead of being
-                      // misreported as a connection problem.
                       networkIssue
                           ? humanizeError(error)
                           : 'Failed to load profile: ${humanizeError(error)}',
@@ -300,16 +249,10 @@ class _DashboardState extends State<Dashboard> {
           );
         }
 
-        // A load just succeeded — give a future transient failure the full
-        // retry budget again instead of picking up already-maxed-out.
         _autoRetryCount = 0;
 
         final data = snap.data!;
         final points = data['points'] as int;
-        // `role` is the backend's source of truth (player/brand/admin/creator)
-        // — an admin can promote a user straight to `creator` via RBAC without
-        // a `/creator/page` record ever existing, so gate on this, not on
-        // whether a creator page was ever created.
         final role = data['role'] as String?;
         final isAdmin = role == 'admin';
         final isBrand = role == 'brand' || role == 'creator' || isAdmin;
@@ -323,9 +266,6 @@ class _DashboardState extends State<Dashboard> {
         final tierName = data['tierName'] as String?;
         final newTier = auraTierForName(tierName);
 
-        // Compare the server's own tier string across fetches (not a
-        // locally-guessed level threshold) — a real tier upgrade is exactly
-        // when this string moves later in the tiers list.
         if (_lastKnownTier != null && _lastKnownTier != tierName) {
           final oldTier = auraTierForName(_lastKnownTier);
           if (auraTiers.indexOf(newTier) > auraTiers.indexOf(oldTier)) {
@@ -400,8 +340,6 @@ class _DashboardState extends State<Dashboard> {
           displayName: displayName,
           username: username,
           photoUrl: photoUrl,
-          streakDay: streakDay,
-          lastStreakDate: lastStreakDate,
         );
       },
     );
@@ -419,8 +357,6 @@ class _DashboardState extends State<Dashboard> {
     required String displayName,
     required String username,
     required String photoUrl,
-    required int streakDay,
-    required String lastStreakDate,
   }) {
     final tier = auraTierForName(tierName, level: level);
 
@@ -444,9 +380,6 @@ class _DashboardState extends State<Dashboard> {
                       photoUrl,
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(
-                  child: _buildStreakBanner(streakDay, lastStreakDate),
                 ),
                 const SliverToBoxAdapter(child: _PendingUploadBanner()),
                 SliverToBoxAdapter(child: _buildHeroSection(context)),
@@ -496,13 +429,6 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
 
-          // ── Name + Points + bell ──────────────────────
-          // Everything right of the logo, packed to the right margin and
-          // vertically centred. The @username Text is Flexible so a long
-          // name ellipsises; the pill and bell keep their size. NB: a
-          // Flexible inside a MainAxisSize.min Row collapses to zero width —
-          // that trap is why an earlier version showed no username — so this
-          // is an Expanded row aligned to its end instead.
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -577,177 +503,6 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Streak Banner ──────────────────────────────────────────────────────────
-  Widget _buildStreakBanner(int streakDay, String lastStreakDate) {
-    final now = DateTime.now();
-    final todayStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final yesterday = now.subtract(const Duration(days: 1));
-    final yesterdayStr =
-        '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
-
-    final qualifiedToday = lastStreakDate == todayStr;
-    final qualifiedYesterday = lastStreakDate == yesterdayStr;
-    final bonusJustCredited = streakDay == 0 && qualifiedToday;
-
-    // Broken: had an active streak but missed at least one full day
-    final broken =
-        streakDay > 0 &&
-        !qualifiedToday &&
-        !qualifiedYesterday &&
-        lastStreakDate.isNotEmpty;
-
-    // At risk: after 7 pm, streak active, haven't played today yet
-    final atRisk =
-        !broken && streakDay > 0 && !qualifiedToday && now.hour >= 19;
-
-    if (streakDay == 0 && !bonusJustCredited) return const SizedBox.shrink();
-
-    final displayDay = bonusJustCredited ? 7 : streakDay;
-    const streakColor = Color(0xFFFF6B35);
-
-    // State-driven appearance
-    late Color borderColor;
-    late Color labelColor;
-    late String emoji;
-    late String label;
-
-    if (broken) {
-      borderColor = const Color(0xFFFF4444).withValues(alpha: 0.45);
-      labelColor = const Color(0xFFFF6B6B);
-      emoji = '💔';
-      label = 'Streak broken — play today to start a new one!';
-    } else if (bonusJustCredited) {
-      borderColor = streakColor.withValues(alpha: 0.50);
-      labelColor = streakColor;
-      emoji = '🎉';
-      label = '7-Day Streak complete! +50 Auras awarded';
-    } else if (atRisk) {
-      borderColor = Colors.amber.withValues(alpha: 0.65);
-      labelColor = Colors.amber;
-      emoji = '⚠️';
-      label = 'Streak ends at midnight — play now to save it!';
-    } else if (qualifiedToday) {
-      borderColor = streakColor.withValues(alpha: 0.40);
-      labelColor = streakColor;
-      emoji = '🔥';
-      label = 'Day $displayDay/7 — keep it up!';
-    } else {
-      borderColor = streakColor.withValues(alpha: 0.20);
-      labelColor = AppColors.textMuted;
-      emoji = '🔥';
-      label = 'Day $displayDay/7 — play a challenge to continue';
-    }
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0820),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Day dot tracker ──────────────────────────────────────
-                Row(
-                  children: List.generate(7, (i) {
-                    final dayNum = i + 1;
-                    final isCompleted =
-                        broken
-                            ? false
-                            : (dayNum < displayDay ||
-                                (dayNum == displayDay &&
-                                    (qualifiedToday || bonusJustCredited)));
-                    final isCurrent =
-                        !broken &&
-                        !bonusJustCredited &&
-                        dayNum == displayDay &&
-                        !qualifiedToday;
-                    final isPast = broken && dayNum <= displayDay;
-
-                    Color dotBg;
-                    Border? dotBorder;
-                    Widget dotChild;
-
-                    if (isPast) {
-                      dotBg = const Color(0xFFFF4444).withValues(alpha: 0.18);
-                      dotChild = const Icon(
-                        Icons.close_rounded,
-                        color: Color(0xFFFF6B6B),
-                        size: 11,
-                      );
-                    } else if (isCompleted) {
-                      dotBg = streakColor;
-                      dotChild = const Icon(
-                        Icons.local_fire_department_rounded,
-                        color: Colors.white,
-                        size: 12,
-                      );
-                    } else if (isCurrent) {
-                      dotBg = Colors.transparent;
-                      dotBorder = Border.all(
-                        color: atRisk ? Colors.amber : streakColor,
-                        width: 1.5,
-                      );
-                      dotChild = Text(
-                        '$dayNum',
-                        style: TextStyle(
-                          color: atRisk ? Colors.amber : streakColor,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    } else {
-                      dotBg = Colors.white.withValues(alpha: 0.06);
-                      dotChild = Text(
-                        '$dayNum',
-                        style: const TextStyle(
-                          color: Colors.white24,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    }
-
-                    return Expanded(
-                      child: Container(
-                        margin: EdgeInsets.only(right: i < 6 ? 4 : 0),
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: dotBg,
-                          shape: BoxShape.circle,
-                          border: dotBorder,
-                        ),
-                        child: Center(child: dotChild),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 7),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: labelColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    fontFamily: 'SpaceGrotesk',
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Hero Section ───────────────────────────────────────────────────────────
   Widget _buildHeroSection(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
@@ -788,6 +543,7 @@ class _DashboardState extends State<Dashboard> {
                       MaterialPageRoute(
                         builder:
                             (_) => ChallengeDetail(
+                              source: 'home',
                               title: title,
                               instructions: instructions,
                               videoUrl: videoUrl,
@@ -889,13 +645,15 @@ class _DashboardState extends State<Dashboard> {
             children: [
               const Text('Brand Videos', style: AppTextStyles.sectionHeader),
               GestureDetector(
-                onTap:
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const BrandsListScreen(),
-                      ),
+                onTap: () {
+                  AnalyticsService().logExploreBrandsClick();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BrandsListScreen(),
                     ),
+                  );
+                },
                 child: const Text(
                   'See All >',
                   style: TextStyle(
@@ -943,6 +701,7 @@ class _DashboardState extends State<Dashboard> {
                                       MaterialPageRoute(
                                         builder:
                                             (_) => ChallengeDetail(
+                                              source: 'home',
                                               title: title,
                                               instructions: instructions,
                                               videoUrl: videoUrl,
@@ -1026,6 +785,7 @@ class _DashboardState extends State<Dashboard> {
                                           MaterialPageRoute(
                                             builder:
                                                 (_) => ChallengeDetail(
+                                                  source: 'home',
                                                   title: title,
                                                   instructions: description,
                                                   videoUrl: videoUrl,
@@ -1152,6 +912,7 @@ class _DashboardState extends State<Dashboard> {
                                   MaterialPageRoute(
                                     builder:
                                         (_) => ChallengeDetail(
+                                          source: 'home',
                                           title: title,
                                           instructions: instructions,
                                           videoUrl: videoUrl,
@@ -1209,10 +970,6 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Endless challenges grid ───────────────────────────────────────────────
-  // Loops the same 20 challenges already fetched for the sections above
-  // (no extra network calls — this is not pagination) indefinitely via
-  // modulo indexing, purely so the dashboard's scroll has real depth
-  // instead of stopping dead right after Trending Videos.
   Widget _buildEndlessChallengesHeader(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -1324,6 +1081,7 @@ class _DashboardState extends State<Dashboard> {
                                 (_) =>
                                     creatorId.isNotEmpty
                                         ? CreatorProfileScreen(
+                                          source: 'home',
                                           creatorId: creatorId,
                                         )
                                         : const CreatorVideosScreen(),
@@ -1486,6 +1244,7 @@ class _EndlessChallengeCard extends StatelessWidget {
         context,
         MaterialPageRoute(
           builder: (_) => ChallengeDetail(
+            source: 'home',
             title: title,
             instructions: instructions,
             videoUrl: videoUrl,
@@ -1562,11 +1321,6 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
     );
   }
 
-  // The "X" looks like a routine dismiss-this-notification action, but it
-  // was wired to UploadQueueService.clear() — permanently discarding the
-  // only reference to the recorded video (and any Aura points it would have
-  // earned) with no way back. Confirm first so closing the banner can't be
-  // mistaken for a harmless "hide this" tap.
   Future<void> _confirmDiscard() async {
     final confirmed = await showDialog<bool>(
       context: context,

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import 'analytics_service.dart';
 import 'screen_cache.dart';
 
 class ApiClient {
@@ -95,6 +96,7 @@ class ApiClient {
       _storage.write(key: _kRefresh, value: refreshToken),
       _storage.write(key: _kUserId, value: userId),
     ]);
+    AnalyticsService().setUserId(userId);
   }
 
   Future<void> clearSession() {
@@ -103,6 +105,7 @@ class ApiClient {
     // account to sign in never briefly sees the previous user's profile,
     // leaderboard position, etc.
     ScreenCache.clear();
+    AnalyticsService().setUserId(null);
     return _storage.deleteAll();
   }
 
@@ -215,17 +218,23 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> delete(String path, {bool auth = false}) async {
+  Future<Map<String, dynamic>> delete(
+    String path, {
+    bool auth = false,
+    Map<String, dynamic>? body,
+  }) async {
     var headers = auth ? await _authedHeaders() : _baseHeaders;
     debugPrint('[API] DELETE ${ApiConfig.baseUrl}$path');
     var res = await httpClient
-        .delete(_uri(path), headers: headers)
+        .delete(_uri(path),
+            headers: headers, body: body == null ? null : jsonEncode(body))
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
     if (res.statusCode == 401 && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
-          .delete(_uri(path), headers: headers)
+          .delete(_uri(path),
+              headers: headers, body: body == null ? null : jsonEncode(body))
           .timeout(_timeout);
       debugPrint('[API] Retry ${res.statusCode} ${res.body}');
     }

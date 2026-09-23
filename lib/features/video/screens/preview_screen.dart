@@ -3,9 +3,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
+import '../../../core/services/analytics_service.dart';
+import '../../../core/services/crash_reporter.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/upload_queue_service.dart';
+import '../../../core/services/videos_service.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
@@ -159,8 +162,12 @@ class _PreviewScreenState extends State<PreviewScreen> {
       _progress = 0;
     });
 
+    var stage = 'presign';
+    final uploadWatch = Stopwatch()..start();
     try {
       final service = ChallengesService();
+      AnalyticsService().logUploadStarted(widget.challengeId,
+          fileSizeBytes: await File(widget.videoPath).length());
 
       // Step 1: get presigned S3 URL + claim an unclaimed Video placeholder
       final presign = await service.presignSubmission(widget.challengeId);
@@ -168,6 +175,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       final videoId = presign['videoId'] as String;
 
       // Step 2: upload directly to S3
+      stage = 'upload';
       await ApiClient().uploadToS3(
         uploadUrl,
         File(widget.videoPath),
@@ -183,6 +191,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
       // _scoringTimeout (90s) — swap to the full-screen "Aura Sense"
       // animation for this wait instead of leaving the progress bar frozen
       // at 95% with no explanation of what's happening.
+      AnalyticsService().logUploadSucceeded(widget.challengeId,
+          durationMs: uploadWatch.elapsedMilliseconds);
+      stage = 'submission';
       if (mounted) {
         setState(() => _uploadState = _UploadState.scoring);
         _player.pause();
@@ -192,6 +203,13 @@ class _PreviewScreenState extends State<PreviewScreen> {
       final submission = result.submission;
 
       await UploadQueueService.clear();
+      // The uploaded file itself stays un-mirrored (ADR 020), but nothing in
+      // the /profile/videos response says so — record it locally, keyed by
+      // this video's id, so My Videos / the video detail screen can flip
+      // playback the same way this review screen just did.
+      if (widget.mirrored) await VideosService.markMirrored(videoId);
+      AnalyticsService().logSubmissionUploaded(widget.challengeId);
+      _logScoringOutcome(submission, result.levelUp);
 
       if (!mounted) return;
       setState(() => _uploadState = _UploadState.done);
@@ -250,6 +268,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
           );
       }
     } catch (e, st) {
+      if (e is! SocketException &&
+          e is! TimeoutException &&
+          e is! http.ClientException &&
+          e is! String) {
+        // Not a network problem or a server-worded rejection — an unexpected
+        // error in the upload path worth seeing in Crashlytics.
+        CrashReporter.recordError(e, st, reason: 'upload failed ($stage)');
+      }
+      AnalyticsService().logUploadFailed(
+        widget.challengeId,
+        stage: stage,
+        reason: e is TimeoutException
+            ? 'timeout'
+            : (e is SocketException || e is http.ClientException)
+                ? 'network'
+                : e is String
+                    ? 'rejected'
+                    : 'other',
+      );
       debugPrint('[Upload] failed: $e\n$st');
       if (!mounted) return;
       // A dropped/stalled connection can surface as any of these — not just
@@ -273,6 +310,25 @@ class _PreviewScreenState extends State<PreviewScreen> {
       // Only auto-retry connectivity failures — server-rejected requests
       // (e.g. incomplete profile) will just fail the same way again.
       if (isNetworkError) _startAutoRetry();
+    }
+  }
+
+  void _logScoringOutcome(
+      Map<String, dynamic> submission, Map<String, dynamic>? levelUp) {
+    final a = AnalyticsService();
+    final points = (submission['auraPoints'] as num?)?.toInt() ?? 0;
+    a.logSubmissionStatus(
+      challengeId: widget.challengeId,
+      status: submissionStatusFromApi(submission),
+      score: (submission['aiScore'] as num?)?.toInt() ?? 0,
+      points: points,
+    );
+    if (points > 0) {
+      a.logPointsAwarded(challengeId: widget.challengeId, amount: points);
+    }
+    if (levelUp != null) {
+      final to = levelUp['toLevel'] ?? levelUp['level'] ?? levelUp['newLevel'];
+      a.logLevelUp(toLevel: to is num ? to.toInt() : null);
     }
   }
 

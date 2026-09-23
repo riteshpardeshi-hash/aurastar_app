@@ -1,3 +1,4 @@
+import '../../../core/services/analytics_service.dart';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -84,6 +85,8 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
             await image.toByteData(format: ui.ImageByteFormat.png);
         bytes = byteData?.buffer.asUint8List();
       }
+      AnalyticsService()
+          .logShare(contentType: 'challenge_result', itemId: widget.challengeId);
       if (bytes != null) {
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
