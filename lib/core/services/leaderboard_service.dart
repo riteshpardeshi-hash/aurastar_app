@@ -9,12 +9,6 @@ class LeaderboardService {
   }) =>
       _fetch('/leaderboard', page: page, limit: limit, auth: true);
 
-  Future<List<Map<String, dynamic>>> fetchFriends({
-    int page = 1,
-    int limit = 20,
-  }) =>
-      _fetch('/leaderboard/friends', page: page, limit: limit, auth: true);
-
   // No fetchChallenge() here — GET /leaderboard/challenge/{id} is empirically
   // broken (confirmed against the live backend: it returns an empty
   // `responses` array for challenges that have real, scored public
