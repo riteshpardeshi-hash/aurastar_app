@@ -44,6 +44,11 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
+  // Streak feature disabled for now (product decision). Gates the banner's
+  // call site and the at-risk alert below; fetchStreak() and the data itself
+  // are left running so re-enabling later is just flipping this back.
+  static const _streakFeatureEnabled = false;
+
   String? _lastKnownTier;
   bool _atRiskAlertShown = false;
 
@@ -309,7 +314,10 @@ class _DashboardState extends State<Dashboard> {
         _lastKnownTier = tierName;
 
         // At-risk streak alert: show once per session after 7 pm
-        if (!_atRiskAlertShown && streakDay > 0 && DateTime.now().hour >= 19) {
+        if (_streakFeatureEnabled &&
+            !_atRiskAlertShown &&
+            streakDay > 0 &&
+            DateTime.now().hour >= 19) {
           final now = DateTime.now();
           final todayStr =
               '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -422,9 +430,7 @@ class _DashboardState extends State<Dashboard> {
                       ),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: _buildStreakBanner(streakDay, lastStreakDate),
-                  ),
+                  // Streak banner disabled for now — see _buildStreakBanner.
                   const SliverToBoxAdapter(child: _PendingUploadBanner()),
                   // Admin-curated Featured carousel (backend ADR 092) — auto-
                   // advances, each card slides in from the left; renders nothing
@@ -557,6 +563,10 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Streak Banner ──────────────────────────────────────────────────────────
+  // Feature disabled for now (product decision) — the call site below is
+  // skipped rather than this method deleted, since fetchStreak() and the
+  // underlying data are still wanted for a later re-enable.
+  // ignore: unused_element
   Widget _buildStreakBanner(int streakDay, String lastStreakDate) {
     final now = DateTime.now();
     final todayStr =

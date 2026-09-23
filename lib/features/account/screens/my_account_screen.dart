@@ -1018,6 +1018,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   // ── Streak card ───────────────────────────────────────────────────────────────
+  // Feature disabled for now (product decision) — the call site above is
+  // skipped rather than this method deleted, since fetchStreak() and the
+  // underlying data are still wanted for a later re-enable.
+  // ignore: unused_element
   Widget _buildStreakCard() {
     if (_streak == null) return const SizedBox.shrink();
     final current = (_streak!['currentStreak'] as num?)?.toInt() ?? 0;
@@ -1694,7 +1698,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 _buildBecomeCreatorBanner(context, totalRewards),
               ],
               _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
-              _buildStreakCard(),
+              // Streak card disabled for now — see _buildStreakCard.
               _buildRewardsRow(context),
               const SizedBox(height: 8),
               _buildReferralCard(context),
