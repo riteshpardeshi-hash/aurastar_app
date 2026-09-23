@@ -32,12 +32,21 @@ class PreviewScreen extends StatefulWidget {
   /// as others' cameras see it. See ADR 026.
   final bool mirrored;
 
+  /// CameraScreen's own route, passed down so a successful submission can
+  /// remove it from the stack (see [_PreviewScreenState._doUpload]) — without
+  /// this, CameraScreen survives underneath with its already-uploaded
+  /// [videoPath] still in [CameraScreen._videoFile], and pressing back from
+  /// the result screen lands on a "ready to submit" camera screen for a take
+  /// that's already been scored, letting the user resubmit the same video.
+  final Route<dynamic>? cameraRoute;
+
   const PreviewScreen({
     super.key,
     required this.videoPath,
     required this.challengeTitle,
     required this.challengeId,
     this.mirrored = false,
+    this.cameraRoute,
   });
 
   @override
@@ -83,6 +92,28 @@ class _PreviewScreenState extends State<PreviewScreen> {
     _player.addListener(() {
       if (mounted) setState(() => _isPlaying = _player.value.isPlaying);
     });
+  }
+
+  bool _auraSenseArtPrecached = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // AuraSenseLoadingView / AuraSubmittedPopup's "analysing" screen both
+    // show this same large (4325x7721) diamond image the moment upload
+    // starts. Left to Image.asset's normal lazy decode, it stayed blank for
+    // a visible beat after the screen appeared while the percent counter
+    // and trivia — which start animating immediately — were already moving,
+    // making the diamond look like it "comes in late". Warming the decode
+    // now, while the user is still reviewing the clip (well before Submit),
+    // means it's already cached by the time either screen needs it.
+    if (!_auraSenseArtPrecached) {
+      _auraSenseArtPrecached = true;
+      precacheImage(
+        const AssetImage('assets/images/analysing/Asset 132.png'),
+        context,
+      );
+    }
   }
 
   @override
@@ -266,6 +297,14 @@ class _PreviewScreenState extends State<PreviewScreen> {
               ),
             ),
           );
+          // Also drop CameraScreen from the stack — otherwise it survives
+          // underneath, still holding this now-submitted take, and backing
+          // out of the result screen would land on a camera screen that
+          // looks ready to submit the same video again.
+          final cameraRoute = widget.cameraRoute;
+          if (cameraRoute != null && cameraRoute.isActive) {
+            Navigator.of(context).removeRoute(cameraRoute);
+          }
       }
     } catch (e, st) {
       if (e is! SocketException &&

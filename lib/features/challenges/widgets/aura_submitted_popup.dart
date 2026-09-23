@@ -452,6 +452,30 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                   ),
                 ),
           if (!isSummary) Container(color: Colors.black.withValues(alpha: 0.35)),
+          // Small close button: with barrierDismissible false and no
+          // PopScope, this screen had no way out at all besides the retry
+          // action, leaving a user who just wanted to move on stuck here.
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).pop('continue'),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  ),
+                ),
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),

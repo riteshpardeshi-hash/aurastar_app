@@ -379,6 +379,7 @@ class _CameraScreenState extends State<CameraScreen>
   void _goToPreview() {
     if (_videoFile == null) return;
     _takeAwaitingReview = false;
+    final myRoute = ModalRoute.of(context);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -390,6 +391,10 @@ class _CameraScreenState extends State<CameraScreen>
           // mirrored; flip the review playback back so it matches what the
           // user just saw. iOS already records the front camera mirrored.
           mirrored: Platform.isAndroid && _lastRecordingWasFront,
+          // Lets PreviewScreen remove this screen from the stack on a
+          // successful submit, instead of leaving it underneath still
+          // holding this now-submitted take (see PreviewScreen.cameraRoute).
+          cameraRoute: myRoute,
         ),
       ),
     );

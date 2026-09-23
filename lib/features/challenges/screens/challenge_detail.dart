@@ -83,6 +83,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   String? _ownerType;
   String? _ownerId;
 
+  // Anchors the iOS/iPadOS share-sheet popover to the actual button instead
+  // of an unset origin — see _share().
+  final _shareButtonKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -206,15 +210,34 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // and the old Firestore write had no Firebase Auth session backing it for
   // REST-API authenticated users, so it silently failed every time.
 
-  void _share() {
+  Future<void> _share() async {
     ChallengeAnalyticsService().recordShare(widget.challengeId);
     AnalyticsService().logShare(contentType: 'challenge', itemId: widget.challengeId);
     final link = '$kChallengeBaseUrl/${widget.challengeId}';
-    Share.share(
-      'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
-      'Think you can complete it? 💪\n\n'
-      '👉 $link',
-    );
+    try {
+      // sharePositionOrigin anchors the share-sheet popover on iPad/Mac and
+      // has no documented effect on iPhone, but omitting it is also the one
+      // change several reported "share sheet silently does nothing on iOS"
+      // issues against this plugin were traced to — cheap and harmless to
+      // always supply. Previously this call was unguarded fire-and-forget,
+      // so any PlatformException from it (this is the only Share.share call
+      // in the app not already wrapped) had nowhere to surface at all.
+      final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      final origin = box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size;
+      await Share.share(
+        'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
+        'Think you can complete it? 💪\n\n'
+        '👉 $link',
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open the share sheet: $e')),
+      );
+    }
   }
 
   void _showReportSheet() {
@@ -645,6 +668,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                   ),
                   const SizedBox(width: 4),
                   IconButton(
+                    key: _shareButtonKey,
                     onPressed: _share,
                     icon: const Icon(Icons.share_rounded,
                         color: Colors.white, size: 20),
