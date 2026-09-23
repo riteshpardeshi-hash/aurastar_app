@@ -932,15 +932,22 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         children: [
                           // The circle's own edge IS the progress bar — how much of
                           // the current level's Aura the user has earned so far.
+                          // Always the app's own accent purple, not tier.color: the
+                          // Rookie tier's color (a flat mid-grey) made the ring nearly
+                          // invisible against this card's dark background even when
+                          // pct was computed correctly — the ring read as "broken"
+                          // when it was really just a contrast problem. The inner
+                          // badge below still uses tier.color for its glow/gradient
+                          // and tier-name text, so tiers stay visually distinct there.
                           SizedBox(
                             width: 80,
                             height: 80,
                             child: CircularProgressIndicator(
                               key: const Key('levelProgressRing'),
                               value: pct,
-                              strokeWidth: 3.5,
-                              backgroundColor: tier.color.withValues(alpha: 0.18),
-                              valueColor: AlwaysStoppedAnimation<Color>(tier.color),
+                              strokeWidth: 4.5,
+                              backgroundColor: _accent.withValues(alpha: 0.20),
+                              valueColor: const AlwaysStoppedAnimation<Color>(_accent),
                             ),
                           ),
                           Container(
