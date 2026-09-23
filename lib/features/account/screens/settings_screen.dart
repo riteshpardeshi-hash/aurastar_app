@@ -1,10 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../../../core/services/crash_reporter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/services/analytics_service.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../core/services/auth_api_service.dart';
-import '../../../core/utils/error_message.dart';
 import '../../../core/utils/legal_links.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
@@ -13,6 +14,7 @@ import '../../auth/screens/phone_auth_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
+import '../../../core/config/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -85,6 +87,12 @@ class SettingsScreen extends StatelessWidget {
                   builder: (_) => const NotificationPreferencesScreen()),
             ),
           ),
+          _tile(
+            context,
+            icon: Icons.download_outlined,
+            label: 'Export My Data',
+            onTap: () => _exportMyData(context),
+          ),
           const SizedBox(height: 24),
           _section('Support'),
           _tile(
@@ -151,6 +159,18 @@ class SettingsScreen extends StatelessWidget {
               color: Colors.orangeAccent,
               onTap: CrashReporter.testCrash,
             ),
+          _tile(
+            context,
+            icon: Icons.dns_outlined,
+            label: 'API server',
+            subtitle: ApiConfig.isCompileTimePinned
+                ? '${ApiConfig.baseUrl}  (pinned via --dart-define)'
+                : ApiConfig.baseUrl,
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => const _ApiServerDialog(),
+            ),
+          ),
           const SizedBox(height: 24),
           _section('Danger Zone'),
           _tile(
@@ -166,6 +186,13 @@ class SettingsScreen extends StatelessWidget {
             label: 'Logout of All Devices',
             color: Colors.redAccent,
             onTap: () => _logoutAll(context),
+          ),
+          _tile(
+            context,
+            icon: Icons.pause_circle_outline_rounded,
+            label: 'Deactivate Account',
+            color: Colors.redAccent,
+            onTap: () => _deactivateAccount(context),
           ),
           _tile(
             context,
@@ -198,21 +225,32 @@ class SettingsScreen extends StatelessWidget {
     required String label,
     required VoidCallback onTap,
     Color? color,
+    String? subtitle,
   }) {
     final c = color ?? Colors.white;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E0E20),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white10),
       ),
-      child: ListTile(
-        leading: Icon(icon, color: c, size: 22),
-        title: Text(label, style: TextStyle(color: c, fontSize: 15)),
-        trailing: Icon(Icons.chevron_right_rounded,
-            color: Colors.white24, size: 20),
-        onTap: onTap,
+      // Material (not a bare DecoratedBox color) so ListTile's ink/splash and
+      // its subtitle-layout assertions have a proper backing surface.
+      child: Material(
+        color: const Color(0xFF0E0E20),
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          leading: Icon(icon, color: c, size: 22),
+          title: Text(label, style: TextStyle(color: c, fontSize: 15)),
+          subtitle: subtitle == null
+              ? null
+              : Text(subtitle,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          trailing: Icon(Icons.chevron_right_rounded,
+              color: Colors.white24, size: 20),
+          onTap: onTap,
+        ),
       ),
     );
   }
@@ -316,50 +354,197 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // `DELETE /profile` (ADR 098) — required for App Store / Play Store
-  // compliance whenever an app supports account creation (Apple Guideline
-  // 5.1.1(v)). The dialog pops the typed reason (possibly empty string) on
-  // confirm, or null on cancel/dismiss — enough to tell "confirmed with a
-  // blank reason" apart from "backed out" without a dedicated result type.
-  Future<void> _deleteAccount(BuildContext context) async {
-    final reason = await showDialog<String>(
+  // Reversible any time by simply logging back in (ADR 022/098) — unlike
+  // Delete Account this has no scheduled endpoint, so a single confirm is
+  // enough, same weight as Logout/Logout of All Devices.
+  Future<void> _deactivateAccount(BuildContext context) async {
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => const _DeleteAccountDialog(),
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF12102A),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Deactivate Account',
+            style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'Your profile and content are hidden and you\'ll be signed out '
+            'everywhere. Log back in any time to reactivate — nothing is '
+            'deleted.',
+            style: TextStyle(color: AppColors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Deactivate',
+                style: TextStyle(
+                    color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
-    if (reason == null || !context.mounted) return;
+    if (ok != true || !context.mounted) return;
 
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-
-    DateTime? scheduledFor;
-    Object? error;
     try {
-      scheduledFor =
-          await AuthApiService().deleteAccount(reason: reason.isEmpty ? null : reason);
+      await AuthApiService().deactivateAccount();
+      await FirebaseAuth.instance.signOut();
     } catch (e) {
-      error = e;
-    }
-    if (!context.mounted) return;
-    Navigator.of(context, rootNavigator: true).pop(); // dismiss the spinner
-
-    if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(humanizeError(error))));
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t deactivate account: $e')),
+        );
+      }
       return;
     }
-
-    AnalyticsService().logAccountDeletionRequested();
+    if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => _AccountDeletedScreen(scheduledFor: scheduledFor),
-      ),
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
       (route) => false,
     );
+  }
+
+  // Required by App Store Guideline 5.1.1(v) and Google Play's account
+  // deletion policy: self-service, in-app, no support ticket required.
+  // Two steps — an explanation of what's kept vs. removed (mirrors the
+  // hosted Privacy Policy §5), then a typed "DELETE" confirmation — since
+  // unlike Logout this is (eventually) irreversible.
+  Future<void> _deleteAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    DateTime? scheduledFor;
+    try {
+      scheduledFor = await AuthApiService().deleteAccount();
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t delete account: $e')),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    Navigator.pop(context); // dismiss the spinner
+    AnalyticsService().logAccountDeletionRequested();
+
+    // Shown (and dismissed) BEFORE navigating away — Settings' own context
+    // is about to be removed from the tree by pushAndRemoveUntil below, so
+    // this can't be a post-navigation SnackBar the way _deleteAccount used
+    // to assume; that context would already be unmounted by the time it ran.
+    final scheduled = scheduledFor;
+    if (scheduled != null && context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF12102A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text('Account Deletion Scheduled',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text(
+            'Your account will be permanently deleted on '
+            '${_formatDate(scheduled)}. Log back in before then to '
+            'cancel it.',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.45),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK',
+                  style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+      (route) => false,
+    );
+  }
+
+  // Downloads the signed-in user's data as an .xlsx workbook and hands it to
+  // the OS share sheet — same in-memory-bytes pattern as
+  // MyAccountScreen._shareCard(), no temp file needed.
+  Future<void> _exportMyData(BuildContext context) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      final results = await Future.wait([
+        AuthApiService().exportMyData(),
+        AuthApiService().getProfileOrThrow(),
+      ]);
+      final bytes = results[0] as Uint8List;
+      final profile = results[1] as Map<String, dynamic>;
+      if (context.mounted) Navigator.pop(context); // dismiss the spinner
+      await Share.shareXFiles(
+        [
+          XFile.fromData(
+            bytes,
+            mimeType:
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            // Mirrors the backend's own filename convention exactly (see
+            // profileExport.service.js#exportFilename) so the file a user shares/saves
+            // is self-identifying, not a generic/opaque name.
+            name: '${_exportFilenameSlug(profile)}_export_${_isoDate(DateTime.now())}.xlsx',
+          ),
+        ],
+      );
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // dismiss the spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Couldn\'t export your data: $e')),
+        );
+      }
+    }
+  }
+
+  // Mirrors backend/utilities/exportLabels.js-adjacent slug rule in
+  // profileExport.service.js#exportFilename — lowercase, non [a-z0-9_-] stripped.
+  static String _exportFilenameSlug(Map<String, dynamic> profile) {
+    final raw = (profile['profileName'] as String?) ?? 'user';
+    final slug = raw.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]+'), '_');
+    return slug.isEmpty ? 'user' : slug;
+  }
+
+  static String _isoDate(DateTime d) {
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$m-$day';
+  }
+
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   void _showHelpSheet(BuildContext context) {
@@ -368,163 +553,6 @@ class SettingsScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => const _HelpSheet(),
-    );
-  }
-}
-
-class _DeleteAccountDialog extends StatefulWidget {
-  const _DeleteAccountDialog();
-
-  @override
-  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
-}
-
-class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
-  final _reasonController = TextEditingController();
-
-  @override
-  void dispose() {
-    _reasonController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF12102A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: const Text('Delete Account',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "This signs you out and deactivates your account right away. "
-              "Your account and data are then permanently deleted after a "
-              "short grace period — logging back in before then cancels the "
-              "deletion and restores everything. After the grace period "
-              "ends, this can't be undone.",
-              style: TextStyle(color: AppColors.textMuted, height: 1.4),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _reasonController,
-              maxLength: 500,
-              maxLines: 3,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Tell us why (optional)',
-                hintStyle: const TextStyle(color: AppColors.textFaint),
-                counterStyle: const TextStyle(color: AppColors.textFaint),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel',
-              style: TextStyle(color: AppColors.textMuted)),
-        ),
-        TextButton(
-          onPressed: () =>
-              Navigator.pop(context, _reasonController.text.trim()),
-          child: const Text('Delete Account',
-              style: TextStyle(
-                  color: Colors.redAccent, fontWeight: FontWeight.bold)),
-        ),
-      ],
-    );
-  }
-}
-
-class _AccountDeletedScreen extends StatelessWidget {
-  final DateTime? scheduledFor;
-  const _AccountDeletedScreen({this.scheduledFor});
-
-  static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
-  String _formatDate(DateTime d) {
-    final local = d.toLocal();
-    return '${_months[local.month - 1]} ${local.day}, ${local.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final date = scheduledFor;
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF080810),
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.check_circle_outline_rounded,
-                    color: AppColors.accent, size: 64),
-                const SizedBox(height: 20),
-                const Text(
-                  'Account deletion requested',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  date == null
-                      ? "You've been signed out. Your account will be "
-                          'permanently deleted after a short grace period '
-                          'unless you log back in before then.'
-                      : "You've been signed out. Your account will be "
-                          'permanently deleted on ${_formatDate(date)} '
-                          'unless you log back in before then — logging in '
-                          'cancels the deletion.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: AppColors.textMuted, height: 1.5, fontSize: 14),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: () => Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
-                      (route) => false,
-                    ),
-                    child: const Text('Done',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -646,6 +674,204 @@ class _HelpItem extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Two-step "are you sure" for account deletion: an explanation of what's
+/// kept vs. removed, then a typed "DELETE" to unlock the confirm button —
+/// this is the one destructive action in Settings that can't be undone.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _ctrl = TextEditingController();
+  bool _canConfirm = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(() {
+      final ok = _ctrl.text.trim().toUpperCase() == 'DELETE';
+      if (ok != _canConfirm) setState(() => _canConfirm = ok);
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF12102A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('Delete Account',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Your account is deactivated immediately and signed out '
+            'everywhere. It\'s then permanently deleted after a grace '
+            'period set by Aura Arena — you\'ll see the exact date after '
+            'confirming below.\n\n'
+            'Logging back in at any point before that date cancels the '
+            'deletion and reactivates your account automatically — nothing '
+            'is lost until the grace period actually ends.\n\n'
+            'Once the grace period ends, this can\'t be undone.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.45),
+          ),
+          const SizedBox(height: 16),
+          Text('Type DELETE to confirm',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ctrl,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.characters,
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: const InputDecoration(
+              hintText: 'DELETE',
+              hintStyle: TextStyle(color: Colors.white24),
+              enabledBorder:
+                  UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              focusedBorder:
+                  UnderlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted)),
+        ),
+        TextButton(
+          onPressed: _canConfirm ? () => Navigator.pop(context, true) : null,
+          child: Text('Delete Forever',
+              style: TextStyle(
+                  color: _canConfirm ? Colors.redAccent : Colors.white24,
+                  fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Debug-only picker to point the app at a different backend (local dev server
+/// vs. production) without rebuilding — persists via [ApiConfig.setRuntimeOverride].
+class _ApiServerDialog extends StatefulWidget {
+  const _ApiServerDialog();
+
+  @override
+  State<_ApiServerDialog> createState() => _ApiServerDialogState();
+}
+
+class _ApiServerDialogState extends State<_ApiServerDialog> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: ApiConfig.baseUrl);
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply(String url) async {
+    setState(() => _saving = true);
+    // '' / the production constant → clear the override (fall back to prod).
+    await ApiConfig.setRuntimeOverride(
+        url.trim() == ApiConfig.production ? '' : url.trim());
+    if (!mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('API server → ${ApiConfig.baseUrl}\n'
+            'Restart the app and log in again (tokens are per-backend).'),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  Widget _preset(String label, String url) => Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton(
+          onPressed: _saving ? null : () => _ctrl.text = url,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            foregroundColor: const Color(0xFF7B2CBF),
+          ),
+          child: Text('$label  ·  $url',
+              style: const TextStyle(fontSize: 12), textAlign: TextAlign.left),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF12102A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: const Text('API server', style: TextStyle(color: Colors.white)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (ApiConfig.isCompileTimePinned)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Pinned by --dart-define=API_BASE_URL — this picker is ignored '
+                'until that build flag is removed.',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+              ),
+            ),
+          TextField(
+            controller: _ctrl,
+            enabled: !_saving && !ApiConfig.isCompileTimePinned,
+            autocorrect: false,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'http://host:port/api/v1',
+              hintStyle: TextStyle(color: Colors.white24),
+              enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          _preset('Production', ApiConfig.production),
+          _preset('Local · Android emulator', ApiConfig.localAndroidEmulator),
+          _preset('Local · simulator / adb reverse', ApiConfig.localLoopback),
+          const SizedBox(height: 6),
+          const Text(
+            'Physical device on the same wifi: use http://<your-machine-LAN-IP>:3000/api/v1',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+        ),
+        TextButton(
+          onPressed: _saving || ApiConfig.isCompileTimePinned
+              ? null
+              : () => _apply(_ctrl.text),
+          child: const Text('Save',
+              style: TextStyle(
+                  color: Color(0xFF7B2CBF), fontWeight: FontWeight.w700)),
+        ),
+      ],
     );
   }
 }

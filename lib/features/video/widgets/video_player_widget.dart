@@ -19,7 +19,7 @@ class VideoPlayerWidget extends StatefulWidget {
   final bool forcePortrait;
 
   /// Horizontally flips playback. Set for the current user's own
-  /// front-camera Android takes (see ADR 020 / VideosService.isMirroredVideo)
+  /// front-camera Android takes (see ADR 026 / VideosService.isMirroredVideo)
   /// — the uploaded file is deliberately left un-mirrored so other viewers
   /// and the AI scorer see the true orientation, but a screen playing the
   /// video back to its owner should match what they saw while recording.

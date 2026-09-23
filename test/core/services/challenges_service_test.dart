@@ -301,4 +301,92 @@ void main() {
       );
     });
   });
+
+  // Regression coverage for ADR 021: the "Report challenge" sheet wrote
+  // straight to a Firestore `reports` collection — a leftover from before
+  // this app moved to the REST backend — instead of calling
+  // POST /challenges/{id}/report. Firestore accepted the write and the
+  // sheet showed its normal success toast, so reports silently never
+  // reached the backend's Trust & Safety Moderation Queue at all.
+  group('challengeReportReasonCode', () {
+    test('maps every "Report challenge" sheet label to its backend enum '
+        'value (utilities/enums/challengeReport.js CHALLENGE_REPORT_REASONS)',
+        () {
+      expect(
+        challengeReportReasonCode('Inappropriate content'),
+        'inappropriate',
+      );
+      expect(
+        challengeReportReasonCode('Misleading or false challenge'),
+        'misleading',
+      );
+      expect(challengeReportReasonCode('Spam or duplicate'), 'spam');
+      expect(
+        challengeReportReasonCode('Dangerous or unsafe activity'),
+        'dangerous',
+      );
+      expect(challengeReportReasonCode('Other'), 'other');
+    });
+
+    test('an unrecognised label falls back to "other" rather than sending '
+        'an invalid enum value the backend would 422 on', () {
+      expect(challengeReportReasonCode('Not a real reason'), 'other');
+    });
+  });
+
+  group('reportChallenge', () {
+    setUp(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      FlutterSecureStorage.setMockInitialValues({
+        'api_access_token': 'token',
+        'api_refresh_token': 'refresh',
+        'api_user_id': 'user-1',
+      });
+    });
+
+    tearDown(() {
+      ApiClient.httpClient = http.Client();
+    });
+
+    test('POSTs the mapped reason + remarks to /challenges/{id}/report',
+        () async {
+      late Uri capturedUri;
+      late Map<String, dynamic> capturedBody;
+      ApiClient.httpClient = MockClient((request) async {
+        capturedUri = request.url;
+        capturedBody = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {'alreadyReported': false},
+          }),
+          201,
+        );
+      });
+
+      await ChallengesService().reportChallenge(
+        'chal-1',
+        'inappropriate',
+        remarks: 'Inappropriate content',
+      );
+
+      expect(capturedUri.path, '/api/v1/challenges/chal-1/report');
+      expect(capturedBody['reason'], 'inappropriate');
+      expect(capturedBody['remarks'], 'Inappropriate content');
+    });
+
+    test('throws the backend message on a non-success response', () async {
+      ApiClient.httpClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({'status': 'fail', 'message': 'Challenge not found.'}),
+          404,
+        );
+      });
+
+      expect(
+        () => ChallengesService().reportChallenge('chal-1', 'spam'),
+        throwsA('Challenge not found.'),
+      );
+    });
+  });
 }

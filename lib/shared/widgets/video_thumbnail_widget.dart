@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
+import '../../core/services/challenge_analytics_service.dart';
 import '../../core/utils/asset_cache_key.dart';
+import 'impression_tracker.dart';
 
 /// Shared in-memory cache of extracted JPEG bytes, keyed by [assetCacheKey] of
 /// the video URL (NOT the raw URL — the backend re-signs presigned URLs on
@@ -54,10 +56,28 @@ class VideoThumbnailWidget extends StatefulWidget {
   final BoxFit fit;
 
   /// Horizontally flips the rendered frame. Set for a front-camera Android
-  /// take (see ADR 020 / VideosService.isMirroredVideo) whose stored file is
+  /// take (see ADR 026 / VideosService.isMirroredVideo) whose stored file is
   /// un-mirrored, so the extracted/backend thumbnail needs the same flip
   /// PreviewScreen applies to match what the user saw while recording.
   final bool mirrored;
+
+  /// When set, this thumbnail is a challenge card: it reports a challenge
+  /// **impression** (backend ADR 090) each time it becomes ≥50% visible, and
+  /// again after scrolling fully off-screen — so a challenge seen anywhere in
+  /// the app counts, every time. Leave null for non-challenge thumbnails
+  /// (user submission videos, etc.).
+  final String? impressionChallengeId;
+
+  /// The video's own `processingStatus` from the backend, when the caller has
+  /// it (e.g. the "My Videos" grid, fed from `GET /profile/videos`). When
+  /// this is `"failed"` — backend ADR 099: a video whose async processing
+  /// pipeline never completed and was swept to a terminal failure state — the
+  /// raw video is presumed gone (that's exactly the case the sweep exists
+  /// for) and this widget skips straight to an "unavailable" placeholder
+  /// instead of spending up to 30s trying to extract a frame from a URL
+  /// that's almost certainly dead. Leave null for feed/challenge thumbnails
+  /// that don't carry this field.
+  final String? processingStatus;
 
   const VideoThumbnailWidget({
     super.key,
@@ -65,6 +85,8 @@ class VideoThumbnailWidget extends StatefulWidget {
     this.thumbnailUrl,
     this.fit = BoxFit.cover,
     this.mirrored = false,
+    this.impressionChallengeId,
+    this.processingStatus,
   });
 
   @override
@@ -75,6 +97,7 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
   Uint8List? _bytes;
   bool _loading = true;
   bool _useNetwork = false;
+  bool _processingFailed = false;
 
   static const _gradient = BoxDecoration(
     gradient: LinearGradient(
@@ -101,12 +124,14 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
     final urlChanged =
         assetCacheKey(old.videoUrl) != assetCacheKey(widget.videoUrl) ||
             assetCacheKey(old.thumbnailUrl ?? '') !=
-                assetCacheKey(widget.thumbnailUrl ?? '');
+                assetCacheKey(widget.thumbnailUrl ?? '') ||
+            old.processingStatus != widget.processingStatus;
     if (urlChanged) {
       setState(() {
         _loading = true;
         _bytes = null;
         _useNetwork = false;
+        _processingFailed = false;
       });
       _load();
     }
@@ -121,6 +146,15 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
 
     if (widget.videoUrl.isEmpty) {
       if (mounted) setState(() => _loading = false);
+      return;
+    }
+
+    // A video the backend has given up on (ADR 099) has no thumbnail and, in
+    // practice, no reliably fetchable raw video either — don't spend up to
+    // 30s discovering that via a failed extraction; go straight to the
+    // distinct "unavailable" placeholder.
+    if (widget.processingStatus == 'failed') {
+      if (mounted) setState(() { _loading = false; _processingFailed = true; });
       return;
     }
 
@@ -191,7 +225,20 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _content(context);
+    final id = widget.impressionChallengeId;
+    if (id == null || id.isEmpty) return content;
+    return ImpressionTracker(
+      detectorKey: ValueKey('imp-thumb-$id'),
+      onImpression: () => ChallengeAnalyticsService().recordImpression(id),
+      child: content,
+    );
+  }
+
+  Widget _content(BuildContext context) {
     if (_loading) return const VideoThumbnailSkeleton();
+
+    if (_processingFailed) return _unavailable();
 
     if (_useNetwork) {
       // CachedNetworkImage persists to disk (survives restarts and list
@@ -226,6 +273,18 @@ class _VideoThumbnailWidgetState extends State<VideoThumbnailWidget> {
         child: const Center(
           child: Icon(Icons.play_circle_outline_rounded,
               color: Colors.white24, size: 32),
+        ),
+      );
+
+  // Distinct from _fallback(): this is a definite, permanent "nothing to
+  // show" (ADR 099's video_processing_timeout sweep), not "still loading" or
+  // "couldn't extract a frame from an otherwise-fine video" — a different
+  // icon so it doesn't read as just another loading state.
+  Widget _unavailable() => Container(
+        decoration: _gradient,
+        child: const Center(
+          child: Icon(Icons.videocam_off_rounded,
+              color: Colors.white24, size: 28),
         ),
       );
 }

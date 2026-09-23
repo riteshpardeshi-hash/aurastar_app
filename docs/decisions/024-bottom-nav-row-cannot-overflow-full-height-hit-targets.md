@@ -1,4 +1,4 @@
-# 018 — Bottom nav row can't overflow; full-slot hit targets; clamped text scale
+# 024 — Bottom nav row can't overflow; full-slot hit targets; clamped text scale
 
 Status: Accepted
 

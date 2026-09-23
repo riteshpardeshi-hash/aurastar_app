@@ -86,8 +86,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   @override
   void initState() {
     super.initState();
-    // Opening the detail page is an unambiguous view of this challenge.
+    // Opening the detail page shows the challenge and plays its video.
     ChallengeAnalyticsService().recordImpression(widget.challengeId);
+    ChallengeAnalyticsService().recordVideoView(widget.challengeId);
     // Logged once the challenge fetch settles (success or failure) so the
     // event can carry owner_type / owner_id; deliberately not gated on
     // `mounted` — the view happened even if the user already backed out.
@@ -1369,36 +1370,22 @@ class _ReportSheetState extends State<_ReportSheet> {
   String? _selected;
   bool _submitting = false;
 
-  // Maps the UI's display copy to the backend's `reason` enum for
-  // POST /challenges/{id}/report (see openapi.yaml).
-  static const _reasonCodes = {
-    'Inappropriate content': 'inappropriate',
-    'Misleading or false challenge': 'misleading',
-    'Spam or duplicate': 'spam',
-    'Dangerous or unsafe activity': 'dangerous',
-    'Other': 'other',
-  };
-
   Future<void> _submit() async {
     if (_selected == null || _submitting) return;
     setState(() => _submitting = true);
 
     try {
-      final res = await ApiClient().post(
-        '/challenges/${widget.challengeId}/report',
-        {'reason': _reasonCodes[_selected] ?? 'other'},
-        auth: true,
+      await ChallengesService().reportChallenge(
+        widget.challengeId,
+        challengeReportReasonCode(_selected!),
+        remarks: _selected,
       );
-      final alreadyReported =
-          (res['data'] as Map<String, dynamic>?)?['alreadyReported'] == true;
 
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(alreadyReported
-              ? "You've already reported this challenge. We're reviewing it."
-              : 'Report submitted. Thank you for your feedback.'),
+          content: const Text('Report submitted. Thank you for your feedback.'),
           backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

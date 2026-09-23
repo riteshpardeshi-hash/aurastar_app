@@ -8,6 +8,7 @@ import '../../../core/services/auth_api_service.dart';
 import '../../../core/utils/apple_sign_in_error.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/legal_consent_text.dart';
+import '../../../shared/widgets/deletion_cancelled_dialog.dart';
 import 'phone_auth_screen.dart';
 import 'profile_setup_screen.dart';
 import '../../shell/main_shell.dart';
@@ -61,11 +62,19 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
     );
   }
 
-  void _navigateAfterAuth(
-      bool isNewUser, Map<String, dynamic> user, String method) {
+  Future<void> _navigateAfterAuth(
+    bool isNewUser,
+    Map<String, dynamic> user,
+    String method, {
+    bool deletionCancelled = false,
+  }) async {
     isNewUser
         ? AnalyticsService().logSignUp(method)
         : AnalyticsService().logLogin(method);
+    if (deletionCancelled) {
+      await showDeletionCancelledDialog(context);
+      if (!mounted) return;
+    }
     final isProfileComplete = user['isProfileComplete'] as bool? ?? !isNewUser;
     Navigator.pushReplacement(
       context,
@@ -96,7 +105,8 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
 
       final result = await AuthApiService().signInWithGoogle(idToken);
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user, 'google');
+      await _navigateAfterAuth(result.isNewUser, result.user, 'google',
+          deletionCancelled: result.deletionCancelled);
     } catch (e) {
       if (mounted) setState(() => _loading = null);
       _showError('Google sign-in failed. Please try again.');
@@ -124,7 +134,8 @@ class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
         authorizationCode: authCode,
       );
       if (!mounted) return;
-      _navigateAfterAuth(result.isNewUser, result.user, 'apple');
+      await _navigateAfterAuth(result.isNewUser, result.user, 'apple',
+          deletionCancelled: result.deletionCancelled);
     } catch (e) {
       // The user dismissing the Apple sheet throws canceled here instead of
       // returning null the way GoogleSignIn().signIn() does — treat it the

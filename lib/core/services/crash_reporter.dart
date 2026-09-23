@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 /// Like [AnalyticsService] it never throws: crash reporting must not be able
 /// to break the app, and Firebase may legitimately be uninitialised (the boot
 /// `Firebase.initializeApp` is bounded by a timeout and its failure is
-/// swallowed; unit tests never initialise it). See ADR 023.
+/// swallowed; unit tests never initialise it). See ADR 029.
 ///
 /// Reports are only collected in release/profile builds — debug builds are
 /// noisy and would bury real crashes.

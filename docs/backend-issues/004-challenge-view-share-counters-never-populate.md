@@ -1,6 +1,7 @@
 # Backend gap: challenge Views / Shares / Attempts analytics counters never populate
 
 **Reported:** 2026-09-07
+**Status:** RESOLVED (2026-09-09), then **definitions finalized (2026-09-10)** — the backend replaced the ad-hoc "views" rule with a canonical definition + a Redis-buffered counter pipeline ([backend ADR 090](http://144.91.79.237:5173/decisions/090-engagement-metrics-and-redis-buffered-counters)); the client realigned in [ADR 018](../decisions/018-engagement-reporting-realigned-to-backend-adr-090.md) / [ADR 019](../decisions/019-feed-impression-instrumentation-visibilitydetector.md). See [Definitions finalized](#definitions-finalized-2026-09-10).
 **Severity:** Medium — creator & brand analytics are unusable; every challenge reads 0 views / 0 shares / 0 attempts regardless of real activity
 **Affected endpoints:**
 - `GET /creator/challenges/{id}/analytics` (`views`, `shares`, `totalAttempts`)
@@ -111,3 +112,62 @@ as issue 002 (`GET /profile/videos` linkage).
    share it, and submit a scored entry.
 2. Open the creator analytics screen for that challenge.
 3. Views / Shares / Total Attempts all read `0` (expected: non-zero).
+
+## Resolution (2026-09-09)
+
+All three requested backend changes landed. Confirmed against the backend
+repo (`aura-arena/backend`) + the live OpenAPI spec.
+
+1. **`views` source — wired.** Backend ADR 086 added
+   `utilities/challengeStats.js#bumpChallengeStat`. The **first**
+   `watch-progress` ping per `(challenge, player)` bumps
+   `CreatorChallengeStats.views` (`watchAnalytics.service.js`). Backend
+   ADR 089 then added the matching `CreatorDailyAnalytics.views` +1 at the
+   same point, so the daily/trend series moves too. `POST /impression` also
+   bumps both, but **only for a challenge in an ACTIVE paid Campaign** — for
+   an organic challenge it's a no-op, so `watch-progress` is the organic
+   source. `ChallengeAnalyticsService` fires both; no client change needed.
+
+2. **Share endpoint — shipped**, exactly the proposed shape. `POST
+   /challenges/{id}/share` → `challenges.service.js#recordShare` bumps
+   `CreatorChallengeStats.shares` (ADR 086) and `CreatorDailyAnalytics.shares`
+   (ADR 089). The `platform` body field is accepted but **not yet stored** —
+   `CreatorShareAnalytics.platformDistribution` remains a backend follow-up.
+   `ChallengeAnalyticsService.recordShare` already sends it; nothing to change
+   client-side.
+
+3. **`attemptCount` — already incremented.** `creatorParticipants.service.js`
+   (`inc = { attemptCount: 1, totalAuraEarned }`) and the admin participant
+   aggregations read it. `totalAttempts` reflects real submissions.
+
+**Still open (backend follow-ups, not blocking this issue):**
+- Per-platform share attribution (`platformDistribution`).
+- Grid-feed scroll impressions on the client (needs a visibility detector);
+  opening a challenge still records a view via `ChallengeDetail`.
+
+## Definitions finalized (2026-09-10)
+
+The 2026-09-09 fix wired *writers* but left "what is a view" ad hoc (it meant
+"a distinct player's first watch, ever" — the same number as "distinct
+watchers"). The product owner set canonical definitions and the backend
+rebuilt the counters around them — [backend ADR 090](http://144.91.79.237:5173/decisions/090-engagement-metrics-and-redis-buffered-counters):
+
+- **Impression** = the video appeared on screen, any feed. Every sighting,
+  no de-dup. `POST /challenges/{id}/impression` now records one for **every**
+  challenge (organic included), on top of any campaign-pool bookkeeping.
+- **View** = a play session with ≥ 1s watched. **One per `sessionId`** (so a
+  user replaying counts again) — not per user, not "first ever". Recorded
+  from `POST /challenges/{id}/watch-progress` when `watchedDuration ≥ 1`.
+- `CreatorChallengeStats` / `CreatorDailyAnalytics` gain an `impressions`
+  field. Views + impressions are counted in **Redis** and flushed to Mongo
+  ~every 60s, so analytics lag activity by up to a minute.
+- The "an impression is also a view" 1:1 line was removed from
+  `impression.service.js`; the campaign billing engine is otherwise
+  untouched.
+
+**Client realignment** — [ADR 018](../decisions/018-engagement-reporting-realigned-to-backend-adr-090.md)
+(drop the per-session impression de-dup; send the first `watch-progress` ping
+at the 1s mark) and [ADR 019](../decisions/019-feed-impression-instrumentation-visibilitydetector.md)
+(`ImpressionTracker` — a `VisibilityDetector` wrapper — for the grid feeds
+that previously fired nothing). Client contract:
+[`docs/features/engagement-reporting.md`](../features/engagement-reporting.md).

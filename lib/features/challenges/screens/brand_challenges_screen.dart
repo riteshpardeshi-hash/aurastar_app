@@ -308,6 +308,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                 VideoThumbnailWidget(
                     videoUrl: videoUrl,
                     thumbnailUrl: thumbnailUrl,
+                    impressionChallengeId: doc.id,
                     fit: BoxFit.cover),
                 // Gradient
                 Container(
@@ -604,6 +605,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
                     VideoThumbnailWidget(
                         videoUrl: videoUrl,
                         thumbnailUrl: thumbnailUrl,
+                    impressionChallengeId: doc.id,
                         fit: BoxFit.cover),
                     Positioned.fill(
                       child: DecoratedBox(

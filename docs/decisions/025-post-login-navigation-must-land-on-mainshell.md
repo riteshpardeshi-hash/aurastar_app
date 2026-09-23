@@ -1,4 +1,4 @@
-# 019 — Post-login navigation must land on MainShell, not a bare Dashboard
+# 025 — Post-login navigation must land on MainShell, not a bare Dashboard
 
 Status: Accepted
 
@@ -96,7 +96,7 @@ and pass after. Full suite green; `flutter analyze` clean.
 
 ## Related
 
-ADR 018 hardened `AppBottomNav`'s own layout (equal-width slots, clamped
+ADR 024 hardened `AppBottomNav`'s own layout (equal-width slots, clamped
 text scale) against a separate, additive failure mode where the *last two*
 tabs were untappable on narrow / large-font devices due to row overflow
 clipping the hit region. This ADR is the cause of the *all four dead*

@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/upload_queue_service.dart';
 
-// The pending-upload record carries the `mirrored` flag (ADR 020) so a
+// The pending-upload record carries the `mirrored` flag (ADR 026) so a
 // front-camera take whose upload failed re-opens PreviewScreen from the
 // dashboard banner with the same orientation it was reviewed in.
 void main() {

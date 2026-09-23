@@ -1,6 +1,6 @@
-# 023 — Report crashes with Firebase Crashlytics
+# 029 — Report crashes with Firebase Crashlytics
 
-Status: Accepted (builds on 022)
+Status: Accepted (builds on 028)
 
 ## Problem
 
@@ -40,7 +40,7 @@ Add `firebase_crashlytics` on the same Firebase project as analytics (022).
 ## Consequences
 
 - The prototype iOS workflow has no Firebase app registered for
-  `...auraapp.prototype` (see 022), so its crashes aren't reported and its
+  `...auraapp.prototype` (see 028), so its crashes aren't reported and its
   dSYMs aren't uploaded.
 - Reports arrive after the app is relaunched, roughly a minute later.
 - The privacy policy and store data-safety forms must mention crash

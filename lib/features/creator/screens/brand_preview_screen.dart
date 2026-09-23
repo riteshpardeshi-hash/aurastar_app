@@ -18,7 +18,7 @@ class BrandPreviewScreen extends StatefulWidget {
 
   /// Mirror playback so the review matches the selfie-mirrored camera
   /// preview. Set only for front-camera takes on Android (iOS already
-  /// records the front camera mirrored). See ADR 020.
+  /// records the front camera mirrored). See ADR 026.
   final bool mirrored;
 
   const BrandPreviewScreen({

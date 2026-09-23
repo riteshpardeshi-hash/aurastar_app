@@ -403,7 +403,7 @@ void main() {
     expect(createSubmissionCalls, 1);
   });
 
-  // ADR 020: Android records the front camera un-mirrored while its preview
+  // ADR 026: Android records the front camera un-mirrored while its preview
   // is mirrored, so the review screen looked flipped vs what the user just
   // framed. `mirrored: true` flips playback back; the uploaded file is left
   // alone. Default is false (back camera, gallery pick, iOS).

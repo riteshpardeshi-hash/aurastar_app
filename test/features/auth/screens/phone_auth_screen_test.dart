@@ -13,6 +13,7 @@ import 'package:aura_app/core/services/screen_cache.dart';
 import 'package:aura_app/core/services/sms_otp_autofill.dart';
 import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/auth/screens/phone_auth_screen.dart';
+import 'package:aura_app/features/auth/screens/profile_setup_screen.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
 import 'package:aura_app/features/shell/main_shell.dart';
 
@@ -186,7 +187,7 @@ void main() {
       {required bool isNewUser, bool isProfileComplete = true}) async {
     SharedPreferences.setMockInitialValues({});
     ScreenCache.clear();
-    VideosService.resetLocallyDeletedForTest();
+    VideosService.resetLocallyMirroredForTest();
     addTearDown(ScreenCache.clear);
 
     ApiClient.httpClient = MockClient((request) async {
@@ -314,6 +315,72 @@ void main() {
     final otpField =
         tester.widgetList<TextField>(find.byType(TextField)).elementAt(1);
     expect(otpField.controller!.text, '482910');
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  });
+
+  // Regression coverage: a *returning* user (isNewUser: false — true only on
+  // account creation, not on every login) whose profile was never completed
+  // used to be sent straight to Dashboard regardless of what the server
+  // said, with isProfileComplete force-written true into local prefs. Every
+  // backend endpoint the Dashboard's tabs call is gated by
+  // requireProfileComplete and 403s for an incomplete profile, so the tab
+  // bar itself still worked (IndexedStack still switched pages) but every
+  // tab's content silently failed to load — reading identically to "the
+  // bottom nav doesn't respond" from the outside, and reported as exactly
+  // that more than once. Only the onboarding-vs-Dashboard destination on a
+  // *new* user (isNewUser: true) had ever actually been driven by the
+  // server's isProfileComplete value.
+  testWidgets(
+      'a returning user with an incomplete profile is sent to onboarding, '
+      'not straight to Dashboard', (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/auth/otp/request')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {'validitySeconds': 180},
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/auth/otp/verify')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'accessToken': 'access-token',
+              'refreshToken': 'refresh-token',
+              'isNewUser': false,
+              'user': {
+                'id': 'user-1',
+                'phone': '9876543210',
+                'countryCode': '+91',
+                'isProfileComplete': false,
+              },
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
+    ));
+    await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.text('Get OTP'));
+    await tester.pump(); // requestOtp resolves
+    await tester.pump(); // OTP field appears
+    await tester.enterText(find.byType(TextField).at(1), '482910');
+    await tester.tap(find.text('Get Started'));
+    await tester.pump(); // verifyOtp resolves
+    await tester.pump(); // navigation settles
+
+    expect(find.byType(ProfileSetupScreen), findsOneWidget);
+    expect(find.byType(Dashboard), findsNothing);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
   });

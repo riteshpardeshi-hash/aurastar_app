@@ -1,4 +1,4 @@
-# 020 — Mirror the front-camera *review playback*, not the recording or the file
+# 026 — Mirror the front-camera *review playback*, not the recording or the file
 
 Status: Accepted
 

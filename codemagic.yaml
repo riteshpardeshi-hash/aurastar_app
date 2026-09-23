@@ -41,7 +41,7 @@ workflows:
 
       # Crashlytics can only symbolicate iOS crashes with the build's dSYMs.
       # Never fails the build: a missing dSYM or upload error just means that
-      # release's iOS crashes show unsymbolicated addresses (ADR 023).
+      # release's iOS crashes show unsymbolicated addresses (ADR 029).
       - name: Upload dSYMs to Crashlytics
         ignore_failure: true
         script: |

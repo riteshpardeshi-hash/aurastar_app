@@ -93,7 +93,7 @@ class _MainShellState extends State<MainShell> {
     // The four tab roots (Home, Search, Leaderboard, Profile) have no
     // in-app back button, and MainShell is normally the only route on the
     // navigator stack (post-login/post-submit flows land here via
-    // pushAndRemoveUntil — see ADR 019). With no PopScope, the system back
+    // pushAndRemoveUntil — see ADR 025). With no PopScope, the system back
     // button on any tab fell straight through to the default "no route to
     // pop -> exit the app" behavior, so switching to Search/Leaderboard/
     // Profile and pressing back exited instead of returning to Home, the

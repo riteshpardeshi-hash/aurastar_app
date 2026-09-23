@@ -42,7 +42,18 @@ because it's three pages long isn't documented, it's buried.
 | 015 | [Creator profile grid shows the creator's authored challenges, not their attempt videos](015-creator-profile-shows-authored-challenges-not-attempt-videos.md) | Accepted |
 | 016 | [Coupon integration: POOL vs CATALOG sourcing, one post-score sheet](016-catalog-vs-pool-coupon-sourcing.md) | Accepted |
 | 017 | [Tab shell reveals the tapped tab immediately; drop the ready-gate](017-tab-shell-reveals-immediately-no-ready-gate.md) | Accepted (amends 011) |
-| 018 | [Bottom nav row can't overflow; full-slot hit targets; clamped text scale](018-bottom-nav-row-cannot-overflow-full-height-hit-targets.md) | Accepted |
-| 019 | [Post-login navigation must land on MainShell, not a bare Dashboard](019-post-login-navigation-must-land-on-mainshell.md) | Accepted |
-| 020 | [Mirror the front-camera review playback, not the recording or the file](020-front-camera-review-playback-mirrored-not-the-file.md) | Accepted |
-| 021 | [Extend the front-camera mirror flag past the review screen to every own-video playback surface](021-mirror-own-video-playback-outside-review-too.md) | Accepted (amends 020) |
+| 018 | [Engagement reporting realigned to the backend's view/impression definitions](018-engagement-reporting-realigned-to-backend-adr-090.md) | Accepted (amends 012) |
+| 019 | [Feed-card impressions via a shared `VisibilityDetector` wrapper](019-feed-impression-instrumentation-visibilitydetector.md) | Accepted (extends 012 / 018) |
+| 020 | [Home is `dashboard.dart`: pull-to-refresh, Featured carousel, device on engagement pings](020-home-screen-is-dashboard-pull-to-refresh-featured-carousel-device-pings.md) | Accepted |
+| 021 | [Challenge/submission reports must go through the REST backend, not Firestore](021-challenge-report-wired-to-backend-not-firestore.md) | Accepted |
+| 022 | [Account deactivation, delayed-deletion grace period, and data export](022-account-deactivation-deletion-grace-period.md) | Accepted |
+| 023 | [Skip frame extraction for a backend-orphaned video](023-orphaned-video-thumbnail-placeholder.md) | Accepted |
+| 024 | [Bottom nav row can't overflow; full-slot hit targets; clamped text scale](024-bottom-nav-row-cannot-overflow-full-height-hit-targets.md) | Accepted |
+| 025 | [Post-login navigation must land on MainShell, not a bare Dashboard](025-post-login-navigation-must-land-on-mainshell.md) | Accepted |
+| 026 | [Mirror the front-camera review playback, not the recording or the file](026-front-camera-review-playback-mirrored-not-the-file.md) | Accepted |
+| 027 | [Extend the front-camera mirror flag past the review screen to every own-video playback surface](027-mirror-own-video-playback-outside-review-too.md) | Accepted (amends 026) |
+| 028 | [Firebase Analytics on the new Firebase project](028-firebase-analytics-on-new-firebase-project.md) | Accepted |
+| 029 | [Firebase Crashlytics](029-firebase-crashlytics.md) | Accepted |
+
+For how a feature works *today* (as opposed to why a decision was made), see
+[`docs/features/`](../features/).

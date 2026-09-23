@@ -60,3 +60,12 @@ android/key.properties
 # android/app/google-services.json is intentionally NOT ignored: it holds
 # client identifiers (not secrets) and the Google Services Gradle plugin
 # needs it in CI. See docs/decisions/022.
+
+# Operator scripts
+/scripts/node_modules/
+/scripts/serviceAccount.json
+/scripts/package-lock.json
+
+# Firebase
+.firebase/
+firebase-debug.log

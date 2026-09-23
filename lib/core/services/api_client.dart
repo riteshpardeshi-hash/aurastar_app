@@ -218,23 +218,46 @@ class ApiClient {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> delete(
-    String path, {
-    bool auth = false,
-    Map<String, dynamic>? body,
-  }) async {
+  // Binary GET (e.g. an .xlsx export) — every other method above assumes a
+  // JSON body and blindly `jsonDecode`s it, which would throw on raw bytes.
+  // Same 401-retry-once + timeout shape as [get]; a non-200 response is
+  // assumed to carry a JSON error envelope (the shape every other endpoint
+  // in this backend uses for errors), so its `message` is surfaced the same
+  // way callers already expect.
+  Future<Uint8List> getBytes(String path, {bool auth = false}) async {
+    var headers = auth ? await _authedHeaders() : _baseHeaders;
+    debugPrint('[API] GET(bytes) ${ApiConfig.baseUrl}$path');
+    var res =
+        await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
+    debugPrint('[API] ${res.statusCode} (${res.bodyBytes.length} bytes)');
+    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+      headers = await _authedHeaders();
+      res =
+          await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
+      debugPrint('[API] Retry ${res.statusCode} (${res.bodyBytes.length} bytes)');
+    }
+    if (res.statusCode != 200) {
+      try {
+        final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+        throw Exception(body['message'] as String? ?? 'Request failed (${res.statusCode})');
+      } on FormatException {
+        throw Exception('Request failed (${res.statusCode})');
+      }
+    }
+    return res.bodyBytes;
+  }
+
+  Future<Map<String, dynamic>> delete(String path, {bool auth = false}) async {
     var headers = auth ? await _authedHeaders() : _baseHeaders;
     debugPrint('[API] DELETE ${ApiConfig.baseUrl}$path');
     var res = await httpClient
-        .delete(_uri(path),
-            headers: headers, body: body == null ? null : jsonEncode(body))
+        .delete(_uri(path), headers: headers)
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
     if (res.statusCode == 401 && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
-          .delete(_uri(path),
-              headers: headers, body: body == null ? null : jsonEncode(body))
+          .delete(_uri(path), headers: headers)
           .timeout(_timeout);
       debugPrint('[API] Retry ${res.statusCode} ${res.body}');
     }

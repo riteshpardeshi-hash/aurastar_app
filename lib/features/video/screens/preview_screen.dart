@@ -29,7 +29,7 @@ class PreviewScreen extends StatefulWidget {
   /// Set only for front-camera takes on Android, whose recorded file is
   /// un-mirrored (iOS already records the front camera mirrored). The
   /// uploaded file itself is untouched — the feed still shows the recording
-  /// as others' cameras see it. See ADR 020.
+  /// as others' cameras see it. See ADR 026.
   final bool mirrored;
 
   const PreviewScreen({
@@ -203,7 +203,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       final submission = result.submission;
 
       await UploadQueueService.clear();
-      // The uploaded file itself stays un-mirrored (ADR 020), but nothing in
+      // The uploaded file itself stays un-mirrored (ADR 026), but nothing in
       // the /profile/videos response says so — record it locally, keyed by
       // this video's id, so My Videos / the video detail screen can flip
       // playback the same way this review screen just did.

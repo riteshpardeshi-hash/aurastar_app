@@ -142,16 +142,13 @@ void main() {
   // supported it since ADR 098.
   group('deleteAccount', () {
     test(
-        'DELETEs /profile with the reason, clears the session, and returns '
+        'DELETEs /profile, clears the session, and returns '
         'the scheduled hard-delete date', () async {
       String? requestedMethod;
       String? requestedPath;
-      Map<String, dynamic>? requestedBody;
       ApiClient.httpClient = MockClient((request) async {
         requestedMethod = request.method;
         requestedPath = request.url.path;
-        requestedBody =
-            request.body.isEmpty ? null : jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response(
           jsonEncode({
             'status': 'success',
@@ -161,13 +158,11 @@ void main() {
         );
       });
 
-      final result =
-          await AuthApiService().deleteAccount(reason: 'Taking a break');
+      final result = await AuthApiService().deleteAccount();
 
       expect(requestedMethod, 'DELETE');
       expect(requestedPath!.endsWith('/profile'), isTrue,
           reason: 'expected DELETE /profile, got $requestedPath');
-      expect(requestedBody?['reason'], 'Taking a break');
       expect(result, DateTime.utc(2026, 10, 7));
       expect(await ApiClient().isLoggedIn(), isFalse,
           reason: 'a successful deletion request must clear the local '

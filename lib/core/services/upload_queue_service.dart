@@ -93,7 +93,7 @@ class PendingUpload {
   final String challengeTitle;
 
   /// Whether the review screen should mirror playback (front-camera take on
-  /// a platform that records the front camera un-mirrored). See ADR 020.
+  /// a platform that records the front camera un-mirrored). See ADR 026.
   final bool mirrored;
 
   const PendingUpload({

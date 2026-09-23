@@ -17,7 +17,7 @@ class UserVideoDetailScreen extends StatefulWidget {
   final bool reviewedByAI;
   final String videoId;
 
-  /// See VideoPlayerWidget.mirrored / ADR 020 — set for this user's own
+  /// See VideoPlayerWidget.mirrored / ADR 026 — set for this user's own
   /// front-camera Android takes so playback matches what they saw recording.
   final bool mirrored;
 
@@ -56,15 +56,20 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
 
   Future<void> _delete() async {
     final pts = _deductibleAura;
-    // The backend does not reverse Aura on delete (openapi.yaml: DELETE
-    // /videos/{id} is a bare soft-delete); VideosService tracks the lost
-    // points locally and subtracts them from displayed balances. Warn the
-    // user with the exact amount so the wallet drop isn't a surprise.
+    // The backend now reverses Aura on delete server-side (video.service.js
+    // #deleteVideo) — but only the *net* amount this submission actually
+    // contributed: full points if it was the challenge's best score and no
+    // other submission remains, the difference down to the next-best
+    // submission if one does, or nothing at all if it wasn't the best.
+    // `pts` (this video's own score) is an upper bound, not necessarily the
+    // exact amount that'll be removed, so the copy says "up to" rather than
+    // asserting a precise figure.
     final message = pts > 0
         ? 'This video earned you $pts Aura ${pts == 1 ? 'point' : 'points'}. '
-            'Deleting it will permanently remove those $pts '
-            '${pts == 1 ? 'point' : 'points'} from your wallet, and this '
-            "can't be undone."
+            'Deleting it will permanently remove up to $pts '
+            '${pts == 1 ? 'point' : 'points'} from your wallet — less if a '
+            "better submission of yours already exists for this challenge — "
+            "and this can't be undone."
         : 'This will permanently remove your video. This action cannot be undone.';
 
     final confirmed = await showDialog<bool>(
@@ -99,7 +104,7 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
 
     setState(() => _deleting = true);
     try {
-      await VideosService().deleteVideo(widget.videoId, auraPoints: pts);
+      await VideosService().deleteVideo(widget.videoId);
       if (mounted) Navigator.pop(context, 'deleted');
     } catch (e) {
       if (!mounted) return;

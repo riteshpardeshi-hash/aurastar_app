@@ -1,4 +1,4 @@
-# 022 — Add Firebase Analytics by moving the app's default Firebase project to `aura-arena-81e92`
+# 028 — Add Firebase Analytics by moving the app's default Firebase project to `aura-arena-81e92`
 
 Status: Accepted
 

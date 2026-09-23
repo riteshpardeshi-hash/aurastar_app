@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/core/services/screen_cache.dart';
-import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/account/screens/my_account_screen.dart';
 import 'package:aura_app/features/challenges/screens/all_general_challenges_screen.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
@@ -47,7 +46,6 @@ void main() {
     });
     SharedPreferences.setMockInitialValues({});
     ScreenCache.clear();
-    VideosService.resetLocallyDeletedForTest();
     leaderboardCalls = 0;
     gateLeaderboard = null;
     myVideos = [];
@@ -140,7 +138,13 @@ void main() {
 
     expect(find.byType(MyAccountScreen), findsOneWidget,
         reason: 'the already-loaded Profile tab appears immediately');
-    expect(find.byType(CircularProgressIndicator), findsNothing,
+    // Not a bare CircularProgressIndicator check: MyAccountScreen's aura
+    // points card permanently hosts one (key: levelProgressRing) as a
+    // progress-ring visual, not a loading state — it's present even once
+    // the tab is fully ready. ScreenSkeleton is this app's actual
+    // full-screen "still loading" placeholder (see screen_skeleton.dart),
+    // so that's the one a ready tab must never show.
+    expect(find.byType(ScreenSkeleton), findsNothing,
         reason: 'a tab switch must never show a loading spinner');
   });
 
@@ -198,7 +202,7 @@ void main() {
   group('system back button', () {
     // Regression: the four tab roots have no in-app back button, and
     // MainShell has nothing below it on the navigator stack (post-login/
-    // post-submit flows land here via pushAndRemoveUntil — ADR 019). With
+    // post-submit flows land here via pushAndRemoveUntil — ADR 025). With
     // no PopScope, pressing the hardware/system back button on ANY tab —
     // not just Home — fell straight through to "no route to pop, exit the
     // app", instead of returning to Home first like every other bottom-nav
@@ -259,66 +263,4 @@ void main() {
     });
   });
 
-  group('Profile "MY VIDEOS" staleness across screens', () {
-    // Regression: MyAccountScreen (the Profile tab) stays mounted forever
-    // inside MainShell's IndexedStack (ADR 011) — its initState/first load
-    // runs once per app session, not on every tab visit. Deleting a video
-    // from AllVideosScreen ("VIEW ALL") — always a fresh push with no
-    // callback wired on return — updated AllVideosScreen's own state but
-    // left the still-mounted Profile screen showing the already-deleted
-    // video until the next pull-to-refresh or app relaunch. Simulates that
-    // by calling VideosService().deleteVideo directly (as any other screen
-    // would), independent of MyAccountScreen, instead of tapping its grid.
-
-    Map<String, dynamic> video(String id, {int aura = 50}) => {
-          '_id': id,
-          'videoId': id,
-          'videoUrl': 'https://example.com/$id.mp4',
-          'thumbnailUrl': 'https://example.com/$id.jpg',
-          'status': 'active',
-          'submission': {'status': 'scored', 'verdict': 'GOOD', 'auraPoints': aura},
-        };
-
-    testWidgets(
-        'a delete from elsewhere (AllVideosScreen) removes the video from '
-        'the already-mounted Profile grid without a refetch', (tester) async {
-      myVideos = [video('v1'), video('v2')];
-      await pumpShell(tester);
-
-      await tester.tap(find.text('Profile'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('Approved'), findsNWidgets(2),
-          reason: 'both videos load into the Profile preview grid');
-
-      // Simulates AllVideosScreen (a separate, unrelated screen instance)
-      // deleting v2 — MyAccountScreen never calls this itself here.
-      await VideosService().deleteVideo('v2', auraPoints: 50);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('Approved'), findsNWidgets(1),
-          reason: 'the already-mounted Profile grid must drop the deleted '
-              'video in place, not keep showing it until the next reload');
-    });
-
-    testWidgets(
-        'a second, unrelated delete also lands on the already-mounted '
-        'Profile grid', (tester) async {
-      myVideos = [video('v1'), video('v2')];
-      await pumpShell(tester);
-
-      await tester.tap(find.text('Profile'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('Approved'), findsNWidgets(2));
-
-      await VideosService().deleteVideo('v1', auraPoints: 50);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-
-      expect(find.text('Approved'), findsNWidgets(1));
-    });
-  });
 }

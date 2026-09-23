@@ -8,7 +8,7 @@ import 'crash_reporter.dart';
 /// Every method is fire-and-forget and never throws: analytics must not be
 /// able to break a screen, and Firebase may legitimately be uninitialised
 /// (the boot-time `Firebase.initializeApp` is bounded by a timeout and its
-/// failure is swallowed, and unit tests never initialise it). See ADR 022.
+/// failure is swallowed, and unit tests never initialise it). See ADR 028.
 ///
 /// Callers pass only opaque ids and coarse enums — never phone numbers,
 /// names, or other PII.

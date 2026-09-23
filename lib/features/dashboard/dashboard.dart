@@ -7,7 +7,7 @@ import '../../core/services/connectivity_probe.dart';
 import '../../core/services/challenges_service.dart';
 import '../../core/services/home_service.dart';
 import '../../core/services/push_notification_service.dart';
-import '../../core/services/videos_service.dart';
+import '../../core/services/video_prewarm_cache.dart';
 import '../../core/models/aura_tier.dart';
 import '../../core/utils/streak_date.dart';
 import '../../shared/widgets/video_thumbnail_widget.dart';
@@ -47,14 +47,43 @@ class _DashboardState extends State<Dashboard> {
   String? _lastKnownTier;
   bool _atRiskAlertShown = false;
 
-  late final Future<List<Map<String, dynamic>>> _challengesFuture =
-      ChallengesService()
-          .fetchChallenges(limit: 20)
-          .then((raw) => raw.map(normaliseChallenge).toList());
+  // Shared across the Hero/Brand Videos/Trending/Banners sections so they
+  // don't each fire their own REST call (and re-fetch on every rebuild).
+  // Reassigned by [_refresh] (pull-to-refresh), so not `final`.
+  late Future<List<Map<String, dynamic>>> _challengesFuture = _fetchChallenges();
 
   // Creator-page-tagged pages for the "Creator Videos" shelf.
-  late final Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
+  late Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
       HomeService().fetchTrendingCreators(limit: 10);
+
+  // Bumped by [_refresh]. The Featured carousel is keyed on it, so a pull
+  // disposes + recreates it → its initState re-fetches the admin-curated list.
+  int _refreshTick = 0;
+
+  Future<List<Map<String, dynamic>>> _fetchChallenges() => ChallengesService()
+      .fetchChallenges(limit: 20)
+      .then((raw) => raw.map(normaliseChallenge).toList());
+
+  // Pull-to-refresh on the home feed — re-fetches everything the screen shows
+  // (the shared challenge list, trending creators, the profile header, and via
+  // the key bump the Featured carousel) and holds the spinner until the
+  // primary feed data settles.
+  Future<void> _refresh() async {
+    final challenges = _fetchChallenges();
+    final creators = HomeService().fetchTrendingCreators(limit: 10);
+    if (!mounted) return;
+    setState(() {
+      _challengesFuture = challenges;
+      _trendingCreatorsFuture = creators;
+      _refreshTick++;
+      final uid = _profileUserId;
+      if (uid != null) _profileFuture = _fetchDashboardProfile(uid);
+    });
+    await Future.wait<void>([
+      challenges.then<void>((_) {}, onError: (_) {}),
+      creators.then<void>((_) {}, onError: (_) {}),
+    ]);
+  }
 
   String? _profileUserId;
   Future<Map<String, dynamic>>? _profileFuture;
@@ -132,8 +161,9 @@ class _DashboardState extends State<Dashboard> {
         (profile['auraPoints'] as num?)?.toInt() ??
         (profile['totalRewards'] as num?)?.toInt() ??
         0;
-    await VideosService.hydrate();
-    final points = VideosService.adjustBalanceForDeletedVideos(serverPoints);
+    // Server-authoritative — the backend now debits Aura on video delete
+    // itself, so the raw balance is already correct (no client offset).
+    final points = serverPoints;
     // Server-computed and authoritative — do not recompute level/tier from
     // `points` locally (see aura_tier.dart's auraTierForName).
     final level = (profile['level'] as num?)?.toInt() ?? 1;
@@ -176,6 +206,8 @@ class _DashboardState extends State<Dashboard> {
             displayName: 'Guest',
             username: '',
             photoUrl: '',
+            streakDay: 0,
+            lastStreakDate: '',
           );
         }
         if (_profileUserId != userId) {
@@ -340,6 +372,8 @@ class _DashboardState extends State<Dashboard> {
           displayName: displayName,
           username: username,
           photoUrl: photoUrl,
+          streakDay: streakDay,
+          lastStreakDate: lastStreakDate,
         );
       },
     );
@@ -357,6 +391,8 @@ class _DashboardState extends State<Dashboard> {
     required String displayName,
     required String username,
     required String photoUrl,
+    required int streakDay,
+    required String lastStreakDate,
   }) {
     final tier = auraTierForName(tierName, level: level);
 
@@ -365,34 +401,51 @@ class _DashboardState extends State<Dashboard> {
       body: Column(
         children: [
           Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: SafeArea(
-                    bottom: false,
-                    child: _buildHeader(
-                      context,
-                      points,
-                      tier,
-                      displayName,
-                      username,
-                      userId,
-                      photoUrl,
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              color: _accent,
+              backgroundColor: const Color(0xFF12102A),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: SafeArea(
+                      bottom: false,
+                      child: _buildHeader(
+                        context,
+                        points,
+                        tier,
+                        displayName,
+                        username,
+                        userId,
+                        photoUrl,
+                      ),
                     ),
                   ),
-                ),
-                const SliverToBoxAdapter(child: _PendingUploadBanner()),
-                SliverToBoxAdapter(child: _buildHeroSection(context)),
-                SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
-                SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
-                SliverToBoxAdapter(child: _buildBannersSection(context)),
-                SliverToBoxAdapter(child: _buildTrendingSection(context)),
-                if (isAdmin)
-                  SliverToBoxAdapter(child: _buildAdminButton(context)),
-                SliverToBoxAdapter(child: _buildEndlessChallengesHeader(context)),
-                _buildEndlessChallengesGrid(context),
-                const SliverToBoxAdapter(child: SizedBox(height: 24)),
-              ],
+                  SliverToBoxAdapter(
+                    child: _buildStreakBanner(streakDay, lastStreakDate),
+                  ),
+                  const SliverToBoxAdapter(child: _PendingUploadBanner()),
+                  // Admin-curated Featured carousel (backend ADR 092) — auto-
+                  // advances, each card slides in from the left; renders nothing
+                  // when no challenge is featured. Keyed on _refreshTick so
+                  // pull-to-refresh rebuilds + re-fetches it.
+                  SliverToBoxAdapter(
+                    child: _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
+                  ),
+                  SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
+                  SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
+                  SliverToBoxAdapter(child: _buildBannersSection(context)),
+                  SliverToBoxAdapter(child: _buildTrendingSection(context)),
+                  if (isAdmin)
+                    SliverToBoxAdapter(child: _buildAdminButton(context)),
+                  SliverToBoxAdapter(
+                    child: _buildEndlessChallengesHeader(context),
+                  ),
+                  _buildEndlessChallengesGrid(context),
+                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ],
+              ),
             ),
           ),
           // Inside MainShell the shell owns the one shared bottom nav.
@@ -503,133 +556,174 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // ── Hero Section ───────────────────────────────────────────────────────────
-  Widget _buildHeroSection(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _challengesFuture,
-      builder: (context, snap) {
-        final list = snap.data ?? [];
-        final hero =
-            list.isEmpty
-                ? null
-                : list.firstWhere(
-                  (c) => c['creatorId'] == 'system',
-                  orElse: () => list.first,
-                );
+  // ── Streak Banner ──────────────────────────────────────────────────────────
+  Widget _buildStreakBanner(int streakDay, String lastStreakDate) {
+    final now = DateTime.now();
+    final todayStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final yesterday = now.subtract(const Duration(days: 1));
+    final yesterdayStr =
+        '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
 
-        String title = 'Bollywood Walk';
-        String videoUrl = '';
-        String thumbnailUrl = '';
-        String instructions = '';
-        String challengeId = '';
-        int participants = 0;
+    final qualifiedToday = lastStreakDate == todayStr;
+    final qualifiedYesterday = lastStreakDate == yesterdayStr;
+    final bonusJustCredited = streakDay == 0 && qualifiedToday;
 
-        if (hero != null) {
-          title = hero['title'] as String? ?? title;
-          videoUrl = hero['videoUrl'] as String? ?? '';
-          thumbnailUrl = hero['thumbnailUrl'] as String? ?? '';
-          instructions = hero['instructions'] as String? ?? '';
-          challengeId = hero['id'] as String? ?? '';
-          participants = hero['submissionsCount'] as int? ?? 0;
-        }
+    // Broken: had an active streak but missed at least one full day
+    final broken =
+        streakDay > 0 &&
+        !qualifiedToday &&
+        !qualifiedYesterday &&
+        lastStreakDate.isNotEmpty;
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
-          child: GestureDetector(
-            onTap:
-                challengeId.isNotEmpty
-                    ? () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (_) => ChallengeDetail(
-                              source: 'home',
-                              title: title,
-                              instructions: instructions,
-                              videoUrl: videoUrl,
-                              challengeId: challengeId,
-                            ),
-                      ),
-                    )
-                    : null,
-            child: Container(
-              height: 320,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF4B3EAA), width: 1.5),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(19),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    VideoThumbnailWidget(
-                      videoUrl: videoUrl,
-                      thumbnailUrl: thumbnailUrl,
-                    ),
-                    // Bottom-to-top dark gradient for text readability
-                    Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: [0.2, 1.0],
-                          colors: [Colors.transparent, Colors.black],
+    // At risk: after 7 pm, streak active, haven't played today yet
+    final atRisk =
+        !broken && streakDay > 0 && !qualifiedToday && now.hour >= 19;
+
+    if (streakDay == 0 && !bonusJustCredited) return const SizedBox.shrink();
+
+    final displayDay = bonusJustCredited ? 7 : streakDay;
+    const streakColor = Color(0xFFFF6B35);
+
+    // State-driven appearance
+    late Color borderColor;
+    late Color labelColor;
+    late String emoji;
+    late String label;
+
+    if (broken) {
+      borderColor = const Color(0xFFFF4444).withValues(alpha: 0.45);
+      labelColor = const Color(0xFFFF6B6B);
+      emoji = '💔';
+      label = 'Streak broken — play today to start a new one!';
+    } else if (bonusJustCredited) {
+      borderColor = streakColor.withValues(alpha: 0.50);
+      labelColor = streakColor;
+      emoji = '🎉';
+      label = '7-Day Streak complete! +50 Auras awarded';
+    } else if (atRisk) {
+      borderColor = Colors.amber.withValues(alpha: 0.65);
+      labelColor = Colors.amber;
+      emoji = '⚠️';
+      label = 'Streak ends at midnight — play now to save it!';
+    } else if (qualifiedToday) {
+      borderColor = streakColor.withValues(alpha: 0.40);
+      labelColor = streakColor;
+      emoji = '🔥';
+      label = 'Day $displayDay/7 — keep it up!';
+    } else {
+      borderColor = streakColor.withValues(alpha: 0.20);
+      labelColor = AppColors.textMuted;
+      emoji = '🔥';
+      label = 'Day $displayDay/7 — play a challenge to continue';
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0820),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Day dot tracker ──────────────────────────────────────
+                Row(
+                  children: List.generate(7, (i) {
+                    final dayNum = i + 1;
+                    final isCompleted =
+                        broken
+                            ? false
+                            : (dayNum < displayDay ||
+                                (dayNum == displayDay &&
+                                    (qualifiedToday || bonusJustCredited)));
+                    final isCurrent =
+                        !broken &&
+                        !bonusJustCredited &&
+                        dayNum == displayDay &&
+                        !qualifiedToday;
+                    final isPast = broken && dayNum <= displayDay;
+
+                    Color dotBg;
+                    Border? dotBorder;
+                    Widget dotChild;
+
+                    if (isPast) {
+                      dotBg = const Color(0xFFFF4444).withValues(alpha: 0.18);
+                      dotChild = const Icon(
+                        Icons.close_rounded,
+                        color: Color(0xFFFF6B6B),
+                        size: 11,
+                      );
+                    } else if (isCompleted) {
+                      dotBg = streakColor;
+                      dotChild = const Icon(
+                        Icons.local_fire_department_rounded,
+                        color: Colors.white,
+                        size: 12,
+                      );
+                    } else if (isCurrent) {
+                      dotBg = Colors.transparent;
+                      dotBorder = Border.all(
+                        color: atRisk ? Colors.amber : streakColor,
+                        width: 1.5,
+                      );
+                      dotChild = Text(
+                        '$dayNum',
+                        style: TextStyle(
+                          color: atRisk ? Colors.amber : streakColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 6,
-                      right: 6,
-                      bottom: 4,
-                      child: ThumbnailStatsBadge(participants: participants),
-                    ),
-                    // Featured tag
-                    Positioned(
-                      left: 16,
-                      top: 16,
+                      );
+                    } else {
+                      dotBg = Colors.white.withValues(alpha: 0.06);
+                      dotChild = Text(
+                        '$dayNum',
+                        style: const TextStyle(
+                          color: Colors.white24,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }
+
+                    return Expanded(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
+                        margin: EdgeInsets.only(right: i < 6 ? 4 : 0),
+                        height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.3),
-                          ),
+                          color: dotBg,
+                          shape: BoxShape.circle,
+                          border: dotBorder,
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.star_rounded,
-                              color: Color(0xFFD4A8FF),
-                              size: 14,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Featured',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                fontFamily: 'SpaceGrotesk',
-                              ),
-                            ),
-                          ],
-                        ),
+                        child: Center(child: dotChild),
                       ),
-                    ),
-                  ],
+                    );
+                  }),
                 ),
-              ),
+                const SizedBox(height: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: labelColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'SpaceGrotesk',
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -719,6 +813,7 @@ class _DashboardState extends State<Dashboard> {
                                         VideoThumbnailWidget(
                                           videoUrl: videoUrl,
                                           thumbnailUrl: thumbnailUrl,
+                                          impressionChallengeId: challengeId,
                                         ),
                                         Positioned(
                                           left: 0,
@@ -803,6 +898,7 @@ class _DashboardState extends State<Dashboard> {
                                             VideoThumbnailWidget(
                                               videoUrl: videoUrl,
                                               thumbnailUrl: thumbnailUrl,
+                                              impressionChallengeId: challengeId,
                                             ),
                                             Container(
                                               color: Colors.black.withValues(
@@ -930,6 +1026,7 @@ class _DashboardState extends State<Dashboard> {
                                     VideoThumbnailWidget(
                                       videoUrl: videoUrl,
                                       thumbnailUrl: thumbnailUrl,
+                                      impressionChallengeId: challengeId,
                                     ),
                                     Positioned(
                                       left: 0,
@@ -1260,6 +1357,7 @@ class _EndlessChallengeCard extends StatelessWidget {
             VideoThumbnailWidget(
               videoUrl: videoUrl,
               thumbnailUrl: thumbnailUrl,
+              impressionChallengeId: challengeId,
             ),
             Positioned(
               left: 0,
@@ -1418,6 +1516,234 @@ class _PendingUploadBannerState extends State<_PendingUploadBanner> {
             onPressed: _confirmDiscard,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Featured carousel ────────────────────────────────────────────────────────
+// The admin-curated Featured strip on the home screen (backend ADR 092).
+// Shows ONLY challenges an admin has flagged `isFeatured`, in the original
+// full-bleed 320px hero-card style. Swipe left/right through them, and it also
+// auto-advances every [_interval]. Renders nothing at all when the list is
+// empty, so the home feed just closes the gap.
+class _FeaturedCarousel extends StatefulWidget {
+  const _FeaturedCarousel({super.key});
+
+  @override
+  State<_FeaturedCarousel> createState() => _FeaturedCarouselState();
+}
+
+class _FeaturedCarouselState extends State<_FeaturedCarousel> {
+  static const _interval = Duration(seconds: 4);
+  static const _accent = Color(0xFF7B2CBF);
+
+  final PageController _pageController = PageController();
+  List<Map<String, dynamic>> _items = const [];
+  bool _loaded = false;
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final items = await HomeService().fetchFeatured();
+    if (!mounted) return;
+    setState(() {
+      _items = items;
+      _loaded = true;
+      _index = 0;
+    });
+    _prewarm(0);
+    _startAutoAdvance();
+  }
+
+  void _startAutoAdvance() {
+    _timer?.cancel();
+    if (_items.length > 1) {
+      _timer = Timer.periodic(_interval, (_) {
+        if (!mounted || !_pageController.hasClients || _items.length < 2) return;
+        final next = (_index + 1) % _items.length;
+        _pageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
+  }
+
+  void _onPageChanged(int i) {
+    setState(() => _index = i);
+    _prewarm(i);
+    // A manual swipe resets the auto-advance clock so it doesn't yank the
+    // card away right after the user lands on one.
+    _startAutoAdvance();
+  }
+
+  void _prewarm(int i) {
+    if (i < 0 || i >= _items.length) return;
+    final url = normaliseHomeSummary(_items[i])['videoUrl'] as String? ?? '';
+    if (url.isNotEmpty) {
+      VideoPrewarmCache.prewarm(url, mixWithOthers: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 344, // 320 card + 24 bottom padding (matches the old hero)
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: _items.length,
+            onPageChanged: _onPageChanged,
+            physics: _items.length > 1
+                ? const BouncingScrollPhysics()
+                : const NeverScrollableScrollPhysics(),
+            itemBuilder: (context, i) => _heroCard(_items[i]),
+          ),
+        ),
+        if (_items.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(_items.length, (i) {
+                final on = i == _index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: on ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: on ? _accent : Colors.white24,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // The original full-bleed 320px hero card, now one page of the carousel.
+  Widget _heroCard(Map<String, dynamic> raw) {
+    final c = normaliseHomeSummary(raw);
+    final title = c['title'] as String;
+    final videoUrl = c['videoUrl'] as String;
+    final thumbnailUrl = c['thumbnailUrl'] as String;
+    final instructions = c['instructions'] as String;
+    final challengeId = c['id'] as String;
+    final participants = c['submissionsCount'] as int? ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 20),
+      child: GestureDetector(
+        onTap: challengeId.isEmpty
+            ? null
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChallengeDetail(
+                      title: title,
+                      instructions: instructions,
+                      videoUrl: videoUrl,
+                      challengeId: challengeId,
+                    ),
+                  ),
+                ),
+        child: Container(
+          height: 320,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF4B3EAA), width: 1.5),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(19),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                VideoThumbnailWidget(
+                  videoUrl: videoUrl,
+                  thumbnailUrl: thumbnailUrl,
+                  impressionChallengeId: challengeId,
+                ),
+                // Bottom-to-top dark gradient for text readability
+                Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.2, 1.0],
+                      colors: [Colors.transparent, Colors.black],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 6,
+                  right: 6,
+                  bottom: 4,
+                  child: ThumbnailStatsBadge(participants: participants),
+                ),
+                // Featured tag
+                Positioned(
+                  left: 16,
+                  top: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFD4A8FF),
+                          size: 14,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Featured',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'SpaceGrotesk',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

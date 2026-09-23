@@ -9,7 +9,6 @@ import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
-import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/core/utils/asset_cache_key.dart';
 import 'package:aura_app/features/account/screens/all_videos_screen.dart';
 
@@ -38,7 +37,6 @@ void main() {
       'api_user_id': 'user-1',
     });
     SharedPreferences.setMockInitialValues({});
-    VideosService.resetLocallyDeletedForTest();
 
     ApiClient.httpClient = MockClient((request) async {
       if (request.method == 'GET' &&

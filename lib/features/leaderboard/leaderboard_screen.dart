@@ -7,7 +7,6 @@ import '../../core/services/challenges_service.dart';
 import '../../core/services/friends_service.dart';
 import '../../core/services/leaderboard_service.dart';
 import '../../core/services/screen_cache.dart';
-import '../../core/services/videos_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/challenge_leaderboard_row.dart';
@@ -169,12 +168,7 @@ class _ApiBoardState extends State<_ApiBoard>
   @override
   void initState() {
     super.initState();
-    // Load the caller's id and hydrate the deleted-video Aura offset (see
-    // VideosService) so build() can drop the user's own row to the rank their
-    // post-deletion score actually earns — the server still ranks them on the
-    // pre-deletion total. setState covers both once they resolve.
     () async {
-      await VideosService.hydrate();
       final id = await ApiClient().userId;
       if (mounted) setState(() => _myId = id);
     }();
@@ -276,12 +270,10 @@ class _ApiBoardState extends State<_ApiBoard>
         ),
       );
     }
-    // The server ranks the current user on their pre-deletion Aura total;
-    // re-score and re-position their row for any videos they've deleted that
-    // the backend hasn't debited yet. Pure transform over a pristine
-    // `_entries` (which stays the raw server list for the cache).
-    final display =
-        VideosService.applyDeletedVideoOffsetToLeaderboard(_entries, _myId);
+    // Server-authoritative — the backend now debits Aura (and re-ranks) on
+    // video delete itself, so the raw server list needs no client-side
+    // re-scoring/re-positioning.
+    final display = _entries;
     final userInList = _myId != null && display.any((e) => e['id'] == _myId);
     return RefreshIndicator(
       color: _accent,
@@ -667,10 +659,10 @@ class _EntryList extends StatelessWidget {
                 data['username'] as String? ??
                 data['profileName'] as String? ??
                 '';
-            final score = VideosService.adjustBalanceForDeletedVideos(
+            final score =
                 ((data['auraPoints'] ?? data['totalRewards']) as num?)
                         ?.toInt() ??
-                    0);
+                    0;
             return _PlayerRow(
               rank: entries.length + 1,
               name: name,

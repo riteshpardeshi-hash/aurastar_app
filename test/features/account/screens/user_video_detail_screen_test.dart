@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
-import 'package:aura_app/core/services/videos_service.dart';
 import 'package:aura_app/features/account/screens/user_video_detail_screen.dart';
 
 // Regression coverage: deleting a video used to run a Firestore transaction
@@ -34,7 +33,6 @@ void main() {
       'api_user_id': 'user-1',
     });
     SharedPreferences.setMockInitialValues({});
-    VideosService.resetLocallyDeletedForTest();
 
     deleteCalls = 0;
     deletedPath = null;
@@ -117,11 +115,6 @@ void main() {
     expect(find.text('Open Detail'), findsOneWidget,
         reason: 'a successful delete should pop back to the caller');
     expect(deletedResultHolder.value, 'deleted');
-    // The backend doesn't debit Aura on delete (openapi.yaml: bare
-    // soft-delete) — the 50 points this approved video earned are recorded
-    // as a local wallet offset so displayed balances drop right away.
-    expect(VideosService.deletedVideoAuraOffset, 50);
-    expect(VideosService.adjustBalanceForDeletedVideos(1000), 950);
   });
 
   // The confirm dialog must name the points the delete will cost, so the

@@ -308,29 +308,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted) setState(() => _isCreator = v);
     });
-    // This screen stays mounted forever inside MainShell's IndexedStack
-    // (ADR 011) — a delete from AllVideosScreen ("VIEW ALL", a fresh push
-    // with no callback on return) never touches our `_videos` state, so the
-    // Profile preview grid kept showing already-deleted videos until the
-    // next pull-to-refresh or app relaunch. Re-filter in place whenever any
-    // screen deletes a video instead.
-    VideosService.deletionTick.addListener(_onVideoDeletedElsewhere);
-  }
-
-  @override
-  void dispose() {
-    VideosService.deletionTick.removeListener(_onVideoDeletedElsewhere);
-    super.dispose();
-  }
-
-  void _onVideoDeletedElsewhere() {
-    if (!mounted) return;
-    final filtered =
-        _videos.where((v) => !VideosService.isDeletedVideo(v)).toList();
-    if (filtered.length != _videos.length) {
-      setState(() => _videos = filtered);
-      _cacheBundle();
-    }
   }
 
   void _cacheBundle() {
@@ -359,10 +336,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
     try {
       final uid = await ApiClient().userId;
-      // Restores ids deleted on earlier launches before the grid filter
-      // below runs — /profile/videos keeps listing soft-deleted videos, so a
-      // cold start would otherwise un-hide every previously deleted one.
-      await VideosService.hydrate();
       final results = await Future.wait<dynamic>([
         AuthApiService().getProfile(),
         AuthApiService().fetchMyVideos(limit: 10),
@@ -372,24 +345,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         AuthApiService().fetchReferralStatsDetail(),
         RewardsService().fetchRewards(),
       ]);
-      // The backend doesn't debit Aura when a video is deleted; VideosService
-      // carries the lost points locally and the Aura balance below subtracts
-      // them via adjustBalanceForDeletedVideos (hydrate() above loaded it).
       if (!mounted) return;
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
-        // /profile/videos keeps returning a video after DELETE /videos/{id}
-        // soft-deletes it — the list endpoint never drops it. Without this
-        // filter a deleted video reappears in the grid on the next refresh,
-        // and re-tapping Delete on it then 404s ("video not found") since
-        // it's already gone server-side. VideosService.isDeletedVideo also
-        // covers ids deleted this session, since the server-side marker has
-        // proven unreliable (see that method).
-        _videos = (results[1] as List)
-            .cast<Map<String, dynamic>>()
-            .where((v) => !VideosService.isDeletedVideo(v))
-            .toList();
+        // /profile/videos excludes soft-deleted videos at the source now
+        // (backend fix — see docs/backend-issues/002-*, resolved).
+        _videos = (results[1] as List).cast<Map<String, dynamic>>();
         _savedChallenges = (results[2] as List)
             .cast<Map<String, dynamic>>()
             .map(normaliseChallenge)
@@ -454,8 +416,12 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       'videoId': s['videoId'] as String? ?? submissionId,
       'videoUrl': s['videoUrl'] as String? ?? '',
       'thumbnailUrl': s['thumbnailUrl'] as String? ?? '',
-      // See VideosService.isMirroredVideo / ADR 020.
+      // See VideosService.isMirroredVideo / ADR 026.
       'mirrored': VideosService.isMirroredVideo(s),
+      // The Video document's own async-processing state (ADR 099) — a
+      // "failed" video has nothing servable and the thumbnail widget uses
+      // this to skip straight to an unavailable placeholder.
+      'processingStatus': s['processingStatus'] as String?,
       'status': submissionStatusFromApi(submission),
       // `/profile/videos`'s nested `submission` object omits `auraPoints`
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
@@ -888,8 +854,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   // ── Aura points card ─────────────────────────────────────────────────────────
-  Widget _buildAuraPointsCard(int points, int level, String? tierName) {
+  Widget _buildAuraPointsCard(
+    int points,
+    int level,
+    String? tierName,
+    Map<String, dynamic>? levelProgressData,
+  ) {
     final tier = auraTierForName(tierName, level: level);
+    // Server-computed (GET /profile#levelProgress) — never derive this from a
+    // hardcoded step locally, the level.aura_step App Setting is admin-tunable.
+    // Falls back to an empty ring (not a guess) if an older cached profile
+    // response predates this field.
+    final pct = ((levelProgressData?['pct'] as num?) ?? 0).toDouble().clamp(0.0, 1.0);
+    final auraToNextLevel = (levelProgressData?['auraToNextLevel'] as num?)?.toInt();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -947,49 +924,68 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         ],
                       ),
                     ),
-                    Container(
+                    SizedBox(
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            tier.color.withValues(alpha: 0.35),
-                            tier.color.withValues(alpha: 0.08),
-                          ],
-                        ),
-                        border: Border.all(
-                            color: tier.color.withValues(alpha: 0.70),
-                            width: 2.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: tier.color.withValues(alpha: 0.35),
-                            blurRadius: 14,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Text('LEVEL',
-                              style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
-                          Text(
-                            '$level',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              height: 1.0,
+                          // The circle's own edge IS the progress bar — how much of
+                          // the current level's Aura the user has earned so far.
+                          SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              key: const Key('levelProgressRing'),
+                              value: pct,
+                              strokeWidth: 3.5,
+                              backgroundColor: tier.color.withValues(alpha: 0.18),
+                              valueColor: AlwaysStoppedAnimation<Color>(tier.color),
                             ),
                           ),
-                          Text(
-                            tier.name,
-                            style: TextStyle(
-                              color: tier.color,
-                              fontSize: 8,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
+                          Container(
+                            width: 68,
+                            height: 68,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  tier.color.withValues(alpha: 0.35),
+                                  tier.color.withValues(alpha: 0.08),
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: tier.color.withValues(alpha: 0.35),
+                                  blurRadius: 14,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('LEVEL',
+                                    style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
+                                Text(
+                                  '$level',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                Text(
+                                  tier.name,
+                                  style: TextStyle(
+                                    color: tier.color,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -997,6 +993,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     ),
                   ],
                 ),
+                if (auraToNextLevel != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    auraToNextLevel > 0
+                        ? '$auraToNextLevel Aura to Level ${level + 1}'
+                        : 'Ready to level up!',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1458,6 +1463,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               final data = preview[i];
               final videoUrl = data['videoUrl'] as String;
               final thumbnailUrl = data['thumbnailUrl'] as String;
+              final processingStatus = data['processingStatus'] as String?;
               final status = data['status'] as String;
               final auraPoints = data['auraPoints'] as int;
               final aiScore = data['aiScore'];
@@ -1499,6 +1505,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       VideoThumbnailWidget(
                           videoUrl: videoUrl,
                           thumbnailUrl: thumbnailUrl,
+                          processingStatus: processingStatus,
                           fit: BoxFit.cover,
                           mirrored: mirrored),
                       Positioned(
@@ -1617,14 +1624,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final serverRewards = (_profile['auraPoints'] as num?)?.toInt() ??
         (_profile['totalRewards'] as num?)?.toInt() ??
         0;
-    // Subtract Aura from videos the user deleted that the backend hasn't
-    // debited yet (see VideosService). Only the displayed points move —
-    // level and tier stay on the server's authoritative values.
-    final totalRewards =
-        VideosService.adjustBalanceForDeletedVideos(serverRewards);
+    // Server-authoritative — the backend now debits Aura on video delete
+    // itself, so the raw balance is already correct (no client offset).
+    final totalRewards = serverRewards;
     // Server-computed and authoritative — do not recompute locally.
     final level = (_profile['level'] as num?)?.toInt() ?? 1;
     final tierName = _profile['tier'] as String?;
+    final levelProgressData = _profile['levelProgress'] as Map<String, dynamic>?;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1680,7 +1686,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ] else ...[
                 _buildBecomeCreatorBanner(context, totalRewards),
               ],
-              _buildAuraPointsCard(totalRewards, level, tierName),
+              _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
               _buildStreakCard(),
               _buildRewardsRow(context),
               const SizedBox(height: 8),
@@ -1760,6 +1766,7 @@ class _SavedChallengesGrid extends StatelessWidget {
           children: challenges.map((c) {
             final videoUrl = c['videoUrl'] as String? ?? '';
             final thumbnailUrl = c['thumbnailUrl'] as String?;
+            final processingStatus = c['processingStatus'] as String?;
             final title    = c['title']    as String? ?? '';
             return ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -1769,6 +1776,7 @@ class _SavedChallengesGrid extends StatelessWidget {
                   VideoThumbnailWidget(
                       videoUrl: videoUrl,
                       thumbnailUrl: thumbnailUrl,
+                      processingStatus: processingStatus,
                       fit: BoxFit.cover),
                   Positioned(
                     bottom: 0,
