@@ -44,7 +44,9 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
 
   void _share() {
     AnalyticsService().logShare(contentType: 'video');
-    Share.share('Check out my video submission on Aura! 🌟\n${widget.videoUrl}');
+    Share.share(
+      'Check out my video submission on Aura! 🌟\n${widget.videoUrl}',
+    );
   }
 
   /// Points this delete will claw back from the wallet — only an approved
@@ -64,41 +66,54 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     // `pts` (this video's own score) is an upper bound, not necessarily the
     // exact amount that'll be removed, so the copy says "up to" rather than
     // asserting a precise figure.
-    final message = pts > 0
-        ? 'This video earned you $pts Aura ${pts == 1 ? 'point' : 'points'}. '
-            'Deleting it will permanently remove up to $pts '
-            '${pts == 1 ? 'point' : 'points'} from your wallet — less if a '
-            "better submission of yours already exists for this challenge — "
-            "and this can't be undone."
-        : 'This will permanently remove your video. This action cannot be undone.';
+    final message =
+        pts > 0
+            ? 'This video earned you $pts Aura ${pts == 1 ? 'point' : 'points'}. '
+                'Deleting it will permanently remove up to $pts '
+                '${pts == 1 ? 'point' : 'points'} from your wallet — less if a '
+                "better submission of yours already exists for this challenge — "
+                "and this can't be undone."
+            : 'This will permanently remove your video. This action cannot be undone.';
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF12102A),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Delete Video',
-            style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text(
-          message,
-          style: const TextStyle(color: AppColors.textMuted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textMuted)),
+      builder:
+          (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF12102A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            title: const Text(
+              'Delete Video',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Text(
+              message,
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete',
-                style: TextStyle(
-                    color: Colors.redAccent, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
     );
     if (confirmed != true || !mounted) return;
 
@@ -113,9 +128,9 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
       // (403 "requires ownership", 400 "this is a challenge's reference
       // video", 404) — surface the backend's actual reason instead of a
       // generic "try again" that hides which one actually happened.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(humanizeError(e))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(humanizeError(e))));
     }
   }
 
@@ -123,6 +138,17 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
   Widget build(BuildContext context) {
     final isApproved = widget.status == 'approved';
     final isPending = widget.status == 'pending';
+    // 'ai_error' = AI scoring didn't finish (backend status 'failed', or a
+    // status the client can't interpret) and the submission goes to manual
+    // admin review. It is not a rejection — this screen used to fall through
+    // to "Rejected" while the video grid labelled the same video "Review".
+    final isUnderReview = widget.status == 'ai_error';
+    final statusColor =
+        isApproved
+            ? Colors.green
+            : isUnderReview
+            ? Colors.orange
+            : Colors.red;
 
     return Scaffold(
       appBar: AppBar(
@@ -205,14 +231,22 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
                       Row(
                         children: [
                           Icon(
-                            isApproved ? Icons.check_circle : Icons.cancel,
-                            color: isApproved ? Colors.green : Colors.red,
+                            isApproved
+                                ? Icons.check_circle
+                                : isUnderReview
+                                ? Icons.hourglass_top
+                                : Icons.cancel,
+                            color: statusColor,
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            isApproved ? "Approved" : "Rejected",
+                            isApproved
+                                ? "Approved"
+                                : isUnderReview
+                                ? "Under review"
+                                : "Rejected",
                             style: TextStyle(
-                              color: isApproved ? Colors.green : Colors.red,
+                              color: statusColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -223,7 +257,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Icon(Icons.auto_awesome, size: 16, color: Color(0xFF7B2CBF)),
+                            const Icon(
+                              Icons.auto_awesome,
+                              size: 16,
+                              color: Color(0xFF7B2CBF),
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               "AI Score: ${widget.aiScore} / 100",
@@ -239,7 +277,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Icon(Icons.stars, color: Colors.deepPurple, size: 20),
+                            const Icon(
+                              Icons.stars,
+                              color: Colors.deepPurple,
+                              size: 20,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               "+${widget.auraPoints} Aura Points earned",
@@ -256,7 +298,11 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
                         const SizedBox(height: 12),
                         const Text(
                           "AI Feedback",
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black54),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Colors.black54,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
