@@ -390,12 +390,19 @@ class _VoucherCard extends StatelessWidget {
 
   static const _accent = AppColors.accent;
 
+  // Falls back through offerName -> voucherLabel -> a fallback that reflects
+  // which kind of voucher this actually is (never a hardcoded "Leaderboard
+  // Voucher" for a card that may be rendered under LEVEL-UP VOUCHERS too) —
+  // see GET /profile/offer-vouchers, which now always joins offerName +
+  // voucherLabel in, so this fallback is only a defensive last resort.
   String get _title =>
       (voucher['offerName'] as String?)?.trim().isNotEmpty == true
           ? voucher['offerName'] as String
           : (voucher['voucherLabel'] as String?)?.trim().isNotEmpty == true
               ? voucher['voucherLabel'] as String
-              : 'Leaderboard Voucher';
+              : _level != null
+                  ? 'Level-Up Voucher'
+                  : 'Leaderboard Voucher';
 
   String? get _value {
     final v = (voucher['voucherValue'] as String?)?.trim();
