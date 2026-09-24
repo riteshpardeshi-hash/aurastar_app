@@ -169,6 +169,51 @@ void main() {
     expect(find.textContaining('LEVELCODE1'), findsOneWidget);
   });
 
+  // Regression: a recurring level-up offer (ADR 104 — one admin-configured
+  // Offer grants on every level-up, forever) has the exact same generic
+  // offerName on every single grant it will ever produce. The card used to
+  // just print that raw offerName verbatim — a real one was named "Every
+  // Level Up Reward", so a level-529 grant and a level-530 grant from the
+  // same offer looked identical and neither said what level it was actually
+  // for. The title is now always computed from the level actually earned.
+  testWidgets(
+      'titles a level voucher by its own level, not the recurring offer\'s generic name',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/profile/offer-vouchers')) {
+        return json({
+          'status': 'success',
+          'data': {
+            'responses': [
+              {
+                'code': 'A1',
+                'status': 'GRANTED',
+                'levelAtGrant': 529,
+                'offerName': 'Every Level Up Reward',
+              },
+              {
+                'code': 'A2',
+                'status': 'GRANTED',
+                'levelAtGrant': 530,
+                'offerName': 'Every Level Up Reward',
+              },
+            ],
+          },
+        });
+      }
+      return json({'status': 'success', 'data': {'responses': []}});
+    });
+
+    await useTallSurface(tester);
+    await tester.pumpWidget(const MaterialApp(home: RewardsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Level 529 Reward'), findsOneWidget);
+    expect(find.text('Level 530 Reward'), findsOneWidget);
+    expect(find.text('Every Level Up Reward'), findsNothing);
+  });
+
   testWidgets('shows per-section empty lines when the backend returns nothing',
       (tester) async {
     ApiClient.httpClient = MockClient((request) async {

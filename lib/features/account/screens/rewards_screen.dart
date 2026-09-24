@@ -100,6 +100,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     title: 'COUPONS & BONUSES',
                     subtitle:
                         'Earned from streaks, challenges and special rewards',
+                    count: _bonusRewards.length,
                   ),
                   const SizedBox(height: 12),
                   if (_bonusRewards.isEmpty)
@@ -115,6 +116,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                   _SectionHeader(
                     title: 'LEVEL-UP VOUCHERS',
                     subtitle: 'Won by reaching a new level',
+                    count: _levelVouchers.length,
                   ),
                   const SizedBox(height: 12),
                   if (_levelVouchers.isEmpty)
@@ -130,6 +132,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     title: 'LEADERBOARD VOUCHERS',
                     subtitle:
                         'Won by finishing near the top of a challenge leaderboard',
+                    count: _leaderboardVouchers.length,
                   ),
                   const SizedBox(height: 12),
                   if (_leaderboardVouchers.isEmpty)
@@ -220,14 +223,38 @@ class _CenteredScroll extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final String subtitle;
-  const _SectionHeader({required this.title, required this.subtitle});
+  final int count;
+  const _SectionHeader({
+    required this.title,
+    required this.subtitle,
+    required this.count,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: AppTextStyles.sectionHeader),
+        Row(
+          children: [
+            Text(title, style: AppTextStyles.sectionHeader),
+            if (count > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('$count',
+                    style: const TextStyle(
+                        color: AppColors.accentLight,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ],
+        ),
         const SizedBox(height: 4),
         Text(subtitle,
             style: const TextStyle(color: AppColors.textFaint, fontSize: 12)),
@@ -324,11 +351,13 @@ class _CouponRewardCardState extends State<_CouponRewardCard> {
     final amountLine = isCoupon
         ? (couponValue ?? 'Coupon reward')
         : (auraAmount != null ? '+$auraAmount Aura' : 'Aura reward');
-    // Prefer the resolved reference (a real challenge/offer name) as the
-    // "why" line; fall back to a date so even a context-free reward (e.g.
-    // leaderboard_top, which has no single challenge behind it) is still
-    // distinguishable from another instance of the same reason.
-    final whyLine = refTitle ?? (awardedAt != null ? 'on $awardedAt' : null);
+    // The resolved reference (a real challenge/offer name) — when present,
+    // it's what makes two same-reason rewards from two different days
+    // distinguishable from each other. "Won on {date}" is shown separately,
+    // always, matching _VoucherCard's own wording below — a context-free
+    // reward (e.g. leaderboard_top, which has no single challenge behind it)
+    // still gets a date even with no refTitle.
+    final whyLine = refTitle;
 
     // Only coupons have a trailing action/state: the revealed code, a Claim
     // button, or an Expired/Claimed pill. An aura_points reward is credited
@@ -406,6 +435,12 @@ class _CouponRewardCardState extends State<_CouponRewardCard> {
                 style: const TextStyle(
                     color: AppColors.textFaint, fontSize: 10.5)),
           ],
+          if (awardedAt != null) ...[
+            const SizedBox(height: 2),
+            Text('Won on $awardedAt',
+                style: const TextStyle(
+                    color: AppColors.textFaint, fontSize: 10.5)),
+          ],
           if (trailing != null) ...[
             const SizedBox(height: 10),
             trailing,
@@ -424,19 +459,25 @@ class _VoucherCard extends StatelessWidget {
 
   static const _accent = AppColors.accent;
 
-  // Falls back through offerName -> voucherLabel -> a fallback that reflects
-  // which kind of voucher this actually is (never a hardcoded "Leaderboard
-  // Voucher" for a card that may be rendered under LEVEL-UP VOUCHERS too) —
-  // see GET /profile/offer-vouchers, which now always joins offerName +
-  // voucherLabel in, so this fallback is only a defensive last resort.
-  String get _title =>
-      (voucher['offerName'] as String?)?.trim().isNotEmpty == true
-          ? voucher['offerName'] as String
-          : (voucher['voucherLabel'] as String?)?.trim().isNotEmpty == true
-              ? voucher['voucherLabel'] as String
-              : _level != null
-                  ? 'Level-Up Voucher'
-                  : 'Leaderboard Voucher';
+  // A level-up voucher is titled by the level it was actually earned at
+  // ("Level 529 Reward") — its parent Offer is almost always a *recurring*
+  // one (ADR 104: one admin-configured offer grants on every level-up,
+  // forever), so `offerName`/`voucherLabel` is the exact same generic string
+  // on every single grant it will ever produce, not a useful per-card
+  // heading (it once literally read "Every Level Up Reward" on every card,
+  // regardless of which level it was for). A leaderboard voucher keeps its
+  // offer's own name/label as the heading — that genuinely is meaningful
+  // per-instance branding (a specific campaign, e.g. "Summer Top 10").
+  String get _title {
+    if (_level != null) return 'Level $_level Reward';
+    if ((voucher['offerName'] as String?)?.trim().isNotEmpty == true) {
+      return voucher['offerName'] as String;
+    }
+    if ((voucher['voucherLabel'] as String?)?.trim().isNotEmpty == true) {
+      return voucher['voucherLabel'] as String;
+    }
+    return _rank != null ? 'Rank #$_rank Reward' : 'Reward';
+  }
 
   String? get _value {
     final v = (voucher['voucherValue'] as String?)?.trim();
@@ -451,12 +492,12 @@ class _VoucherCard extends StatelessWidget {
       (voucher['levelAtGrant'] as num?)?.toInt() ??
       (voucher['level'] as num?)?.toInt();
 
-  /// What earned this coupon — a level-up or a leaderboard finish.
-  String? get _originLabel {
-    if (_level != null) return 'Level $_level reward';
-    if (_rank != null) return 'Rank #$_rank';
-    return null;
-  }
+  /// What earned this coupon, when that isn't already said by the title
+  /// above. A level voucher's title already says "Level N Reward", so
+  /// repeating it here would be pure duplication; a leaderboard voucher's
+  /// title is the offer's own branding, so the rank it was won at still
+  /// needs to be said somewhere.
+  String? get _originLabel => _level != null ? null : (_rank != null ? 'Rank #$_rank' : null);
 
   bool get _isCatalog => couponIsCatalog(voucher);
 
