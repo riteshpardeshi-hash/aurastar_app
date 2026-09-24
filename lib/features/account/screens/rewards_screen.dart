@@ -63,6 +63,19 @@ class _RewardsScreenState extends State<RewardsScreen> {
       .where((v) => v['levelAtGrant'] == null && v['level'] == null)
       .toList();
 
+  // offerGrant.service.js mirrors every level-up/leaderboard OfferGrant into a
+  // UserReward row too (reason: level_up_offer / leaderboard_offer) — that
+  // mirror exists for other consumers of GET /profile/rewards, not for this
+  // screen. Without this filter the exact same coupon renders twice: once
+  // here (bare, no merchant/redeem context — reason isn't even in
+  // _reasonLabels, so it just says "Reward") and once, correctly, in its own
+  // voucher section below. Everything actually specific to this section
+  // (streaks, admin grants, brand challenge rewards, milestones) is unaffected.
+  static const _offerGrantMirrorReasons = {'level_up_offer', 'leaderboard_offer'};
+  List<Map<String, dynamic>> get _bonusRewards => _rewards
+      .where((r) => !_offerGrantMirrorReasons.contains(r['reason'] as String?))
+      .toList();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,12 +102,12 @@ class _RewardsScreenState extends State<RewardsScreen> {
                         'Earned from streaks, challenges and special rewards',
                   ),
                   const SizedBox(height: 12),
-                  if (_rewards.isEmpty)
+                  if (_bonusRewards.isEmpty)
                     const _EmptyLine('No coupons or bonuses yet')
                   else
                     _RewardGrid(
                       children: [
-                        for (final r in _rewards)
+                        for (final r in _bonusRewards)
                           _CouponRewardCard(reward: r, onClaimed: _load),
                       ],
                     ),
@@ -107,7 +120,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                   if (_levelVouchers.isEmpty)
                     const _EmptyLine('Level up to win brand vouchers')
                   else
-                    _RewardGrid(
+                    _VoucherList(
                       children: [
                         for (final v in _levelVouchers) _VoucherCard(voucher: v),
                       ],
@@ -123,7 +136,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     const _EmptyLine(
                         'Finish in a challenge’s top ranks to win brand vouchers')
                   else
-                    _RewardGrid(
+                    _VoucherList(
                       children: [
                         for (final v in _leaderboardVouchers)
                           _VoucherCard(voucher: v),
@@ -161,6 +174,27 @@ class _RewardGrid extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Full-width, one per row — unlike [_RewardGrid]'s 2-column layout, a
+/// voucher card carries real content that gets cramped at half-width
+/// (merchant name, offer name, a code chip, and a redeem button all in one
+/// card), so it gets the whole row to itself.
+class _VoucherList extends StatelessWidget {
+  final List<Widget> children;
+  const _VoucherList({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          children[i],
+        ],
+      ],
     );
   }
 }
@@ -465,22 +499,27 @@ class _VoucherCard extends StatelessWidget {
     }
   }
 
-  Widget _redeemButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 32,
-      child: ElevatedButton(
-        onPressed: _redeem,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _accent,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        child: Text(_isCatalog ? 'Shop now' : 'Redeem',
-            style: const TextStyle(fontSize: 12)),
+  // A level-up voucher gets a level-up icon, a leaderboard finish gets a
+  // trophy — a quick visual tell apart from the section header alone, since
+  // both card types are otherwise visually identical.
+  IconData get _icon =>
+      _level != null ? Icons.trending_up_rounded : Icons.emoji_events_rounded;
+
+  Widget _redeemButton({required bool expand}) {
+    final button = ElevatedButton(
+      onPressed: _redeem,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _accent,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
+      child: const Text('Redeem now', style: TextStyle(fontSize: 12)),
+    );
+    return SizedBox(
+      width: expand ? double.infinity : null,
+      height: 32,
+      child: button,
     );
   }
 
@@ -490,9 +529,13 @@ class _VoucherCard extends StatelessWidget {
     final isGranted = _status == 'GRANTED';
     final expiry = _expiryLabel;
     final grantedOn = _grantedOn;
+    final canRedeem = isGranted && _redeemUrl != null;
+    // A code-less CATALOG deal has nothing to show but the redeem button
+    // itself — the link IS the whole redemption.
+    final hasCode = code.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF0E0C1E),
         borderRadius: BorderRadius.circular(14),
@@ -506,18 +549,54 @@ class _VoucherCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: _accent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.emoji_events_rounded,
-                    color: _accent, size: 18),
+                child: Icon(_icon, color: _accent, size: 19),
               ),
-              const Spacer(),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                    // Merchant is the single most useful piece of context for
+                    // a CATALOG deal ("what store is this for") — shown right
+                    // under the title, not buried near the bottom of the card.
+                    if (_isCatalog && _merchantName != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.storefront_rounded,
+                              size: 12, color: AppColors.textFaint),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(_merchantName!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: AppColors.textFaint,
+                                    fontSize: 11.5)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
               _StatusPill(
                 text: isGranted
                     ? 'Ready'
@@ -529,14 +608,6 @@ class _VoucherCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(_title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
-          const SizedBox(height: 2),
           // The reason line: exactly what earned this voucher (rank/level),
           // plus the coupon's own value, plus when it was granted — three
           // independent instances of the same origin (e.g. three separate
@@ -546,34 +617,26 @@ class _VoucherCard extends StatelessWidget {
             [
               if (_originLabel != null) _originLabel,
               if (_value != null) _value,
+              if (grantedOn != null) 'Won on $grantedOn',
             ].join('  ·  '),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11.5),
           ),
-          if (grantedOn != null) ...[
-            const SizedBox(height: 2),
-            Text('Won on $grantedOn',
-                style: const TextStyle(
-                    color: AppColors.textFaint, fontSize: 10.5)),
-          ],
-          if (code.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _CodeChip(code: code, expand: true),
-            if (isGranted && _redeemUrl != null) ...[
-              const SizedBox(height: 8),
-              _redeemButton(),
-            ],
-          ] else if (isGranted && _isCatalog && _redeemUrl != null) ...[
-            // A code-less CATALOG deal — the link is the whole redemption.
-            const SizedBox(height: 10),
-            _redeemButton(),
-          ],
-          if (_isCatalog && _merchantName != null) ...[
-            const SizedBox(height: 6),
-            Text('at ${_merchantName!}',
-                style:
-                    const TextStyle(color: AppColors.textFaint, fontSize: 11)),
+          if (hasCode || canRedeem) ...[
+            const SizedBox(height: 12),
+            if (hasCode)
+              Row(
+                children: [
+                  Expanded(child: _CodeChip(code: code, expand: true)),
+                  if (canRedeem) ...[
+                    const SizedBox(width: 8),
+                    _redeemButton(expand: false),
+                  ],
+                ],
+              )
+            else if (canRedeem)
+              _redeemButton(expand: true),
           ],
           if (expiry != null) ...[
             const SizedBox(height: 8),
