@@ -1,255 +1,857 @@
-// MOCK: the AI-ads backend endpoints do not exist yet. This service returns
-// canned data, keeps the credit balance and jobs in memory, and progresses
-// jobs by wall-clock time so the UI can be built and exercised. When the API
-// ships, replace the bodies with ApiClient calls and keep the public
-// signatures (and the model classes) as they are.
+// AI Ads — the creator side of brand-funded AI ad campaigns, backed by the
+// real backend (backend ADRs 111–115; full contract in AI-ADS-MOBILE-HANDOFF.md
+// and GET /docs → "Creator - AI Ad Campaigns").
+//
+// Flow: a creator joins a brand's campaign (request + accept the ownership
+// terms, or accept an invite) → writes a script (AI, refine, or their own) →
+// optionally generates keyframe images → generates a video → iterates (edit /
+// extend / change audio) → gets it judged by AI → submits a final ad.
+// Every AI action is quoted first ([quote]) and the creator confirms the price;
+// the backend never charges more than the price it showed ([generate] sends it
+// back as `expectedCredits`). Credits are the brand's, allocated per creator.
+import 'api_client.dart';
 
-enum AiGenerationMethod { textToVideo, imagesFirst }
+// ─── Errors ───────────────────────────────────────────────────────────────────
 
-/// Lifecycle of one generation job. Images-first jobs start at
-/// [generatingImages] and wait at [imagesReady] for the creator to pick
-/// images; text-to-video jobs start at [generatingVideo]. [scoring] is the AI
-/// judging the finished video against the brand brief.
-enum AiJobStatus {
-  generatingImages,
-  imagesReady,
-  generatingVideo,
-  scoring,
-  scored,
+/// Any AI Ads request the backend refused. [message] is user-presentable.
+class AiAdsException implements Exception {
+  final int statusCode;
+  final String message;
+
+  const AiAdsException(this.statusCode, this.message);
+
+  @override
+  String toString() => message;
 }
+
+/// 402 — the creator's credits don't cover it (nothing ran, nothing charged).
+class OutOfAiCreditsException extends AiAdsException {
+  const OutOfAiCreditsException([String message = 'You are out of credits']) : super(402, message);
+}
+
+/// 409 "The price changed — this now costs N credits" — re-quote and confirm again.
+class AiPriceChangedException extends AiAdsException {
+  const AiPriceChangedException(String message) : super(409, message);
+}
+
+// ─── Parsing helpers ──────────────────────────────────────────────────────────
+
+String _id(dynamic v) => v is Map ? '${v['_id'] ?? ''}' : '${v ?? ''}';
+int _int(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+int? _intOrNull(dynamic v) => v == null ? null : _int(v);
+DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse('$v');
+List<String> _strings(dynamic v) => v is List ? v.map((e) => '$e').toList() : const [];
+List<Map<String, dynamic>> _maps(dynamic v) =>
+    v is List ? v.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList() : const [];
+
+// ─── Campaigns + joining ──────────────────────────────────────────────────────
 
 class AiBrandAsset {
   final String id;
   final String name;
+  final String handle;
+  final String role;
+  final String kind;
+  final bool mandatory;
+  final String usageRule;
 
-  /// Empty until the admin-panel upload pipeline exists.
+  /// Presigned (1 h) — empty for non-image assets.
   final String imageUrl;
+
+  /// Presigned (1 h) view link for any kind.
+  final String viewUrl;
 
   const AiBrandAsset({
     required this.id,
     required this.name,
+    this.handle = '',
+    this.role = '',
+    this.kind = 'image',
+    this.mandatory = false,
+    this.usageRule = '',
     this.imageUrl = '',
+    this.viewUrl = '',
   });
+
+  factory AiBrandAsset.fromJson(Map<String, dynamic> j) {
+    final kind = '${j['kind'] ?? 'image'}';
+    final url = '${j['viewUrl'] ?? ''}';
+    final role = '${j['role'] ?? ''}';
+    final label = '${j['label'] ?? ''}';
+    return AiBrandAsset(
+      id: _id(j['_id']),
+      name: label.isNotEmpty ? label : _roleLabel(role),
+      handle: '${j['handle'] ?? ''}',
+      role: role,
+      kind: kind,
+      mandatory: j['mandatory'] == true,
+      usageRule: '${j['usageRule'] ?? ''}',
+      imageUrl: kind == 'image' ? url : '',
+      viewUrl: url,
+    );
+  }
+
+  static String _roleLabel(String role) => switch (role) {
+    'LOGO' => 'Logo',
+    'PRODUCT_IMAGE' => 'Product shot',
+    'BRAND_VIDEO' => 'Brand video',
+    'JINGLE' => 'Jingle',
+    'SOUND_EFFECT' => 'Sound effect',
+    _ => 'Reference',
+  };
 }
 
 class AiAdBrief {
-  final String brandName;
-  final String brief;
-  final List<AiBrandAsset> assets;
+  final String product;
+  final String objective;
+  final String targetAudience;
+  final String keyMessage;
+  final String tone;
+  final String callToAction;
+  final List<String> dos;
+  final List<String> donts;
+  final List<String> forbiddenClaims;
 
   const AiAdBrief({
-    required this.brandName,
+    this.product = '',
+    this.objective = '',
+    this.targetAudience = '',
+    this.keyMessage = '',
+    this.tone = '',
+    this.callToAction = '',
+    this.dos = const [],
+    this.donts = const [],
+    this.forbiddenClaims = const [],
+  });
+
+  factory AiAdBrief.fromJson(Map<String, dynamic>? j) {
+    final b = j ?? const {};
+    return AiAdBrief(
+      product: '${b['product'] ?? ''}',
+      objective: '${b['objective'] ?? ''}',
+      targetAudience: '${b['targetAudience'] ?? ''}',
+      keyMessage: '${b['keyMessage'] ?? ''}',
+      tone: '${b['tone'] ?? ''}',
+      callToAction: '${b['callToAction'] ?? ''}',
+      dos: _strings(b['dos']),
+      donts: _strings(b['donts']),
+      forbiddenClaims: _strings(b['forbiddenClaims']),
+    );
+  }
+
+  /// One readable paragraph for the brief card.
+  String get summary => [
+    if (product.isNotEmpty) 'Product: $product.',
+    if (objective.isNotEmpty) objective,
+    if (keyMessage.isNotEmpty) 'Key message: $keyMessage.',
+    if (targetAudience.isNotEmpty) 'For: $targetAudience.',
+    if (tone.isNotEmpty) 'Tone: $tone.',
+    if (callToAction.isNotEmpty) 'Call to action: $callToAction.',
+  ].join(' ');
+}
+
+class AiAdFormat {
+  final String aspectRatio;
+  final int minDurationSeconds;
+  final int maxDurationSeconds;
+  final String language;
+
+  const AiAdFormat({
+    this.aspectRatio = '9:16',
+    this.minDurationSeconds = 10,
+    this.maxDurationSeconds = 30,
+    this.language = 'English',
+  });
+
+  factory AiAdFormat.fromJson(Map<String, dynamic>? j) {
+    final f = j ?? const {};
+    return AiAdFormat(
+      aspectRatio: '${f['aspectRatio'] ?? '9:16'}',
+      minDurationSeconds: _intOrNull(f['minDurationSeconds']) ?? 10,
+      maxDurationSeconds: _intOrNull(f['maxDurationSeconds']) ?? 30,
+      language: '${f['language'] ?? 'English'}',
+    );
+  }
+}
+
+/// A creator's place in a campaign.
+class AiParticipation {
+  final String id;
+
+  /// INVITED, REQUESTED, ACTIVE, SUBMITTED, WINNER, NOT_SELECTED, DECLINED,
+  /// REJECTED, REVOKED, WITHDRAWN or REMOVED.
+  final String status;
+  final int creditsLeft;
+  final int allocatedCredits;
+  final String? finalGenerationId;
+  final int? finalScore;
+
+  const AiParticipation({
+    required this.id,
+    required this.status,
+    this.creditsLeft = 0,
+    this.allocatedCredits = 0,
+    this.finalGenerationId,
+    this.finalScore,
+  });
+
+  factory AiParticipation.fromJson(Map<String, dynamic> j) => AiParticipation(
+    id: _id(j['_id']),
+    status: '${j['status'] ?? ''}',
+    creditsLeft: _int(j['creditsLeft']),
+    allocatedCredits: _int(j['allocatedCredits']),
+    finalGenerationId: j['finalGenerationId'] == null ? null : _id(j['finalGenerationId']),
+    finalScore: _intOrNull(j['finalScore']),
+  );
+
+  /// Can make things (generate, get judged, change the final pick).
+  bool get canWork => status == 'ACTIVE' || status == 'SUBMITTED';
+}
+
+class AiCampaignSummary {
+  final String id;
+  final String title;
+  final String product;
+  final String objective;
+  final DateTime? deadline;
+  final int? seatsLeft;
+
+  /// This creator's participation status, or null when they haven't joined.
+  final String? myStatus;
+  final String participationMode;
+
+  const AiCampaignSummary({
+    required this.id,
+    required this.title,
+    this.product = '',
+    this.objective = '',
+    this.deadline,
+    this.seatsLeft,
+    this.myStatus,
+    this.participationMode = 'OPEN',
+  });
+
+  factory AiCampaignSummary.fromJson(Map<String, dynamic> j) {
+    final brief = j['brief'] is Map ? Map<String, dynamic>.from(j['brief']) : const <String, dynamic>{};
+    return AiCampaignSummary(
+      id: _id(j['_id']),
+      title: '${j['title'] ?? ''}',
+      product: '${brief['product'] ?? ''}',
+      objective: '${brief['objective'] ?? ''}',
+      deadline: _date(j['deadline']),
+      seatsLeft: _intOrNull(j['seatsLeft']),
+      myStatus: j['myStatus'] as String?,
+      participationMode: '${j['participationMode'] ?? 'OPEN'}',
+    );
+  }
+}
+
+class AiCampaign {
+  final String id;
+  final String title;
+  final String status;
+  final AiAdBrief brief;
+  final AiAdFormat format;
+  final DateTime? deadline;
+  final String participationMode;
+  final int? seatsLeft;
+  final int? creditsPerCreator;
+  final List<AiBrandAsset> assets;
+  final AiParticipation? myParticipation;
+
+  const AiCampaign({
+    required this.id,
+    required this.title,
+    required this.status,
     required this.brief,
+    required this.format,
     required this.assets,
+    this.deadline,
+    this.participationMode = 'OPEN',
+    this.seatsLeft,
+    this.creditsPerCreator,
+    this.myParticipation,
   });
+
+  factory AiCampaign.fromJson(Map<String, dynamic> j) => AiCampaign(
+    id: _id(j['_id']),
+    title: '${j['title'] ?? ''}',
+    status: '${j['status'] ?? ''}',
+    brief: AiAdBrief.fromJson(j['brief'] as Map<String, dynamic>?),
+    format: AiAdFormat.fromJson(j['format'] as Map<String, dynamic>?),
+    deadline: _date(j['deadline']),
+    participationMode: '${j['participationMode'] ?? 'OPEN'}',
+    seatsLeft: _intOrNull(j['seatsLeft']),
+    creditsPerCreator: _intOrNull(j['creditsPerCreator']),
+    assets: _maps(j['assets']).map(AiBrandAsset.fromJson).toList(),
+    myParticipation: j['myParticipation'] is Map
+        ? AiParticipation.fromJson(Map<String, dynamic>.from(j['myParticipation']))
+        : null,
+  );
+
+  bool get isLive => status == 'LIVE';
 }
 
-class AiCreditCosts {
-  final int image;
-  final int video;
+// ─── Workspace ────────────────────────────────────────────────────────────────
 
-  const AiCreditCosts({required this.image, required this.video});
+enum AiStage { script, image, video }
 
-  /// What the first action of [method] costs: text-to-video renders the video
-  /// right away, images-first starts by generating images.
-  int firstStepCost(AiGenerationMethod method) =>
-      method == AiGenerationMethod.textToVideo ? video : image;
+enum AiGenerationMethod { textToVideo, imagesFirst }
+
+String _stageName(AiStage s) => s.name.toUpperCase();
+AiStage _stage(String v) => switch (v) {
+  'IMAGE' => AiStage.image,
+  'VIDEO' => AiStage.video,
+  _ => AiStage.script,
+};
+
+class AiPrices {
+  final int? scriptUpTo;
+  final int? imageEach;
+
+  /// Credits per second (decimal, display only); null = resolution unavailable.
+  final Map<String, double?> videoPerSecond;
+
+  /// Credits kept back so the creator can always get their ad judged once.
+  final int reservedForEvaluation;
+
+  const AiPrices({
+    this.scriptUpTo,
+    this.imageEach,
+    this.videoPerSecond = const {},
+    this.reservedForEvaluation = 0,
+  });
+
+  factory AiPrices.fromJson(Map<String, dynamic>? j) {
+    final p = j ?? const {};
+    final video = p['videoPerSecond'] is Map ? Map<String, dynamic>.from(p['videoPerSecond']) : const <String, dynamic>{};
+    return AiPrices(
+      scriptUpTo: _intOrNull(p['scriptUpTo']),
+      imageEach: _intOrNull(p['imageEach']),
+      videoPerSecond: video.map((k, v) => MapEntry(k, v is num ? v.toDouble() : null)),
+      reservedForEvaluation: _int(p['reservedForEvaluation']),
+    );
+  }
+
+  /// Resolutions the platform has priced (others are unavailable).
+  List<String> get resolutions =>
+      ['480p', '720p', '1080p'].where((r) => videoPerSecond[r] != null).toList();
 }
 
-class AiGeneratedImage {
+class AiScriptScene {
+  final int durationSeconds;
+  final String visual;
+  final String voiceover;
+  final String onScreenText;
+
+  const AiScriptScene({required this.durationSeconds, required this.visual, this.voiceover = '', this.onScreenText = ''});
+
+  factory AiScriptScene.fromJson(Map<String, dynamic> j) => AiScriptScene(
+    durationSeconds: _int(j['durationSeconds']),
+    visual: '${j['visual'] ?? ''}',
+    voiceover: '${j['voiceover'] ?? ''}',
+    onScreenText: '${j['onScreenText'] ?? ''}',
+  );
+}
+
+/// One AI action (or free hand-written script) in the creator's workspace.
+class AiGeneration {
   final String id;
+  final AiStage stage;
 
-  /// Empty while this is a mock.
-  final String url;
+  /// GENERATE, REFINE, MANUAL_EDIT, EDIT, EXTEND or REAUDIO.
+  final String operation;
+  final int versionNumber;
+  final String? parentId;
+  final String instructions;
 
-  const AiGeneratedImage({required this.id, this.url = ''});
-}
+  /// The script an image set / video follows.
+  final String? scriptId;
 
-class AiVideoJob {
-  final String id;
-  final String brandId;
-  final String prompt;
-  final AiGenerationMethod method;
-  final AiJobStatus status;
-  final List<AiGeneratedImage> images;
-  final int? score;
-  final String? feedback;
-  final DateTime createdAt;
+  /// RUNNING, COMPLETED, FAILED or CANCELLED.
+  final String status;
+  final String? error;
+  final String scriptText;
+  final List<AiScriptScene> scenes;
+  final List<String> imageUrls;
+  final String? videoUrl;
+  final int quotedCredits;
+  final int chargedCredits;
 
-  const AiVideoJob({
+  /// HELD, SETTLED, REFUNDED or FREE.
+  final String chargeState;
+  final DateTime? createdAt;
+
+  const AiGeneration({
     required this.id,
-    required this.brandId,
-    required this.prompt,
-    required this.method,
+    required this.stage,
+    required this.operation,
+    required this.versionNumber,
     required this.status,
-    required this.images,
-    required this.createdAt,
-    this.score,
-    this.feedback,
+    this.parentId,
+    this.instructions = '',
+    this.scriptId,
+    this.error,
+    this.scriptText = '',
+    this.scenes = const [],
+    this.imageUrls = const [],
+    this.videoUrl,
+    this.quotedCredits = 0,
+    this.chargedCredits = 0,
+    this.chargeState = 'FREE',
+    this.createdAt,
   });
 
-  bool get isInProgress =>
-      status == AiJobStatus.generatingImages ||
-      status == AiJobStatus.generatingVideo ||
-      status == AiJobStatus.scoring;
+  factory AiGeneration.fromJson(Map<String, dynamic> j) {
+    final out = j['output'] is Map ? Map<String, dynamic>.from(j['output']) : const <String, dynamic>{};
+    final script = out['script'] is Map ? Map<String, dynamic>.from(out['script']) : null;
+    return AiGeneration(
+      id: _id(j['_id']),
+      stage: _stage('${j['stage']}'),
+      operation: '${j['operation'] ?? ''}',
+      versionNumber: _int(j['versionNumber']),
+      parentId: j['parentId'] == null ? null : _id(j['parentId']),
+      instructions: '${j['instructions'] ?? ''}',
+      scriptId: j['scriptId'] == null ? null : _id(j['scriptId']),
+      status: '${j['status'] ?? ''}',
+      error: j['error'] as String?,
+      scriptText: '${out['text'] ?? ''}',
+      scenes: script == null ? const [] : _maps(script['scenes']).map(AiScriptScene.fromJson).toList(),
+      imageUrls: _strings(out['imageUrls']),
+      videoUrl: out['videoUrl'] as String?,
+      quotedCredits: _int(j['quotedCredits']),
+      chargedCredits: _int(j['chargedCredits']),
+      chargeState: '${j['chargeState'] ?? 'FREE'}',
+      createdAt: _date(j['createdAt']),
+    );
+  }
+
+  bool get isRunning => status == 'RUNNING';
+  bool get isDone => status == 'COMPLETED';
+  bool get wasRefunded => chargeState == 'REFUNDED';
+  String get label => '${switch (stage) {
+    AiStage.script => 'Script',
+    AiStage.image => 'Images',
+    AiStage.video => 'Video',
+  }} v$versionNumber';
 }
 
-class _JobRecord {
+class AiWorkspace {
+  final String campaignStatus;
+  final DateTime? deadline;
+  final AiAdFormat format;
+  final int creditsLeft;
+  final int allocatedCredits;
+  final AiPrices prices;
+  final List<AiGeneration> generations;
+
+  const AiWorkspace({
+    required this.campaignStatus,
+    required this.format,
+    required this.creditsLeft,
+    required this.allocatedCredits,
+    required this.prices,
+    required this.generations,
+    this.deadline,
+  });
+
+  factory AiWorkspace.fromJson(Map<String, dynamic> j) {
+    final c = j['campaign'] is Map ? Map<String, dynamic>.from(j['campaign']) : const <String, dynamic>{};
+    return AiWorkspace(
+      campaignStatus: '${c['status'] ?? ''}',
+      deadline: _date(c['deadline']),
+      format: AiAdFormat.fromJson(c['format'] as Map<String, dynamic>?),
+      creditsLeft: _int(j['creditsLeft']),
+      allocatedCredits: _int(j['allocatedCredits']),
+      prices: AiPrices.fromJson(j['prices'] as Map<String, dynamic>?),
+      generations: _maps(j['generations']).map(AiGeneration.fromJson).toList(),
+    );
+  }
+
+  List<AiGeneration> of(AiStage stage) => generations.where((g) => g.stage == stage).toList();
+
+  /// Credits usable for anything but evaluation.
+  int get spendable => (creditsLeft - prices.reservedForEvaluation).clamp(0, creditsLeft);
+}
+
+/// One AI action to price and run.
+class AiAction {
+  final AiStage stage;
+
+  /// GENERATE, REFINE, EDIT, EXTEND or REAUDIO.
+  final String operation;
+  final String? parentId;
+  final String? instructions;
+  final String? scriptId;
+  final int? sceneIndex;
+  final int? imageCount;
+
+  /// Keyframes for a video: image generation id + which of its images.
+  final List<({String generationId, int index})> keyframes;
+  final String? resolution;
+  final int? durationSeconds;
+
+  const AiAction({
+    required this.stage,
+    this.operation = 'GENERATE',
+    this.parentId,
+    this.instructions,
+    this.scriptId,
+    this.sceneIndex,
+    this.imageCount,
+    this.keyframes = const [],
+    this.resolution,
+    this.durationSeconds,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'stage': _stageName(stage),
+    'operation': operation,
+    if (parentId != null) 'parentId': parentId,
+    if (instructions != null && instructions!.trim().isNotEmpty) 'instructions': instructions!.trim(),
+    if (scriptId != null) 'scriptId': scriptId,
+    if (sceneIndex != null) 'sceneIndex': sceneIndex,
+    if (imageCount != null) 'imageCount': imageCount,
+    if (keyframes.isNotEmpty) 'keyframes': [for (final k in keyframes) {'generationId': k.generationId, 'index': k.index}],
+    if (resolution != null || durationSeconds != null)
+      'settings': {
+        if (resolution != null) 'resolution': resolution,
+        if (durationSeconds != null) 'durationSeconds': durationSeconds,
+      },
+  };
+}
+
+class AiQuote {
+  final int credits;
+  final int creditsLeft;
+  final int reservedForEvaluation;
+  final bool canAfford;
+  final String note;
+
+  const AiQuote({
+    required this.credits,
+    required this.creditsLeft,
+    required this.canAfford,
+    this.reservedForEvaluation = 0,
+    this.note = '',
+  });
+
+  factory AiQuote.fromJson(Map<String, dynamic> j) {
+    final b = j['breakdown'] is Map ? Map<String, dynamic>.from(j['breakdown']) : const <String, dynamic>{};
+    return AiQuote(
+      credits: _int(j['credits']),
+      creditsLeft: _int(j['creditsLeft']),
+      reservedForEvaluation: _int(j['reservedForEvaluation']),
+      canAfford: j['canAfford'] == true,
+      note: '${b['note'] ?? ''}',
+    );
+  }
+}
+
+// ─── Evaluation ───────────────────────────────────────────────────────────────
+
+class AiCriterionScore {
+  final String name;
+  final int weight;
+  final double score;
+  final String reason;
+
+  const AiCriterionScore({required this.name, required this.weight, required this.score, this.reason = ''});
+
+  factory AiCriterionScore.fromJson(Map<String, dynamic> j) => AiCriterionScore(
+    name: '${j['name'] ?? ''}',
+    weight: _int(j['weight']),
+    score: j['score'] is num ? (j['score'] as num).toDouble() : 0,
+    reason: '${j['reason'] ?? ''}',
+  );
+}
+
+class AiEvaluation {
   final String id;
-  final String brandId;
-  final String prompt;
-  final AiGenerationMethod method;
-  final DateTime createdAt = DateTime.now();
-  final List<AiGeneratedImage> images;
-  AiJobStatus status;
-  DateTime phaseStart = DateTime.now();
-  int? score;
-  String? feedback;
+  final String videoGenerationId;
 
-  _JobRecord({
+  /// QUEUED, RUNNING, COMPLETED or FAILED.
+  final String status;
+  final String? error;
+  final int? overallScore;
+  final List<AiCriterionScore> criteria;
+  final List<({String handle, bool present, String note})> mandatoryAssets;
+  final bool? mandatoryPass;
+  final List<String> forbiddenClaimViolations;
+  final List<String> safetyIssues;
+  final List<({double? atSeconds, String note})> feedback;
+  final List<String> suggestions;
+  final String summary;
+  final String? composedVideoUrl;
+  final int quotedCredits;
+  final int chargedCredits;
+  final DateTime? createdAt;
+
+  const AiEvaluation({
     required this.id,
-    required this.brandId,
-    required this.prompt,
-    required this.method,
+    required this.videoGenerationId,
     required this.status,
-    required this.images,
+    this.error,
+    this.overallScore,
+    this.criteria = const [],
+    this.mandatoryAssets = const [],
+    this.mandatoryPass,
+    this.forbiddenClaimViolations = const [],
+    this.safetyIssues = const [],
+    this.feedback = const [],
+    this.suggestions = const [],
+    this.summary = '',
+    this.composedVideoUrl,
+    this.quotedCredits = 0,
+    this.chargedCredits = 0,
+    this.createdAt,
   });
+
+  factory AiEvaluation.fromJson(Map<String, dynamic> j) => AiEvaluation(
+    id: _id(j['_id']),
+    videoGenerationId: _id(j['videoGenerationId']),
+    status: '${j['status'] ?? ''}',
+    error: j['error'] as String?,
+    overallScore: _intOrNull(j['overallScore']),
+    criteria: _maps(j['criteria']).map(AiCriterionScore.fromJson).toList(),
+    mandatoryAssets: [
+      for (final m in _maps(j['mandatoryAssets']))
+        (handle: '${m['handle'] ?? ''}', present: m['present'] == true, note: '${m['note'] ?? ''}'),
+    ],
+    mandatoryPass: j['mandatoryPass'] as bool?,
+    forbiddenClaimViolations: _strings(j['forbiddenClaimViolations']),
+    safetyIssues: _strings(j['safetyIssues']),
+    feedback: [
+      for (final f in _maps(j['feedback']))
+        (atSeconds: f['atSeconds'] is num ? (f['atSeconds'] as num).toDouble() : null, note: '${f['note'] ?? ''}'),
+    ],
+    suggestions: _strings(j['suggestions']),
+    summary: '${j['summary'] ?? ''}',
+    composedVideoUrl: j['composedVideoUrl'] as String?,
+    quotedCredits: _int(j['quotedCredits']),
+    chargedCredits: _int(j['chargedCredits']),
+    createdAt: _date(j['createdAt']),
+  );
+
+  bool get isPending => status == 'QUEUED' || status == 'RUNNING';
+  bool get isDone => status == 'COMPLETED';
 }
+
+class AiCreditRequest {
+  final String id;
+  final int requestedCredits;
+  final int? approvedCredits;
+
+  /// PENDING, APPROVED, REJECTED or CANCELLED.
+  final String status;
+  final String reason;
+  final String brandNote;
+
+  const AiCreditRequest({
+    required this.id,
+    required this.requestedCredits,
+    required this.status,
+    this.approvedCredits,
+    this.reason = '',
+    this.brandNote = '',
+  });
+
+  factory AiCreditRequest.fromJson(Map<String, dynamic> j) => AiCreditRequest(
+    id: _id(j['_id']),
+    requestedCredits: _int(j['requestedCredits']),
+    approvedCredits: _intOrNull(j['approvedCredits']),
+    status: '${j['status'] ?? ''}',
+    reason: '${j['reason'] ?? ''}',
+    brandNote: '${j['brandNote'] ?? ''}',
+  );
+}
+
+class AiReward {
+  final String id;
+  final String campaignTitle;
+
+  /// PRODUCT, MONEY, COUPON or OTHER.
+  final String type;
+  final String title;
+  final String description;
+  final num? value;
+  final String currency;
+  final String couponCode;
+
+  /// GRANTED, FULFILLED, RECEIVED or CANCELLED.
+  final String status;
+
+  const AiReward({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.status,
+    this.campaignTitle = '',
+    this.description = '',
+    this.value,
+    this.currency = '',
+    this.couponCode = '',
+  });
+
+  factory AiReward.fromJson(Map<String, dynamic> j) => AiReward(
+    id: _id(j['_id']),
+    campaignTitle: j['campaignId'] is Map ? '${j['campaignId']['title'] ?? ''}' : '',
+    type: '${j['type'] ?? 'OTHER'}',
+    title: '${j['title'] ?? ''}',
+    description: '${j['description'] ?? ''}',
+    value: j['value'] as num?,
+    currency: '${j['currency'] ?? ''}',
+    couponCode: '${j['couponCode'] ?? ''}',
+    status: '${j['status'] ?? ''}',
+  );
+
+  bool get canConfirm => status == 'GRANTED' || status == 'FULFILLED';
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
 
 class AiAdsService {
   AiAdsService._();
   static final AiAdsService _instance = AiAdsService._();
   factory AiAdsService() => _instance;
 
-  static const costs = AiCreditCosts(image: 5, video: 20);
+  final _client = ApiClient();
 
-  static const _imagesDuration = Duration(seconds: 6);
-  static const _videoDuration = Duration(seconds: 8);
-  static const _scoringDuration = Duration(seconds: 4);
+  // Script and image generation finish inside the request (≈10–60s).
+  static const _aiTimeout = Duration(seconds: 120);
 
-  // Per-creator balance (brand-funded), in memory only while this is a mock.
-  int _credits = 50;
-  final List<_JobRecord> _jobs = [];
-
-  Future<AiAdBrief> fetchBrief(String brandId) async {
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    return const AiAdBrief(
-      brandName: 'Brand',
-      brief:
-          'Create a 15–30 second ad that shows our product in everyday life. '
-          'Keep the tone upbeat and authentic, feature the logo in the first '
-          'and last seconds, and finish with the tagline.',
-      assets: [
-        AiBrandAsset(id: 'logo', name: 'Logo'),
-        AiBrandAsset(id: 'product', name: 'Product shot'),
-        AiBrandAsset(id: 'palette', name: 'Colour palette'),
-      ],
-    );
-  }
-
-  Future<int> fetchCredits(String brandId) async => _credits;
-
-  /// Starts an async generation job. Throws [OutOfAiCreditsException] when the
-  /// balance can't cover the first step's cost.
-  Future<AiVideoJob> startGeneration({
-    required String brandId,
-    required String prompt,
-    required AiGenerationMethod method,
-  }) async {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    _spend(costs.firstStepCost(method));
-    final record = _JobRecord(
-      id: 'job-${_jobs.length + 1}',
-      brandId: brandId,
-      prompt: prompt,
-      method: method,
-      status:
-          method == AiGenerationMethod.textToVideo
-              ? AiJobStatus.generatingVideo
-              : AiJobStatus.generatingImages,
-      images: List.generate(4, (i) => AiGeneratedImage(id: 'img-$i')),
-    );
-    _jobs.add(record);
-    return _snapshot(record);
-  }
-
-  /// Images-first step two: turn the chosen images into a video. Throws
-  /// [OutOfAiCreditsException] when the balance can't cover the video cost.
-  Future<AiVideoJob> startVideoFromImages(
-    String jobId,
-    List<String> imageIds,
-  ) async {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    final record = _jobs.firstWhere((j) => j.id == jobId);
-    _advance(record);
-    if (record.status != AiJobStatus.imagesReady || imageIds.isEmpty) {
-      throw StateError('Job is not ready for video generation');
+  Future<dynamic> _call(String method, String path, {Map<String, dynamic>? body, Duration? timeout}) async {
+    final res = await _client.send(method, path, body: body, timeout: timeout);
+    if (res.ok) return res.data;
+    if (res.statusCode == 402) throw OutOfAiCreditsException(res.message);
+    if (res.statusCode == 409 && res.message.toLowerCase().contains('price changed')) {
+      throw AiPriceChangedException(res.message);
     }
-    _spend(costs.video);
-    record.status = AiJobStatus.generatingVideo;
-    record.phaseStart = DateTime.now();
-    return _snapshot(record);
+    throw AiAdsException(res.statusCode, res.message);
   }
 
-  Future<List<AiVideoJob>> fetchJobs(String brandId) async {
-    final mine = _jobs.where((j) => j.brandId == brandId).toList();
-    for (final j in mine) {
-      _advance(j);
-    }
-    return mine.reversed.map(_snapshot).toList();
+  String _campaign(String id) => '/creator/ai-campaigns/$id';
+
+  // Campaigns + joining
+
+  /// Live campaigns this creator can see — optionally only one brand's.
+  Future<List<AiCampaignSummary>> listCampaigns({String? brandId}) async {
+    final data = await _call('GET', '/creator/ai-campaigns?limit=50${brandId == null ? '' : '&brandId=$brandId'}');
+    return _maps((data as Map)['responses']).map(AiCampaignSummary.fromJson).toList();
   }
 
-  Future<AiVideoJob?> fetchJob(String jobId) async {
-    for (final j in _jobs) {
-      if (j.id == jobId) {
-        _advance(j);
-        return _snapshot(j);
-      }
-    }
-    return null;
+  /// My invites, requests and campaigns (with the campaign title).
+  Future<List<({AiParticipation participation, String campaignId, String title})>> myCampaigns() async {
+    final data = await _call('GET', '/creator/ai-campaigns/mine?limit=50');
+    return [
+      for (final p in _maps((data as Map)['responses']))
+        (
+          participation: AiParticipation.fromJson(p),
+          campaignId: _id(p['campaignId']),
+          title: p['campaignId'] is Map ? '${p['campaignId']['title'] ?? ''}' : '',
+        ),
+    ];
   }
 
-  void _spend(int cost) {
-    if (_credits < cost) throw OutOfAiCreditsException();
-    _credits -= cost;
-  }
+  Future<AiCampaign> fetchCampaign(String id) async =>
+      AiCampaign.fromJson(Map<String, dynamic>.from(await _call('GET', _campaign(id)) as Map));
 
-  void _advance(_JobRecord r) {
-    final elapsed = DateTime.now().difference(r.phaseStart);
-    if (r.status == AiJobStatus.generatingImages &&
-        elapsed >= _imagesDuration) {
-      r.status = AiJobStatus.imagesReady;
-      r.phaseStart = DateTime.now();
-    } else if (r.status == AiJobStatus.generatingVideo &&
-        elapsed >= _videoDuration) {
-      r.status = AiJobStatus.scoring;
-      r.phaseStart = r.phaseStart.add(_videoDuration);
-    }
-    if (r.status == AiJobStatus.scoring &&
-        DateTime.now().difference(r.phaseStart) >= _scoringDuration) {
-      r.status = AiJobStatus.scored;
-      r.score = 60 + (r.prompt.length * 7) % 36;
-      r.feedback =
-          'Matches the upbeat tone and keeps the product front and centre. '
-          'The logo could appear earlier and the tagline is missing from the '
-          'closing seconds.';
-    }
-  }
+  /// Ask to join an open campaign. The creator has accepted the terms in the UI.
+  Future<void> requestToJoin(String id, {String? message}) => _call('POST', '${_campaign(id)}/request', body: {
+    'acceptTerms': true,
+    if (message != null && message.trim().isNotEmpty) 'message': message.trim(),
+  });
 
-  AiVideoJob _snapshot(_JobRecord r) => AiVideoJob(
-    id: r.id,
-    brandId: r.brandId,
-    prompt: r.prompt,
-    method: r.method,
-    status: r.status,
-    images: r.images,
-    score: r.score,
-    feedback: r.feedback,
-    createdAt: r.createdAt,
+  Future<void> respondToInvite(String participationId, {required bool accept}) =>
+      _call('POST', '/creator/ai-campaign-invites/$participationId/respond', body: {
+        'accept': accept,
+        if (accept) 'acceptTerms': true,
+      });
+
+  Future<void> withdraw(String id) => _call('POST', '${_campaign(id)}/withdraw');
+
+  // Workspace
+
+  Future<AiWorkspace> fetchWorkspace(String id) async =>
+      AiWorkspace.fromJson(Map<String, dynamic>.from(await _call('GET', '${_campaign(id)}/workspace') as Map));
+
+  Future<AiQuote> quote(String id, AiAction action) async =>
+      AiQuote.fromJson(Map<String, dynamic>.from(await _call('POST', '${_campaign(id)}/workspace/quote', body: action.toJson()) as Map));
+
+  /// Run [action] at the price the creator saw ([expectedCredits]). Scripts and
+  /// images come back finished; videos come back RUNNING — poll [fetchGeneration].
+  Future<AiGeneration> generate(String id, AiAction action, {required int expectedCredits}) async =>
+      AiGeneration.fromJson(Map<String, dynamic>.from(await _call(
+        'POST',
+        '${_campaign(id)}/workspace/generations',
+        body: {...action.toJson(), 'expectedCredits': expectedCredits},
+        timeout: _aiTimeout,
+      ) as Map));
+
+  /// A script the creator wrote themselves — free.
+  Future<AiGeneration> createOwnScript(String id, String text) async => AiGeneration.fromJson(
+    Map<String, dynamic>.from(await _call('POST', '${_campaign(id)}/workspace/scripts', body: {'text': text}) as Map),
   );
-}
 
-class OutOfAiCreditsException implements Exception {
-  @override
-  String toString() => 'You are out of credits';
+  /// A hand-edit of an existing script — free, a new version.
+  Future<AiGeneration> editScript(String id, String scriptId, String text) async => AiGeneration.fromJson(
+    Map<String, dynamic>.from(
+      await _call('POST', '${_campaign(id)}/workspace/generations/$scriptId/script', body: {'text': text}) as Map,
+    ),
+  );
+
+  Future<AiGeneration> fetchGeneration(String id, String generationId) async => AiGeneration.fromJson(
+    Map<String, dynamic>.from(await _call('GET', '${_campaign(id)}/workspace/generations/$generationId') as Map),
+  );
+
+  Future<AiGeneration> cancelVideo(String id, String generationId) async => AiGeneration.fromJson(
+    Map<String, dynamic>.from(await _call('POST', '${_campaign(id)}/workspace/generations/$generationId/cancel') as Map),
+  );
+
+  // Evaluation + final submission
+
+  Future<AiQuote> quoteEvaluation(String id, String videoGenerationId) async => AiQuote.fromJson(
+    Map<String, dynamic>.from(
+      await _call('POST', '${_campaign(id)}/workspace/generations/$videoGenerationId/evaluate/quote') as Map,
+    ),
+  );
+
+  Future<AiEvaluation> requestEvaluation(String id, String videoGenerationId, {required int expectedCredits}) async =>
+      AiEvaluation.fromJson(Map<String, dynamic>.from(await _call(
+        'POST',
+        '${_campaign(id)}/workspace/generations/$videoGenerationId/evaluate',
+        body: {'expectedCredits': expectedCredits},
+      ) as Map));
+
+  Future<List<AiEvaluation>> fetchEvaluations(String id) async {
+    final data = await _call('GET', '${_campaign(id)}/workspace/evaluations');
+    return _maps(data).map(AiEvaluation.fromJson).toList();
+  }
+
+  Future<AiEvaluation> fetchEvaluation(String id, String evaluationId) async => AiEvaluation.fromJson(
+    Map<String, dynamic>.from(await _call('GET', '${_campaign(id)}/workspace/evaluations/$evaluationId') as Map),
+  );
+
+  /// Pick a judged video as the final ad (free; changeable until the deadline).
+  Future<AiParticipation> submitFinal(String id, String videoGenerationId) async => AiParticipation.fromJson(
+    Map<String, dynamic>.from(
+      await _call('POST', '${_campaign(id)}/workspace/generations/$videoGenerationId/submit') as Map,
+    ),
+  );
+
+  // Credits + rewards
+
+  Future<AiCreditRequest> requestCredits(String id, int credits, {String? reason}) async =>
+      AiCreditRequest.fromJson(Map<String, dynamic>.from(await _call('POST', '${_campaign(id)}/credit-requests', body: {
+        'credits': credits,
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      }) as Map));
+
+  Future<List<AiCreditRequest>> myCreditRequests(String id) async =>
+      _maps(await _call('GET', '${_campaign(id)}/credit-requests')).map(AiCreditRequest.fromJson).toList();
+
+  Future<List<AiReward>> myRewards() async => _maps(await _call('GET', '/creator/ai-rewards')).map(AiReward.fromJson).toList();
+
+  Future<AiReward> confirmRewardReceived(String rewardId) async =>
+      AiReward.fromJson(Map<String, dynamic>.from(await _call('POST', '/creator/ai-rewards/$rewardId/received') as Map));
 }

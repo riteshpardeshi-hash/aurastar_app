@@ -54,6 +54,7 @@ because it's three pages long isn't documented, it's buried.
 | 027 | [Extend the front-camera mirror flag past the review screen to every own-video playback surface](027-mirror-own-video-playback-outside-review-too.md) | Accepted (amends 026) |
 | 028 | [Firebase Analytics on the new Firebase project](028-firebase-analytics-on-new-firebase-project.md) | Accepted |
 | 029 | [Firebase Crashlytics](029-firebase-crashlytics.md) | Accepted |
+| 030 | [AI Ads UI wired to the backend's campaign model (not a per-brand mock)](030-ai-ads-ui-wired-to-backend-campaigns.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).

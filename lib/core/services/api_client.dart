@@ -247,6 +247,47 @@ class ApiClient {
     return res.bodyBytes;
   }
 
+  /// Like [get]/[post]/[patch] but also returns the HTTP status code, for
+  /// endpoints where the code itself matters (AI Ads: 402 = not enough
+  /// credits, 409 = the price changed / the campaign isn't live). Always
+  /// authenticated; retries once after a 401 refresh, same as the others.
+  Future<ApiResponse> send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
+    Future<http.Response> once() async {
+      final headers = await _authedHeaders();
+      final uri = _uri(path);
+      final encoded = body == null ? null : jsonEncode(body);
+      final t = timeout ?? _timeout;
+      return switch (method) {
+        'GET' => httpClient.get(uri, headers: headers).timeout(t),
+        'POST' => httpClient.post(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'PATCH' => httpClient.patch(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'PUT' => httpClient.put(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'DELETE' => httpClient.delete(uri, headers: headers).timeout(t),
+        _ => throw ArgumentError('Unsupported method $method'),
+      };
+    }
+
+    debugPrint('[API] $method ${ApiConfig.baseUrl}$path');
+    var res = await once();
+    debugPrint('[API] ${res.statusCode} ${res.body}');
+    if (res.statusCode == 401 && await _tryRefresh()) {
+      res = await once();
+      debugPrint('[API] Retry ${res.statusCode} ${res.body}');
+    }
+    Map<String, dynamic> decoded;
+    try {
+      decoded = res.body.isEmpty ? <String, dynamic>{} : jsonDecode(res.body) as Map<String, dynamic>;
+    } on FormatException {
+      decoded = {'status': 'error', 'message': 'Unexpected response (${res.statusCode})'};
+    }
+    return ApiResponse(res.statusCode, decoded);
+  }
+
   Future<Map<String, dynamic>> delete(String path, {bool auth = false}) async {
     var headers = auth ? await _authedHeaders() : _baseHeaders;
     debugPrint('[API] DELETE ${ApiConfig.baseUrl}$path');
@@ -380,4 +421,20 @@ class ApiClient {
     _sessionExpired.add(null);
     return false;
   }
+}
+
+/// A decoded JSON response together with its HTTP status ([ApiClient.send]).
+class ApiResponse {
+  final int statusCode;
+  final Map<String, dynamic> body;
+
+  const ApiResponse(this.statusCode, this.body);
+
+  bool get ok => statusCode >= 200 && statusCode < 300;
+
+  /// The backend's `data` payload.
+  dynamic get data => body['data'];
+
+  /// The backend's human-readable message (errors carry one).
+  String get message => (body['message'] as String?) ?? 'Request failed ($statusCode)';
 }

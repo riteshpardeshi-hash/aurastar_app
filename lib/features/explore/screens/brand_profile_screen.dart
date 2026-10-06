@@ -6,7 +6,8 @@ import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
-import '../../ai_ads/screens/create_ai_videos_screen.dart';
+import '../../../core/services/auth_api_service.dart';
+import '../../ai_ads/screens/ai_campaigns_screen.dart';
 import '../../challenges/screens/challenge_detail.dart';
 
 class BrandProfileScreen extends StatefulWidget {
@@ -33,11 +34,22 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
   int _followerCount = 0;
   bool _loading = true;
 
+  /// AI ad campaigns are creator-only on the backend (`requireRole("creator")`),
+  /// so the entry point is only shown to creators.
+  bool _isCreator = false;
+
   @override
   void initState() {
     super.initState();
     AnalyticsService().logBrandPageView(widget.brandId, widget.source);
     _load();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final profile = await AuthApiService().getProfile();
+    if (!mounted) return;
+    setState(() => _isCreator = profile?['role'] == 'creator');
   }
 
   Future<void> _load() async {
@@ -321,22 +333,27 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             followFn: _service.followBrand,
             unfollowFn: _service.unfollowBrand,
           ),
+          if (_isCreator) ...[
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             height: 44,
             child: OutlinedButton.icon(
+              key: const Key('brand-ai-campaigns'),
               onPressed:
                   () => Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder:
-                          (_) => CreateAiVideosScreen(brandId: widget.brandId),
+                          (_) => AiCampaignsScreen(
+                            brandId: widget.brandId,
+                            brandName: displayName,
+                          ),
                     ),
                   ),
               icon: const Icon(Icons.auto_awesome_rounded, size: 18),
               label: const Text(
-                'Create AI Videos',
+                'AI Ad Campaigns',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
               style: OutlinedButton.styleFrom(
@@ -349,6 +366,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
               ),
             ),
           ),
+          ],
         ],
       ),
     );

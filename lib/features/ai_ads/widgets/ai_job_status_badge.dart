@@ -1,42 +1,74 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
+import 'ai_ui.dart';
 
-String aiJobStatusLabel(AiJobStatus s) => switch (s) {
-  AiJobStatus.generatingImages => 'Generating images',
-  AiJobStatus.imagesReady => 'Pick your images',
-  AiJobStatus.generatingVideo => 'Generating video',
-  AiJobStatus.scoring => 'Scoring',
-  AiJobStatus.scored => 'Scored',
-};
+/// A small coloured status pill.
+class AiStatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
 
-Color aiJobStatusColor(AiJobStatus s) => switch (s) {
-  AiJobStatus.imagesReady => const Color(0xFFFFB84D),
-  AiJobStatus.scored => const Color(0xFF4ADE80),
-  _ => const Color(0xFFD4A8FF),
-};
+  const AiStatusBadge({super.key, required this.label, required this.color});
 
-class AiJobStatusBadge extends StatelessWidget {
-  final AiJobStatus status;
+  /// What a generation is doing.
+  factory AiStatusBadge.generation(AiGeneration g, {Key? key}) => AiStatusBadge(
+    key: key,
+    label: switch (g.status) {
+      'RUNNING' => g.stage == AiStage.video ? 'Generating video' : 'Generating',
+      'COMPLETED' => g.stage == AiStage.image ? 'Pick your images' : 'Ready',
+      'CANCELLED' => 'Cancelled',
+      _ => 'Failed — not charged',
+    },
+    color: switch (g.status) {
+      'RUNNING' => const Color(0xFFD4A8FF),
+      'COMPLETED' => g.stage == AiStage.image ? AiUi.warning : AiUi.success,
+      _ => AiUi.danger,
+    },
+  );
 
-  const AiJobStatusBadge({super.key, required this.status});
+  /// Where an AI judgement is.
+  factory AiStatusBadge.evaluation(AiEvaluation e, {Key? key}) => AiStatusBadge(
+    key: key,
+    label: switch (e.status) {
+      'COMPLETED' => 'Scored ${e.overallScore ?? '-'}',
+      'FAILED' => 'Scoring failed — not charged',
+      _ => 'Scoring',
+    },
+    color: switch (e.status) {
+      'COMPLETED' => AiUi.success,
+      'FAILED' => AiUi.danger,
+      _ => const Color(0xFFD4A8FF),
+    },
+  );
+
+  /// The creator's standing in a campaign.
+  factory AiStatusBadge.participation(String status, {Key? key}) => AiStatusBadge(
+    key: key,
+    label: switch (status) {
+      'INVITED' => "You're invited",
+      'REQUESTED' => 'Waiting for the brand',
+      'ACTIVE' => "You're in",
+      'SUBMITTED' => 'Submitted',
+      'WINNER' => 'Winner 🏆',
+      'NOT_SELECTED' => 'Not selected',
+      'REJECTED' => 'Not accepted',
+      'REMOVED' => 'Removed',
+      'WITHDRAWN' => 'You left',
+      _ => status.toLowerCase(),
+    },
+    color: switch (status) {
+      'ACTIVE' || 'SUBMITTED' => AiUi.success,
+      'WINNER' => AiUi.warning,
+      'INVITED' || 'REQUESTED' => const Color(0xFFD4A8FF),
+      _ => Colors.white54,
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
-    final color = aiJobStatusColor(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        aiJobStatusLabel(status),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
     );
   }
 }
