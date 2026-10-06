@@ -6,6 +6,7 @@ import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
+import '../../ai_ads/screens/create_ai_videos_screen.dart';
 import '../../challenges/screens/challenge_detail.dart';
 
 class BrandProfileScreen extends StatefulWidget {
@@ -319,6 +320,34 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             light: true,
             followFn: _service.followBrand,
             unfollowFn: _service.unfollowBrand,
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => CreateAiVideosScreen(brandId: widget.brandId),
+                    ),
+                  ),
+              icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+              label: const Text(
+                'Create AI Videos',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: _accent.withValues(alpha: 0.2),
+                side: BorderSide(color: _accent.withValues(alpha: 0.6)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
           ),
         ],
       ),
