@@ -76,8 +76,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RewardsScreen()));
     await tester.pumpAndSettle();
 
-    final cardOne = tester.getTopLeft(find.text('on Sep 1').hitTestable());
-    final cardTwo = tester.getTopLeft(find.text('on Sep 5').hitTestable());
+    final cardOne = tester.getTopLeft(find.text('Won on Sep 1').hitTestable());
+    final cardTwo = tester.getTopLeft(find.text('Won on Sep 5').hitTestable());
     // Two-per-row: same row (near-equal y), different column (different x).
     expect((cardOne.dy - cardTwo.dy).abs(), lessThan(5));
     expect(cardOne.dx, isNot(closeTo(cardTwo.dx, 5)));
@@ -150,8 +150,8 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RewardsScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('on Sep 1'), findsOneWidget);
-    expect(find.text('on Sep 5'), findsOneWidget);
+    expect(find.text('Won on Sep 1'), findsOneWidget);
+    expect(find.text('Won on Sep 5'), findsOneWidget);
   });
 
   testWidgets('splits level-up and leaderboard vouchers into their own sections',

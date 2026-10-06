@@ -12,7 +12,7 @@ import 'package:aura_app/features/account/screens/rewards_screen.dart';
 // RewardsScreen shows two backend-distinct tracks: /profile/rewards (coupons
 // + aura bonuses) and /profile/offer-vouchers (brand Leaderboard Offer
 // vouchers). Both sections must render, an unclaimed coupon must offer
-// "Claim", and a GRANTED voucher with a redeemUrl must offer "Redeem".
+// "Claim", and a GRANTED voucher with a redeemUrl must offer "Redeem now".
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -100,7 +100,118 @@ void main() {
     // Voucher: offer name, code and a Redeem action.
     expect(find.text('Summer Top 10'), findsOneWidget);
     expect(find.text('K7Q2M9X4RT'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Redeem'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Redeem now'), findsOneWidget);
+  });
+
+  // Regression: offerGrant.service.js mirrors every level-up/leaderboard
+  // OfferGrant into a UserReward row too (reason: level_up_offer /
+  // leaderboard_offer) — for other consumers of GET /profile/rewards, not
+  // this screen. Without filtering that mirror out, the same coupon rendered
+  // twice: once bare in COUPONS & BONUSES (reason isn't in _reasonLabels, so
+  // it just said "Reward"), and once correctly, with full context, in its own
+  // voucher section.
+  testWidgets(
+      'a level-up coupon mirrored into /profile/rewards does not also render in COUPONS & BONUSES',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/profile/rewards')) {
+        return json({
+          'status': 'success',
+          'data': {
+            'responses': [
+              {
+                '_id': 'r1',
+                'rewardType': 'coupon_code',
+                'reason': 'level_up_offer',
+                'status': 'active',
+                'couponCode': 'LEVELCODE1',
+              },
+              {
+                '_id': 'r2',
+                'rewardType': 'coupon_code',
+                'reason': 'streak_completion',
+                'status': 'active',
+                'couponValue': '10% off your next order',
+              },
+            ],
+          },
+        });
+      }
+      if (path.endsWith('/profile/offer-vouchers')) {
+        return json({
+          'status': 'success',
+          'data': {
+            'responses': [
+              {
+                'code': 'LEVELCODE1',
+                'status': 'GRANTED',
+                'levelAtGrant': 12,
+                'offerName': 'Level 12 Reward',
+              },
+            ],
+          },
+        });
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await useTallSurface(tester);
+    await tester.pumpWidget(const MaterialApp(home: RewardsScreen()));
+    await tester.pumpAndSettle();
+
+    // The mirrored level_up_offer entry never renders in COUPONS & BONUSES —
+    // only the genuinely distinct streak bonus does.
+    expect(find.text('Streak Bonus'), findsOneWidget);
+    expect(find.text('Level 12 Reward'), findsOneWidget);
+    expect(find.text('LEVELCODE1'), findsOneWidget);
+    // The code appears exactly once on screen — not once per section.
+    expect(find.textContaining('LEVELCODE1'), findsOneWidget);
+  });
+
+  // Regression: a recurring level-up offer (ADR 104 — one admin-configured
+  // Offer grants on every level-up, forever) has the exact same generic
+  // offerName on every single grant it will ever produce. The card used to
+  // just print that raw offerName verbatim — a real one was named "Every
+  // Level Up Reward", so a level-529 grant and a level-530 grant from the
+  // same offer looked identical and neither said what level it was actually
+  // for. The title is now always computed from the level actually earned.
+  testWidgets(
+      'titles a level voucher by its own level, not the recurring offer\'s generic name',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/profile/offer-vouchers')) {
+        return json({
+          'status': 'success',
+          'data': {
+            'responses': [
+              {
+                'code': 'A1',
+                'status': 'GRANTED',
+                'levelAtGrant': 529,
+                'offerName': 'Every Level Up Reward',
+              },
+              {
+                'code': 'A2',
+                'status': 'GRANTED',
+                'levelAtGrant': 530,
+                'offerName': 'Every Level Up Reward',
+              },
+            ],
+          },
+        });
+      }
+      return json({'status': 'success', 'data': {'responses': []}});
+    });
+
+    await useTallSurface(tester);
+    await tester.pumpWidget(const MaterialApp(home: RewardsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Level 529 Reward'), findsOneWidget);
+    expect(find.text('Level 530 Reward'), findsOneWidget);
+    expect(find.text('Every Level Up Reward'), findsNothing);
   });
 
   testWidgets('shows per-section empty lines when the backend returns nothing',

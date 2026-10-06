@@ -69,16 +69,19 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       // nested `submission` omits `auraPoints`; openapi.yaml defines it as
       // "Raw aiScore stored on the submission record", so aiScore is the
       // correct fallback.
-      'auraPoints': (submission['auraPoints'] as num?)?.toInt() ??
+      'auraPoints':
+          (submission['auraPoints'] as num?)?.toInt() ??
           (submission['aiScore'] as num?)?.toInt() ??
           0,
       'aiScore': submission['aiScore'],
-      'aiReason': submission['feedback'] as String? ??
+      'aiReason':
+          submission['feedback'] as String? ??
           submission['improvementTip'] as String? ??
           submission['aiReason'] as String? ??
           '',
       'reviewedByAI': submission['reviewedByAI'] as bool? ?? true,
-      'challengeTitle': challengeMap?['title'] as String? ??
+      'challengeTitle':
+          challengeMap?['title'] as String? ??
           s['challengeTitle'] as String? ??
           '',
     };
@@ -102,7 +105,9 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
       case 'rejected':
         return 'Rejected';
       case 'ai_error':
-        return 'Error';
+        // Same label as the profile grid (my_account_screen.dart) — this is a
+        // submission waiting on manual admin review, not an app error.
+        return 'Review';
       default:
         return 'Pending';
     }
@@ -123,13 +128,14 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
           child: Container(height: 1, color: Colors.white10),
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _accent))
-          : RefreshIndicator(
-              color: _accent,
-              onRefresh: _load,
-              child: _videos.isEmpty ? _buildEmpty(context) : _buildGrid(),
-            ),
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator(color: _accent))
+              : RefreshIndicator(
+                color: _accent,
+                onRefresh: _load,
+                child: _videos.isEmpty ? _buildEmpty(context) : _buildGrid(),
+              ),
     );
   }
 
@@ -145,14 +151,20 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.video_library_outlined,
-                      color: Colors.white.withValues(alpha: 0.15), size: 64),
+                  Icon(
+                    Icons.video_library_outlined,
+                    color: Colors.white.withValues(alpha: 0.15),
+                    size: 64,
+                  ),
                   const SizedBox(height: 20),
-                  const Text('No videos yet',
-                      style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600)),
+                  const Text(
+                    'No videos yet',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -194,18 +206,19 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
             final result = await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => UserVideoDetailScreen(
-                  videoNumber: i + 1,
-                  challengeTitle: (data['challengeTitle'] as String?) ?? '',
-                  auraPoints: auraPoints,
-                  videoUrl: videoUrl,
-                  status: status,
-                  aiScore: aiScore,
-                  aiReason: aiReason,
-                  reviewedByAI: reviewedByAI,
-                  videoId: videoId,
-                  mirrored: mirrored,
-                ),
+                builder:
+                    (_) => UserVideoDetailScreen(
+                      videoNumber: i + 1,
+                      challengeTitle: (data['challengeTitle'] as String?) ?? '',
+                      auraPoints: auraPoints,
+                      videoUrl: videoUrl,
+                      status: status,
+                      aiScore: aiScore,
+                      aiReason: aiReason,
+                      reviewedByAI: reviewedByAI,
+                      videoId: videoId,
+                      mirrored: mirrored,
+                    ),
               ),
             );
             if (result == 'deleted') _load();
@@ -216,17 +229,20 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
               fit: StackFit.expand,
               children: [
                 VideoThumbnailWidget(
-                    videoUrl: videoUrl,
-                    thumbnailUrl: thumbnailUrl,
-                    processingStatus: processingStatus,
-                    fit: BoxFit.cover,
-                    mirrored: mirrored),
+                  videoUrl: videoUrl,
+                  thumbnailUrl: thumbnailUrl,
+                  processingStatus: processingStatus,
+                  fit: BoxFit.cover,
+                  mirrored: mirrored,
+                ),
                 Positioned(
                   top: 6,
                   right: 6,
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.90),
                       borderRadius: BorderRadius.circular(6),
@@ -234,9 +250,10 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                     child: Text(
                       statusLabel,
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700),
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -246,7 +263,9 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                     left: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.65),
                         borderRadius: BorderRadius.circular(6),
@@ -254,15 +273,19 @@ class _AllVideosScreenState extends State<AllVideosScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.diamond,
-                              color: Color(0xFFD4A8FF), size: 10),
+                          const Icon(
+                            Icons.diamond,
+                            color: Color(0xFFD4A8FF),
+                            size: 10,
+                          ),
                           const SizedBox(width: 3),
                           Text(
                             '+$auraPoints',
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700),
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
