@@ -38,6 +38,11 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   bool _loadingCities = false;
   bool _saving = false;
   String? _errorText;
+  // Set when the backend list couldn't be loaded — the picker tile turns into
+  // a tap-to-retry row instead of offering nothing (or, as it once did, a
+  // hardcoded list whose ids the backend rejects on Continue).
+  String? _countriesError;
+  String? _citiesError;
 
   // Bumped on every _loadCities call so a slow/out-of-order response from a
   // country the user has since changed away from can't clobber _cities with
@@ -53,6 +58,15 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
   }
 
   Future<void> _loadInitialData() async {
+    await _loadCountries();
+    if (widget.isEditMode) await _prefillFromProfile();
+  }
+
+  Future<void> _loadCountries() async {
+    setState(() {
+      _loadingCountries = true;
+      _countriesError = null;
+    });
     try {
       final countries = await _refService.fetchCountries();
       if (!mounted) return;
@@ -60,11 +74,13 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
         _countries = countries;
         _loadingCountries = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _loadingCountries = false);
+      setState(() {
+        _loadingCountries = false;
+        _countriesError = e.toString();
+      });
     }
-    if (widget.isEditMode) await _prefillFromProfile();
   }
 
   // Edit mode only — pre-fill with the user's currently-saved country/city
@@ -84,31 +100,33 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
         : {...rawCity, 'id': rawCity['id'] ?? rawCity['_id']};
     if (country != null) {
       setState(() => _selectedCountry = country);
-      await _loadCities(country['id'] as String,
-          countryCode: country['code'] as String?);
+      await _loadCities(country['id'] as String);
     }
     if (!mounted || city == null) return;
     setState(() => _selectedCity = city);
   }
 
-  Future<void> _loadCities(String countryId, {String? countryCode}) async {
+  Future<void> _loadCities(String countryId) async {
     final requestId = ++_citiesRequestId;
     setState(() {
       _loadingCities = true;
       _cities = [];
       _selectedCity = null;
+      _citiesError = null;
     });
     try {
-      final cities =
-          await _refService.fetchCities(countryId, countryCode: countryCode);
+      final cities = await _refService.fetchCities(countryId);
       if (!mounted || requestId != _citiesRequestId) return;
       setState(() {
         _cities = cities;
         _loadingCities = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted || requestId != _citiesRequestId) return;
-      setState(() => _loadingCities = false);
+      setState(() {
+        _loadingCities = false;
+        _citiesError = e.toString();
+      });
     }
   }
 
@@ -119,6 +137,16 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     }
     if (_selectedCity == null) {
       _showSnack('Please select your city');
+      return;
+    }
+
+    // Last line of defence: only a real backend id can be saved. Anything
+    // else (stale or locally made-up data) would fail server-side with
+    // "must be a valid 24-character ID".
+    if (!isBackendId(_selectedCountry!['id']) ||
+        !isBackendId(_selectedCity!['id'])) {
+      setState(() => _errorText = 'Please select your country and city again.');
+      _loadCountries();
       return;
     }
 
@@ -184,13 +212,17 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
     ).then((picked) {
       if (picked == null) return;
       setState(() => _selectedCountry = picked);
-      _loadCities(picked['id'] as String, countryCode: picked['code'] as String?);
+      _loadCities(picked['id'] as String);
     });
   }
 
   void _openCityPicker() {
     if (_selectedCountry == null) {
       _showSnack('Please select a country first');
+      return;
+    }
+    if (_cities.isEmpty) {
+      _showSnack('No cities are available for this country yet');
       return;
     }
     showModalBottomSheet<Map<String, dynamic>>(
@@ -278,6 +310,8 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                     const SizedBox(height: 10),
                     _loadingCountries
                         ? _loadingRow()
+                        : _countriesError != null
+                        ? _retryRow(_countriesError!, _loadCountries)
                         : _pickerTile(
                             icon: Icons.flag_rounded,
                             value: _selectedCountry?['name'] as String?,
@@ -292,6 +326,11 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
                     const SizedBox(height: 10),
                     _loadingCities
                         ? _loadingRow()
+                        : _citiesError != null
+                        ? _retryRow(
+                            _citiesError!,
+                            () => _loadCities(_selectedCountry!['id'] as String),
+                          )
                         : _pickerTile(
                             icon: Icons.location_city_rounded,
                             value: _selectedCity?['name'] as String?,
@@ -395,6 +434,31 @@ class _CityInterestsScreenState extends State<CityInterestsScreen> {
             width: 18,
             height: 18,
             child: CircularProgressIndicator(color: _purple, strokeWidth: 2),
+          ),
+        ),
+      );
+
+  Widget _retryRow(String message, VoidCallback onRetry) => GestureDetector(
+        onTap: onRetry,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.60)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.refresh_rounded, color: Colors.redAccent, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -568,7 +632,11 @@ class _SearchPickerSheetState extends State<_SearchPickerSheet> {
                       style: TextStyle(color: AppColors.textFaint, fontSize: 14),
                     ),
                   )
-                : ListView.separated(
+                // Transparent Material so the ListTiles' tap ripple paints
+                // above the sheet's coloured background instead of under it.
+                : Material(
+                    type: MaterialType.transparency,
+                    child: ListView.separated(
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     itemCount: _filtered.length,
                     separatorBuilder: (_, __) => Divider(
@@ -589,6 +657,7 @@ class _SearchPickerSheetState extends State<_SearchPickerSheet> {
                         onTap: () => Navigator.pop(context, item),
                       );
                     },
+                  ),
                   ),
           ),
         ],
