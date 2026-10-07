@@ -137,8 +137,10 @@ Map<String, dynamic> generationJson({
   Map<String, dynamic>? output,
   String? scriptId,
   String instructions = '',
+  int? durationSeconds,
 }) => {
   '_id': id,
+  if (durationSeconds != null) 'settings': {'durationSeconds': durationSeconds},
   'stage': stage,
   'operation': operation,
   'versionNumber': version,

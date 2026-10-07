@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../widgets/ai_dialogs.dart';
+import '../widgets/ai_script_view.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_brand_assets_row.dart';
 import 'ai_video_detail_screen.dart';
@@ -95,12 +96,25 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
+  // Scripts are written for the chosen length — the backend makes the scene timings add up to it.
   AiAction get _aiScriptAction =>
-      AiAction(stage: AiStage.script, instructions: _scriptController.text);
+      AiAction(stage: AiStage.script, instructions: _scriptController.text, durationSeconds: _seconds);
 
   AiAction? get _refineAction => _scriptId == null
       ? null
-      : AiAction(stage: AiStage.script, operation: 'REFINE', parentId: _scriptId, instructions: _directionController.text);
+      : AiAction(
+          stage: AiStage.script,
+          operation: 'REFINE',
+          parentId: _scriptId,
+          instructions: _directionController.text,
+          durationSeconds: _seconds,
+        );
+
+  /// Picks a script version and, when it was written for a length, matches the video to it.
+  void _selectScript(AiGeneration script) {
+    _scriptId = script.id;
+    if (script.durationSeconds != null) _seconds = script.durationSeconds;
+  }
 
   AiAction? get _createAction {
     if (_scriptId == null) return null;
@@ -201,7 +215,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
       AiUi.toast(context, gen.error ?? "The script couldn't be written — you weren't charged.");
     } else {
       _scriptController.clear();
-      _scriptId = gen.id;
+      _selectScript(gen);
     }
     await _load();
   }
@@ -227,7 +241,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     if (gen == null || !mounted) return;
     if (gen.isDone) {
       _directionController.clear();
-      _scriptId = gen.id;
+      _selectScript(gen);
     } else {
       AiUi.toast(context, gen.error ?? "The script couldn't be refined — you weren't charged.");
     }
@@ -324,6 +338,33 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         const AiSectionTitle('Brand assets'),
         AiBrandAssetsRow(assets: campaign.assets),
 
+        AiSectionTitle(
+          'Length',
+          trailing: Text('Your script and video are made for this', style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
+        ),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final s in _lengthOptions(ws))
+              ChoiceChip(
+                label: Text('${s}s'),
+                selected: s == _seconds,
+                onSelected: (_) {
+                  setState(() => _seconds = s);
+                  _refreshQuotes();
+                },
+              ),
+          ],
+        ),
+        if (_seconds != null && _seconds! < ws.format.minDurationSeconds)
+          Padding(
+            key: const Key('ai-short-take-hint'),
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, so extend it before you submit.',
+              style: const TextStyle(color: AiUi.warning, fontSize: 12, height: 1.4),
+            ),
+          ),
         AiSectionTitle('Your script', trailing: scripts.isEmpty ? null : Text('${scripts.length} version${scripts.length == 1 ? '' : 's'}', style: const TextStyle(color: AppColors.textFaint, fontSize: 11))),
         if (scripts.isNotEmpty) ...[
           SizedBox(
@@ -338,9 +379,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                       label: Text('v${s.versionNumber}'),
                       selected: s.id == _scriptId,
                       onSelected: (_) {
-                        setState(() => _scriptId = s.id);
-                        _quoteFor(_refineAction);
-                        _quoteFor(_createAction);
+                        setState(() => _selectScript(s));
+                        _refreshQuotes();
                       },
                     ),
                   ),
@@ -349,12 +389,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
           ),
           if (selected != null) ...[
             const SizedBox(height: 10),
-            Container(
-              key: const Key('ai-selected-script'),
-              padding: const EdgeInsets.all(14),
-              decoration: AiUi.cardDecoration(),
-              child: Text(selected.scriptText, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.45)),
-            ),
+            KeyedSubtree(key: const Key('ai-selected-script'), child: AiScriptView(script: selected)),
             Row(
               children: [
                 TextButton.icon(
@@ -397,30 +432,6 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         const SizedBox(height: 10),
         _methodOption(AiGenerationMethod.imagesFirst, Icons.image_outlined, 'Images first', 'Generate 4 keyframes, pick the best, then make the video'),
         if (_method == AiGenerationMethod.textToVideo) ...[
-          const AiSectionTitle('Length'),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final s in _lengthOptions(ws))
-                ChoiceChip(
-                  label: Text('${s}s'),
-                  selected: s == _seconds,
-                  onSelected: (_) {
-                    setState(() => _seconds = s);
-                    _quoteFor(_createAction);
-                  },
-                ),
-            ],
-          ),
-          if (_seconds != null && _seconds! < ws.format.minDurationSeconds)
-            Padding(
-              key: const Key('ai-short-take-hint'),
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, so extend it before you submit.',
-                style: const TextStyle(color: AiUi.warning, fontSize: 12, height: 1.4),
-              ),
-            ),
           if (ws.prices.resolutions.length > 1) ...[
             const AiSectionTitle('Quality'),
             Wrap(

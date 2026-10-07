@@ -341,18 +341,29 @@ class AiPrices {
 }
 
 class AiScriptScene {
-  final int durationSeconds;
+  /// Half-second steps (the backend fits the scenes to the chosen length).
+  final double durationSeconds;
   final String visual;
   final String voiceover;
   final String onScreenText;
 
-  const AiScriptScene({required this.durationSeconds, required this.visual, this.voiceover = '', this.onScreenText = ''});
+  /// Brand asset handles cued in this scene, e.g. "@img1".
+  final List<String> brandAssetCues;
+
+  const AiScriptScene({
+    required this.durationSeconds,
+    required this.visual,
+    this.voiceover = '',
+    this.onScreenText = '',
+    this.brandAssetCues = const [],
+  });
 
   factory AiScriptScene.fromJson(Map<String, dynamic> j) => AiScriptScene(
-    durationSeconds: _int(j['durationSeconds']),
+    durationSeconds: j['durationSeconds'] is num ? (j['durationSeconds'] as num).toDouble() : double.tryParse('${j['durationSeconds']}') ?? 0,
     visual: '${j['visual'] ?? ''}',
     voiceover: '${j['voiceover'] ?? ''}',
     onScreenText: '${j['onScreenText'] ?? ''}',
+    brandAssetCues: _strings(j['brandAssetCues']),
   );
 }
 
@@ -375,6 +386,14 @@ class AiGeneration {
   final String? error;
   final String scriptText;
   final List<AiScriptScene> scenes;
+
+  /// The AI script's headline parts (empty for a hand-written script).
+  final String scriptTitle;
+  final String scriptHook;
+  final String scriptCallToAction;
+
+  /// The video length this version was made for (a script's target, a video's length).
+  final int? durationSeconds;
   final List<String> imageUrls;
   final String? videoUrl;
   final int quotedCredits;
@@ -396,6 +415,10 @@ class AiGeneration {
     this.error,
     this.scriptText = '',
     this.scenes = const [],
+    this.scriptTitle = '',
+    this.scriptHook = '',
+    this.scriptCallToAction = '',
+    this.durationSeconds,
     this.imageUrls = const [],
     this.videoUrl,
     this.quotedCredits = 0,
@@ -419,6 +442,12 @@ class AiGeneration {
       error: j['error'] as String?,
       scriptText: '${out['text'] ?? ''}',
       scenes: script == null ? const [] : _maps(script['scenes']).map(AiScriptScene.fromJson).toList(),
+      scriptTitle: '${script?['title'] ?? ''}',
+      scriptHook: '${script?['hook'] ?? ''}',
+      scriptCallToAction: '${script?['callToAction'] ?? ''}',
+      durationSeconds: j['settings'] is Map && (j['settings'] as Map)['durationSeconds'] is num
+          ? ((j['settings'] as Map)['durationSeconds'] as num).toInt()
+          : null,
       imageUrls: _strings(out['imageUrls']),
       videoUrl: out['videoUrl'] as String?,
       quotedCredits: _int(j['quotedCredits']),
