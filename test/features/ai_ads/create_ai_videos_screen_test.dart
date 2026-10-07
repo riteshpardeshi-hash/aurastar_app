@@ -92,7 +92,7 @@ void main() {
     await tester.tap(find.text('Images first'));
     await settle(tester);
     expect(find.text('Generate images · 12 credits'), findsOneWidget);
-    expect(backend.calls('POST', '$base/workspace/quote').last.body, {'stage': 'IMAGE', 'operation': 'GENERATE', 'scriptId': 's1', 'imageCount': 4});
+    expect(backend.calls('POST', '$base/workspace/quote').last.body, {'stage': 'IMAGE', 'operation': 'GENERATE', 'scriptId': 's1', 'perScene': true});
   });
 
   testWidgets('unaffordable: button disabled, shortfall explained, can ask for credits', (tester) async {

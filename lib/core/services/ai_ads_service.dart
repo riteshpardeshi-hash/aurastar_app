@@ -395,6 +395,9 @@ class AiGeneration {
   /// The video length this version was made for (a script's target, a video's length).
   final int? durationSeconds;
   final List<String> imageUrls;
+
+  /// Storyboard images: the script scene each image shows (parallel to [imageUrls]).
+  final List<int> sceneIndexes;
   final String? videoUrl;
   final int quotedCredits;
   final int chargedCredits;
@@ -420,6 +423,7 @@ class AiGeneration {
     this.scriptCallToAction = '',
     this.durationSeconds,
     this.imageUrls = const [],
+    this.sceneIndexes = const [],
     this.videoUrl,
     this.quotedCredits = 0,
     this.chargedCredits = 0,
@@ -449,6 +453,7 @@ class AiGeneration {
           ? ((j['settings'] as Map)['durationSeconds'] as num).toInt()
           : null,
       imageUrls: _strings(out['imageUrls']),
+      sceneIndexes: out['sceneIndexes'] is List ? [for (final v in out['sceneIndexes'] as List) _int(v)] : const [],
       videoUrl: out['videoUrl'] as String?,
       quotedCredits: _int(j['quotedCredits']),
       chargedCredits: _int(j['chargedCredits']),
@@ -535,6 +540,9 @@ class AiAction {
   final int? sceneIndex;
   final int? imageCount;
 
+  /// IMAGE: a storyboard — one keyframe per scene of the script.
+  final bool perScene;
+
   /// Keyframes for a video: image generation id + which of its images.
   final List<({String generationId, int index})> keyframes;
   final String? resolution;
@@ -548,6 +556,7 @@ class AiAction {
     this.scriptId,
     this.sceneIndex,
     this.imageCount,
+    this.perScene = false,
     this.keyframes = const [],
     this.resolution,
     this.durationSeconds,
@@ -561,6 +570,7 @@ class AiAction {
     if (scriptId != null) 'scriptId': scriptId,
     if (sceneIndex != null) 'sceneIndex': sceneIndex,
     if (imageCount != null) 'imageCount': imageCount,
+    if (perScene) 'perScene': true,
     if (keyframes.isNotEmpty) 'keyframes': [for (final k in keyframes) {'generationId': k.generationId, 'index': k.index}],
     if (resolution != null || durationSeconds != null)
       'settings': {

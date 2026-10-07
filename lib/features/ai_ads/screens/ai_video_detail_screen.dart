@@ -40,6 +40,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
 
   final Set<int> _picked = {};
   int? _seconds;
+  bool _pickedStoryboard = false;
   _Iterate _iterate = _Iterate.edit;
   int _extendSeconds = 5;
 
@@ -79,7 +80,12 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
         _evaluations = (results[2] as List<AiEvaluation>).where((e) => e.videoGenerationId == gen.id).toList();
         _participation = (results[3] as AiCampaign).myParticipation;
         _assets = (results[3] as AiCampaign).assets;
-        _seconds ??= ws.format.minDurationSeconds;
+        _seconds ??= _scriptGen(ws)?.durationSeconds ?? ws.format.minDurationSeconds;
+        // A storyboard starts with every scene's frame picked — the closest match to the script.
+        if (!_pickedStoryboard && gen.isDone && gen.sceneIndexes.isNotEmpty) {
+          _pickedStoryboard = true;
+          _picked.addAll([for (var i = 0; i < gen.imageUrls.length; i++) i]);
+        }
         _loading = false;
       });
       _schedulePoll();
@@ -116,6 +122,28 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     if (g?.scriptId != null) return g!.scriptId;
     final scripts = _workspace?.of(AiStage.script).where((s) => s.isDone).toList() ?? [];
     return scripts.isEmpty ? null : scripts.last.id;
+  }
+
+  AiGeneration? _scriptGen(AiWorkspace ws) {
+    final id = _gen?.scriptId ?? _scriptForVideo;
+    for (final g in ws.generations) {
+      if (g.id == id) return g;
+    }
+    return null;
+  }
+
+  /// "Scene 2 · 3–7s" for a storyboard image, null for a plain take.
+  String? _sceneLabel(AiGeneration g, int i) {
+    if (i >= g.sceneIndexes.length) return null;
+    final scene = g.sceneIndexes[i];
+    final scenes = _scriptGen(_workspace!)?.scenes ?? const [];
+    if (scene >= scenes.length) return 'Scene ${scene + 1}';
+    var from = 0.0;
+    for (var k = 0; k < scene; k++) {
+      from += scenes[k].durationSeconds;
+    }
+    String f(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+    return 'Scene ${scene + 1} · ${f(from)}–${f(from + scenes[scene].durationSeconds)}s';
   }
 
   AiAction? get _videoFromImages {
@@ -338,14 +366,27 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
   Widget _imagePicker(AiGeneration g) {
     final ws = _workspace!;
     final q = _videoQuote;
-    final options = {ws.format.minDurationSeconds, ((ws.format.minDurationSeconds + ws.format.maxDurationSeconds) / 2).round(), ws.format.maxDurationSeconds}.toList()..sort();
+    final f = ws.format;
+    final options = {
+      if (ws.shortClipSeconds > 0 && ws.shortClipSeconds < f.minDurationSeconds) ws.shortClipSeconds,
+      f.minDurationSeconds,
+      ((f.minDurationSeconds + f.maxDurationSeconds) / 2).round(),
+      f.maxDurationSeconds,
+      if (_scriptGen(ws)?.durationSeconds case final scriptSeconds?) scriptSeconds,
+    }.toList()..sort();
+    final storyboard = g.sceneIndexes.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Pick the images for your video',
-            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
+        Text(storyboard ? 'Your storyboard' : 'Pick the images for your video',
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
         const SizedBox(height: 4),
-        const Text('Select one or more — they set the look of the video.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        Text(
+          storyboard
+              ? 'One frame per scene — each guides its scene in the video. Untick one to let the AI improvise that scene.'
+              : 'Select one or more — they set the look of the video.',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4),
+        ),
         const SizedBox(height: 12),
         GridView.count(
           shrinkWrap: true,
@@ -369,6 +410,16 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
                     fit: StackFit.expand,
                     children: [
                       Image.network(g.imageUrls[i], fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: Colors.white24)),
+                      if (_sceneLabel(g, i) case final label?)
+                        Positioned(
+                          left: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(8)),
+                            child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
                       if (_picked.contains(i)) const Positioned(top: 8, right: 8, child: Icon(Icons.check_circle, color: AiUi.accent, size: 22)),
                     ],
                   ),

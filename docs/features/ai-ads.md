@@ -40,8 +40,11 @@ users whose profile `role` is `creator`.
    length, the hook, one card per scene on a timeline (`0–3s`, the visual, the
    voiceover, the on-screen text, brand cues), then the call to action. A
    hand-written script shows as plain text.
-4. **Create** — *Text to video* (length + quality) or *Images first* (4
-   keyframes → pick → video). Length chips are the brand's min / middle / max,
+4. **Create** — *Text to video* (length + quality) or *Images first*: a
+   **storyboard** (`perScene: true`) — one keyframe per scene of the script, each
+   labelled "Scene 2 · 3–7s" and all picked by default (untick one to let the AI
+   improvise that scene) → video. The video pins each frame to its scene's time,
+   and its length defaults to the script's. Length chips are the brand's min / middle / max,
    plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
    minimum is longer. Picking it shows a hint to extend the clip before submitting. Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
