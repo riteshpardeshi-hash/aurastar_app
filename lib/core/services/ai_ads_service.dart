@@ -293,6 +293,10 @@ class AiCampaign {
   );
 
   bool get isLive => status == 'LIVE';
+  bool get isPaused => status == 'PAUSED';
+
+  /// Closed, completed or cancelled — nothing more can be made or submitted.
+  bool get hasEnded => status == 'CLOSED' || status == 'COMPLETED' || status == 'CANCELLED';
 }
 
 // ─── Workspace ────────────────────────────────────────────────────────────────

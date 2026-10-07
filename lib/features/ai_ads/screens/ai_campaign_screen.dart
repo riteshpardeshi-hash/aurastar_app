@@ -175,11 +175,28 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
           ),
         ]),
       'ACTIVE' || 'SUBMITTED' => Column(children: [
-          Text('${p!.creditsLeft} credits to make your ad',
-              textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          AiPrimaryButton(label: 'Open my workspace', onPressed: () => _openWorkspace(c)),
-          if (status == 'SUBMITTED' && p.finalScore != null) ...[
+          if (c.hasEnded)
+            Text(
+              c.status == 'CANCELLED'
+                  ? 'This campaign was cancelled.'
+                  : 'This campaign has ended — the brand is picking the winners.',
+              key: const Key('ai-campaign-ended'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted),
+            )
+          else ...[
+            Text('${p!.creditsLeft} credits to make your ad',
+                textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            if (c.isPaused) ...[
+              const SizedBox(height: 6),
+              const Text('The brand has paused this campaign for now — you can look, but not create.',
+                  key: Key('ai-campaign-paused'),
+                  textAlign: TextAlign.center, style: TextStyle(color: AiUi.warning, fontSize: 12)),
+            ],
+            const SizedBox(height: 12),
+            AiPrimaryButton(label: 'Open my workspace', onPressed: () => _openWorkspace(c)),
+          ],
+          if (status == 'SUBMITTED' && p!.finalScore != null) ...[
             const SizedBox(height: 10),
             Text('Your final ad is submitted · AI score ${p.finalScore}',
                 textAlign: TextAlign.center, style: const TextStyle(color: AiUi.success, fontSize: 12)),
@@ -196,7 +213,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
         ]),
       _ => Text(
           switch (status) {
-            'NOT_SELECTED' => "The campaign ended — your ad wasn't picked this time.",
+            'NOT_SELECTED' => "The campaign has finished — your ad wasn't picked this time.",
             'REJECTED' => "The brand didn't accept your request.",
             'REMOVED' => 'You were removed from this campaign.',
             _ => status,
