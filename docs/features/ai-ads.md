@@ -33,10 +33,13 @@ users whose profile `role` is `creator`.
 3. **Create** — *Text to video* (length + quality) or *Images first* (4
    keyframes → pick → video). Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
-4. **Judge** — *Get AI score* (paid, background job). The score card shows the
+4. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
+   campaign, shown as "Free · N left"; a background job). The score card shows the
    0–100 score, per-criterion scores, missing mandatory brand assets, forbidden
    claims / safety issues (these cap the score), timed feedback and
-   suggestions. A failed evaluation is refunded and can be retried.
+   suggestions. A failed evaluation doesn't count and can be retried; a video that was already
+   judged can't be judged again (change it first). When none are left, the backend's reason is
+   shown and the button is off.
 5. **Iterate** — *Edit*, *Make it longer* (+4/5/8/10 s) or *New audio* on any
    finished video (paid, quoted).
 6. **Submit** — *Submit as my final ad* (free, changeable until the deadline).
@@ -46,11 +49,14 @@ users whose profile `role` is `creator`.
 ## Money rules the client must keep
 
 - **Never show a price the server didn't quote.** Every paid button label is
-  the latest `POST …/workspace/quote` (or `…/evaluate/quote`) result, and the
-  button is disabled until it arrives or when `canAfford` is false.
+  the latest `POST …/workspace/quote` result, and the button is disabled until
+  it arrives or when `canAfford` is false. Prices are what the AI providers
+  charge plus the platform's margin, synced by the backend (backend ADR 116) —
+  the app holds no pricing logic.
 - **Send the price the creator saw** as `expectedCredits`. The server refuses
   to charge more (409 "The price changed…") — re-quote and let them tap again.
 - **402** means nothing ran and nothing was charged — offer *Ask for more*
   (credit request; the brand reviews all the creator's activity first).
-- Some credits are **kept back for one evaluation** (`reservedForEvaluation`)
-  so a creator can always get their ad judged; the workspace says so.
+- **Evaluation is free** (`credits: 0`, `free: true`, `freeEvaluations`
+  `{limit, used, left}`); the request sends no price. The workspace shows how
+  many free evaluations are left. ([ADR 031](../decisions/031-ai-ads-free-evaluation.md))

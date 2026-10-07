@@ -24,7 +24,7 @@ void main() {
     backend = FakeAiAdsBackend();
     backend.routes['POST $base/workspace/quote'] = (req) =>
         FakeAiAdsBackend.ok(quoteJson(req.body!['operation'] == 'GENERATE' ? 20 : 9));
-    backend.on('POST $base/workspace/generations/v1/evaluate/quote', quoteJson(3));
+    backend.on('POST $base/workspace/generations/v1/evaluate/quote', evalQuoteJson());
   });
   tearDown(FakeAiAdsBackend.reset);
 
@@ -83,10 +83,10 @@ void main() {
     await settle(tester);
 
     expect(find.text('Generating your video…'), findsNothing);
-    expect(find.text('Get AI score · 3 credits'), findsOneWidget);
+    expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
   });
 
-  testWidgets('get AI score: sends the quoted price, then shows the pending state', (tester) async {
+  testWidgets('get AI score: free, then shows the pending state', (tester) async {
     var evaluations = <Map<String, dynamic>>[];
     serve(gen: doneVideo);
     backend.routes['GET $base/workspace/evaluations'] = (_) => FakeAiAdsBackend.ok(evaluations);
@@ -96,10 +96,11 @@ void main() {
     };
     await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
 
-    await tester.tap(find.text('Get AI score · 3 credits'));
+    await tester.tap(find.text('Get AI score · Free · 4 left'));
     await settle(tester);
 
-    expect(backend.calls('POST', '$base/workspace/generations/v1/evaluate').single.body, {'expectedCredits': 3});
+    // Free — no price is sent.
+    expect(backend.calls('POST', '$base/workspace/generations/v1/evaluate').single.body, isEmpty);
     expect(find.text('Scoring your video against the brand brief…'), findsOneWidget);
   });
 
@@ -122,7 +123,7 @@ void main() {
     await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
 
     expect(find.text('The AI could not watch the video'), findsOneWidget);
-    expect(find.text('Try again · 3 credits'), findsOneWidget);
+    expect(find.text('Try again · Free · 4 left'), findsOneWidget);
   });
 
   testWidgets('submit as final ad is free and marks it final', (tester) async {
@@ -167,5 +168,15 @@ void main() {
       'settings': {'durationSeconds': 8},
       'expectedCredits': 9,
     });
+  });
+
+  testWidgets('no free evaluations left: the reason shows and the button is off', (tester) async {
+    serve(gen: doneVideo);
+    backend.on('POST $base/workspace/generations/v1/evaluate/quote', evalQuoteJson(left: 0, reason: "You've used all 5 free AI evaluations in this campaign."));
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+
+    expect(find.text("You've used all 5 free AI evaluations in this campaign."), findsOneWidget);
+    final button = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Get AI score · Free · 0 left'));
+    expect(button.onPressed, isNull);
   });
 }

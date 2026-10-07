@@ -301,9 +301,9 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        if (ws.prices.reservedForEvaluation > 0)
+        if (ws.freeEvaluations.limit > 0)
           Text(
-            '${ws.prices.reservedForEvaluation} of your credits are kept so you can always get your ad judged.',
+            'Getting your ad judged by AI is free — ${ws.freeEvaluations.left} of ${ws.freeEvaluations.limit} left.',
             style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
           ),
         const AiSectionTitle('Brand brief'),
@@ -433,9 +433,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
           AiWarningText(createError)
         else if (createQuote != null && !createQuote.canAfford) ...[
           AiWarningText(
-            createQuote.creditsLeft >= createQuote.credits
-                ? 'Not enough credits — ${createQuote.reservedForEvaluation} are kept for getting your ad judged.'
-                : 'You are out of credits',
+            'This costs ${createQuote.credits} credits and you have ${createQuote.creditsLeft}.',
           ),
           TextButton(onPressed: _askForCredits, child: const Text('Ask the brand for more credits')),
         ],

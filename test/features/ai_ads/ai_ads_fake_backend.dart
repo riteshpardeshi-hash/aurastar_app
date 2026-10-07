@@ -157,7 +157,7 @@ Map<String, dynamic> generationJson({
       },
 };
 
-Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = const [], int creditsLeft = 100, int reserve = 3}) => {
+Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = const [], int creditsLeft = 100, int freeLeft = 5}) => {
   'campaign': {'status': 'LIVE', 'deadline': '2026-12-01T00:00:00.000Z', 'format': {'minDurationSeconds': 10, 'maxDurationSeconds': 20}},
   'creditsLeft': creditsLeft,
   'allocatedCredits': 100,
@@ -165,17 +165,27 @@ Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = con
     'scriptUpTo': 2,
     'imageEach': 3,
     'videoPerSecond': {'480p': 1.5, '720p': 2.5, '1080p': null},
-    'reservedForEvaluation': reserve,
   },
+  'freeEvaluations': {'limit': 5, 'used': 5 - freeLeft, 'left': freeLeft},
   'generations': generations,
 };
 
-Map<String, dynamic> quoteJson(int credits, {int creditsLeft = 100, bool canAfford = true, int reserve = 3}) => {
+Map<String, dynamic> quoteJson(int credits, {int creditsLeft = 100, bool canAfford = true}) => {
   'credits': credits,
   'creditsLeft': creditsLeft,
-  'reservedForEvaluation': reserve,
   'canAfford': canAfford,
   'breakdown': {'note': 'est.'},
+};
+
+/// The evaluation "quote": free (backend ADR 116), with how many are left.
+Map<String, dynamic> evalQuoteJson({int left = 4, String? reason}) => {
+  'credits': 0,
+  'free': true,
+  'creditsLeft': 100,
+  'freeEvaluations': {'limit': 5, 'used': 5 - left, 'left': left},
+  'canAfford': reason == null,
+  if (reason != null) 'reason': reason,
+  'breakdown': {'note': 'Getting your ad judged is free.'},
 };
 
 Map<String, dynamic> evaluationJson({String id = 'e1', String videoId = 'v1', String status = 'COMPLETED', int? score = 72}) => {

@@ -33,7 +33,7 @@ void main() {
 
     expect(find.text('Write with AI · 2 credits'), findsOneWidget);
     expect(find.text('Get a script first — write it, or let the AI write it.'), findsOneWidget);
-    expect(find.textContaining('3 of your credits are kept'), findsOneWidget);
+    expect(find.text('Getting your ad judged by AI is free — 5 of 5 left.'), findsOneWidget);
     final generate = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Generate video'));
     expect(generate.onPressed, isNull);
   });
@@ -93,13 +93,13 @@ void main() {
     expect(backend.calls('POST', '$base/workspace/quote').last.body, {'stage': 'IMAGE', 'operation': 'GENERATE', 'scriptId': 's1', 'imageCount': 4});
   });
 
-  testWidgets('unaffordable: button disabled, reserve explained, can ask for credits', (tester) async {
+  testWidgets('unaffordable: button disabled, shortfall explained, can ask for credits', (tester) async {
     backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1')], creditsLeft: 26));
     quotes(canAffordVideo: false);
     backend.on('POST $base/credit-requests', {'_id': 'r1', 'requestedCredits': 40, 'status': 'PENDING'}, status: 201);
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    expect(find.text('Not enough credits — 3 are kept for getting your ad judged.'), findsOneWidget);
+    expect(find.text('This costs 25 credits and you have 100.'), findsOneWidget);
     expect(tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Generate video · 25 credits')).onPressed, isNull);
 
     await tester.tap(find.text('Ask the brand for more credits'));
