@@ -46,6 +46,105 @@ users whose profile `role` is `creator`.
    The brand picks winners; rewards show under *My rewards*, where the creator
    confirms *I got it*.
 
+## Diagrams
+
+The backend's `docs/features/ai-ads-architecture.md` has every server-side flow (credits,
+pricing, margin, state machines, jobs). These are the app's flows.
+
+### Screens
+
+```mermaid
+flowchart TD
+  BP["Brand profile<br/>AI Ad Campaigns button (creators only)"] --> CL["AiCampaignsScreen<br/>this brand's live campaigns"]
+  CL --> CS["AiCampaignScreen<br/>brief · brand assets · join / invite"]
+  CL --> RW["AiRewardsScreen<br/>(gift icon)"]
+  CS -->|"ACTIVE / SUBMITTED, campaign live"| WS["CreateAiVideosScreen<br/>scripts · method · length · quality"]
+  CS -->|WINNER| RW
+  WS -->|Generate images / video| VD["AiVideoDetailScreen<br/>pick keyframes · progress · score · iterate · submit"]
+  WS -->|library icon| MV["MyAiVideosScreen<br/>images + videos, newest first"]
+  MV --> VD
+  VD -->|new version| VD
+```
+
+### What the campaign screen offers
+
+```mermaid
+flowchart TD
+  S{"My status"} -->|none / declined / revoked / withdrawn| J{"Campaign"}
+  J -->|invite-only| T1["This campaign is invite-only"]
+  J -->|not live or full| T2["Not taking creators right now"]
+  J -->|open + live| ASK["Ask to join → terms dialog → acceptTerms"]
+  S -->|INVITED| INV["Accept invite (terms) · Decline"]
+  S -->|REQUESTED| WAIT["Waiting for the brand · Withdraw request"]
+  S -->|"ACTIVE / SUBMITTED"| E{"Campaign ended?"}
+  E -->|"CLOSED / COMPLETED"| END1["This campaign has ended"]
+  E -->|CANCELLED| END2["This campaign was cancelled"]
+  E -->|PAUSED| PAU["Paused notice + Open my workspace"]
+  E -->|LIVE| OPEN["N credits · Open my workspace<br/>(+ final ad score if submitted)"]
+  S -->|WINNER| WIN["Your ad won · See my rewards"]
+  S -->|NOT_SELECTED / REJECTED / REMOVED| MSG["Explains what happened"]
+```
+
+### A paid action (scripts, images, videos)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor C as Creator
+  participant App
+  participant API
+  App->>API: POST quote (the action, as the creator sets it up)
+  API-->>App: credits, canAfford
+  App-->>C: button reads Generate video · 500 credits (disabled if not affordable)
+  C->>App: tap = confirm that price
+  App->>API: POST generations (action + expectedCredits)
+  alt ok
+    API-->>App: script / images done, or video RUNNING
+  else 409 price changed
+    API-->>App: message
+    App->>API: re-quote, button shows the new price
+  else 402 out of credits
+    API-->>App: message
+    App-->>C: toast with Ask for more → credit request sheet
+  end
+```
+
+### A video, and getting it judged
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor C as Creator
+  participant App as AiVideoDetailScreen
+  participant API
+  App->>API: GET generation (every 5 s while RUNNING)
+  API-->>App: COMPLETED + video URL
+  App->>API: POST evaluate/quote
+  API-->>App: free, N left (or the reason it can't)
+  App-->>C: Get AI score · Free · N left
+  C->>App: tap
+  App->>API: POST evaluate (no price)
+  API-->>App: 202 QUEUED
+  loop every 5 s while QUEUED / RUNNING
+    App->>API: GET evaluations
+  end
+  API-->>App: score, criteria, missing assets, timed feedback, suggestions
+  C->>App: Submit as my final ad (free) or iterate (edit / extend / new audio, quoted)
+```
+
+### Errors the app handles
+
+```mermaid
+flowchart LR
+  R["Response"] --> K{"Status"}
+  K -->|2xx| OK["data"]
+  K -->|402| OUT["OutOfAiCreditsException<br/>→ Ask for more"]
+  K -->|"409 + price changed"| PC["AiPriceChangedException<br/>→ re-quote"]
+  K -->|other| GEN["AiAdsException<br/>→ toast with the backend message"]
+  K -->|401| REF["ApiClient.send refreshes the token once, retries"]
+  K -->|non-JSON| NJ["Unexpected response (status)"]
+```
+
 ## Money rules the client must keep
 
 - **Never show a price the server didn't quote.** Every paid button label is

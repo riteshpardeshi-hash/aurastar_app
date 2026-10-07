@@ -101,4 +101,27 @@ void main() {
 
     expect(find.text('My rewards'), findsOneWidget);
   });
+
+  testWidgets('a closed campaign no longer offers the workspace', (tester) async {
+    backend.on('GET $base', {...campaignJson(myStatus: 'SUBMITTED'), 'status': 'CLOSED'});
+    await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+    expect(find.byKey(const Key('ai-campaign-ended')), findsOneWidget);
+    expect(find.text('This campaign has ended — the brand is picking the winners.'), findsOneWidget);
+    expect(find.text('Open my workspace'), findsNothing);
+  });
+
+  testWidgets('a cancelled campaign says so and offers nothing to make', (tester) async {
+    backend.on('GET $base', {...campaignJson(myStatus: 'ACTIVE'), 'status': 'CANCELLED'});
+    await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+    expect(find.text('This campaign was cancelled.'), findsOneWidget);
+    expect(find.text('Open my workspace'), findsNothing);
+  });
+
+  testWidgets('a paused campaign says so but still lets the creator look', (tester) async {
+    backend.on('GET $base', {...campaignJson(myStatus: 'ACTIVE'), 'status': 'PAUSED'});
+    await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+    expect(find.byKey(const Key('ai-campaign-paused')), findsOneWidget);
+    expect(find.text('Open my workspace'), findsOneWidget);
+  });
 }
+
