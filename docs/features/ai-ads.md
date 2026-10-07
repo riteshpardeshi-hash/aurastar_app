@@ -28,21 +28,33 @@ users whose profile `role` is `creator`.
 1. **Join** — open campaigns: *Ask to join*; invite-only: *Accept invite*.
    Both show the ownership-terms dialog first and send `acceptTerms: true`.
    A request waits for the brand's approval (`REQUESTED` → `ACTIVE`).
-2. **Script** — *Write with AI* (paid), *Refine with AI* (paid), *Use my text*
-   (free) or *Edit* an existing version (free; creates a new version).
-3. **Create** — *Text to video* (length + quality) or *Images first* (4
-   keyframes → pick → video). Videos run in the background; the detail screen
+2. **Length first** — the *Length* chips sit above the script: the script **and**
+   the video are made for it. *Write with AI* / *Refine with AI* send it as
+   `settings.durationSeconds`; the backend makes the scene timings add up to it.
+   Picking a script version selects the length it was written for.
+3. **Script** — *Write with AI* (paid), *Refine with AI* (paid), *Use my text*
+   (free) or *Edit* an existing version (free; creates a new version). Each
+   script button shows its price in a pill on the right (`⚡ 3 credits` / `Free`,
+   `AiSecondaryButton.price`), and a disabled button greys out but stays readable.
+   The selected script shows as a storyboard (`AiScriptView`): title + total
+   length, the hook, one card per scene on a timeline (`0–3s`, the visual, the
+   voiceover, the on-screen text, brand cues), then the call to action. A
+   hand-written script shows as plain text.
+4. **Create** — *Text to video* (length + quality) or *Images first* (4
+   keyframes → pick → video). Length chips are the brand's min / middle / max,
+   plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
+   minimum is longer. Picking it shows a hint to extend the clip before submitting. Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
-4. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
+5. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
    campaign, shown as "Free · N left"; a background job). The score card shows the
    0–100 score, per-criterion scores, missing mandatory brand assets, forbidden
    claims / safety issues (these cap the score), timed feedback and
    suggestions. A failed evaluation doesn't count and can be retried; a video that was already
    judged can't be judged again (change it first). When none are left, the backend's reason is
    shown and the button is off.
-5. **Iterate** — *Edit*, *Make it longer* (+4/5/8/10 s) or *New audio* on any
+6. **Iterate** — *Edit*, *Make it longer* (+4/5/8/10 s) or *New audio* on any
    finished video (paid, quoted).
-6. **Submit** — *Submit as my final ad* (free, changeable until the deadline).
+7. **Submit** — *Submit as my final ad* (free, changeable until the deadline).
    The brand picks winners; rewards show under *My rewards*, where the creator
    confirms *I got it*.
 
@@ -58,7 +70,7 @@ flowchart TD
   BP["Brand profile<br/>AI Ad Campaigns button (creators only)"] --> CL["AiCampaignsScreen<br/>this brand's live campaigns"]
   CL --> CS["AiCampaignScreen<br/>brief · brand assets · join / invite"]
   CL --> RW["AiRewardsScreen<br/>(gift icon)"]
-  CS -->|"ACTIVE / SUBMITTED, campaign live"| WS["CreateAiVideosScreen<br/>scripts · method · length · quality"]
+  CS -->|"ACTIVE / SUBMITTED, campaign live"| WS["CreateAiVideosScreen<br/>length · script storyboard · method · quality"]
   CS -->|WINNER| RW
   WS -->|Generate images / video| VD["AiVideoDetailScreen<br/>pick keyframes · progress · score · iterate · submit"]
   WS -->|library icon| MV["MyAiVideosScreen<br/>images + videos, newest first"]
