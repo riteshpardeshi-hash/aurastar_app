@@ -48,6 +48,49 @@ void main() {
     expect(find.text('Generating your video…'), findsOneWidget);
   });
 
+  testWidgets('a storyboard labels each frame with its scene and time, and starts with all of them picked', (tester) async {
+    final script = generationJson(id: 's1', durationSeconds: 10, output: {
+      'text': 'flat',
+      'script': {
+        'scenes': [
+          {'durationSeconds': 3, 'visual': 'Rain'},
+          {'durationSeconds': 4, 'visual': 'Can'},
+          {'durationSeconds': 3, 'visual': 'Sip'},
+        ],
+      },
+    });
+    final board = generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b.png', 'https://s3/c.png'],
+      'sceneIndexes': [0, 1, 2],
+    });
+    backend.on('GET $base/workspace/generations/i1', board);
+    backend.on('GET $base/workspace', workspaceJson(generations: [script, board]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    backend.on('POST $base/workspace/generations', generationJson(id: 'v2', stage: 'VIDEO', status: 'RUNNING'), status: 201);
+    backend.on('GET $base/workspace/generations/v2', generationJson(id: 'v2', stage: 'VIDEO', status: 'RUNNING'));
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'i1'));
+
+    expect(find.text('Your storyboard'), findsOneWidget);
+    expect(find.text('Scene 1 · 0–3s'), findsOneWidget);
+    expect(find.text('Scene 2 · 3–7s'), findsOneWidget);
+    expect(find.text('Scene 3 · 7–10s'), findsOneWidget);
+    // Length follows the script it was drawn from.
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '10s')).selected, isTrue);
+
+    await tester.ensureVisible(find.text('Create video · 20 credits'));
+    await tester.tap(find.text('Create video · 20 credits'));
+    await settle(tester);
+
+    final body = backend.calls('POST', '$base/workspace/generations').single.body!;
+    expect(body['keyframes'], [
+      {'generationId': 'i1', 'index': 0},
+      {'generationId': 'i1', 'index': 1},
+      {'generationId': 'i1', 'index': 2},
+    ]);
+    expect(body['settings'], containsPair('durationSeconds', 10));
+  });
+
   testWidgets('a running video can be cancelled (refunded)', (tester) async {
     var status = 'RUNNING';
     backend.routes['GET $base/workspace/generations/v1'] =

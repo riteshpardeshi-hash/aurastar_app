@@ -120,7 +120,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     if (_scriptId == null) return null;
     return _method == AiGenerationMethod.textToVideo
         ? AiAction(stage: AiStage.video, scriptId: _scriptId, durationSeconds: _seconds, resolution: _resolution)
-        : AiAction(stage: AiStage.image, scriptId: _scriptId, imageCount: 4);
+        : AiAction(stage: AiStage.image, scriptId: _scriptId, perScene: true);
   }
 
   String _key(AiAction a) => a.toJson().toString();
@@ -430,7 +430,14 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         const AiSectionTitle('How do you want to create it?'),
         _methodOption(AiGenerationMethod.textToVideo, Icons.movie_creation_outlined, 'Text to video', 'Generate the video straight from your script'),
         const SizedBox(height: 10),
-        _methodOption(AiGenerationMethod.imagesFirst, Icons.image_outlined, 'Images first', 'Generate 4 keyframes, pick the best, then make the video'),
+        _methodOption(
+          AiGenerationMethod.imagesFirst,
+          Icons.image_outlined,
+          'Images first',
+          selected == null || selected.scenes.isEmpty
+              ? 'One keyframe per scene of your script, then make the video'
+              : '${selected.scenes.length > 4 ? 4 : selected.scenes.length} keyframes — one per scene — then make the video',
+        ),
         if (_method == AiGenerationMethod.textToVideo) ...[
           if (ws.prices.resolutions.length > 1) ...[
             const AiSectionTitle('Quality'),
