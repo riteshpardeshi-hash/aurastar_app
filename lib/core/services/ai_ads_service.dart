@@ -398,6 +398,9 @@ class AiGeneration {
 
   /// Storyboard images: the script scene each image shows (parallel to [imageUrls]).
   final List<int> sceneIndexes;
+
+  /// The images this version changed (0-based), when it came from "Change images".
+  final List<int> editedImageIndexes;
   final String? videoUrl;
   final int quotedCredits;
   final int chargedCredits;
@@ -424,6 +427,7 @@ class AiGeneration {
     this.durationSeconds,
     this.imageUrls = const [],
     this.sceneIndexes = const [],
+    this.editedImageIndexes = const [],
     this.videoUrl,
     this.quotedCredits = 0,
     this.chargedCredits = 0,
@@ -453,6 +457,9 @@ class AiGeneration {
           ? ((j['settings'] as Map)['durationSeconds'] as num).toInt()
           : null,
       imageUrls: _strings(out['imageUrls']),
+      editedImageIndexes: j['settings'] is Map && (j['settings'] as Map)['editedImageIndexes'] is List
+          ? [for (final v in (j['settings'] as Map)['editedImageIndexes'] as List) _int(v)]
+          : const [],
       sceneIndexes: out['sceneIndexes'] is List ? [for (final v in out['sceneIndexes'] as List) _int(v)] : const [],
       videoUrl: out['videoUrl'] as String?,
       quotedCredits: _int(j['quotedCredits']),
@@ -543,6 +550,12 @@ class AiAction {
   /// IMAGE: a storyboard — one keyframe per scene of the script.
   final bool perScene;
 
+  /// IMAGE REFINE: change these images (0-based), each with its own instruction.
+  final List<({int imageIndex, String instructions})> edits;
+
+  /// IMAGE REFINE: the image the creator has in each slot (any version) — what edits start from.
+  final List<({String generationId, int index})> slotSources;
+
   /// Keyframes for a video: image generation id + which of its images.
   final List<({String generationId, int index})> keyframes;
   final String? resolution;
@@ -557,6 +570,8 @@ class AiAction {
     this.sceneIndex,
     this.imageCount,
     this.perScene = false,
+    this.edits = const [],
+    this.slotSources = const [],
     this.keyframes = const [],
     this.resolution,
     this.durationSeconds,
@@ -571,6 +586,8 @@ class AiAction {
     if (sceneIndex != null) 'sceneIndex': sceneIndex,
     if (imageCount != null) 'imageCount': imageCount,
     if (perScene) 'perScene': true,
+    if (edits.isNotEmpty) 'edits': [for (final e in edits) {'imageIndex': e.imageIndex, 'instructions': e.instructions.trim()}],
+    if (slotSources.isNotEmpty) 'slotSources': [for (final s in slotSources) {'generationId': s.generationId, 'index': s.index}],
     if (keyframes.isNotEmpty) 'keyframes': [for (final k in keyframes) {'generationId': k.generationId, 'index': k.index}],
     if (resolution != null || durationSeconds != null)
       'settings': {

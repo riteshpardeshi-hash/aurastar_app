@@ -46,6 +46,12 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
 
   AiQuote? _videoQuote;
   AiQuote? _iterateQuote;
+
+  // The board: the image version shown (and used) in each slot. Starts as this set's own.
+  List<_Slot>? _board;
+  // "Change images": the slots being changed, each with what to change in it.
+  final Map<int, TextEditingController> _changes = {};
+  AiQuote? _imageEditQuote;
   AiQuote? _evalQuote;
   String? _quoteError;
 
@@ -60,6 +66,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     _poll?.cancel();
     _debounce?.cancel();
     _instructions.dispose();
+    for (final c in _changes.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -82,6 +91,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
         _assets = (results[3] as AiCampaign).assets;
         _seconds ??= _scriptGen(ws)?.durationSeconds ?? ws.format.minDurationSeconds;
         // A storyboard starts with every scene's frame picked — the closest match to the script.
+        if (gen.stage == AiStage.image && gen.isDone && _board == null) {
+          _board = [for (var i = 0; i < gen.imageUrls.length; i++) _Slot(gen.id, i, gen.imageUrls[i], gen.versionNumber)];
+        }
         if (!_pickedStoryboard && gen.isDone && gen.sceneIndexes.isNotEmpty) {
           _pickedStoryboard = true;
           _picked.addAll([for (var i = 0; i < gen.imageUrls.length; i++) i]);
@@ -153,7 +165,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
       stage: AiStage.video,
       scriptId: _scriptForVideo,
       durationSeconds: _seconds,
-      keyframes: [for (final i in (_picked.toList()..sort())) (generationId: g.id, index: i)],
+      keyframes: [
+        for (final i in (_picked.toList()..sort())) (generationId: _board?[i].generationId ?? g.id, index: _board?[i].index ?? i),
+      ],
     );
   }
 
@@ -173,12 +187,63 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     );
   }
 
+  /// Every selected image with what to change in it — null until each one says something.
+  AiAction? get _imageEditAction {
+    final g = _gen;
+    final board = _board;
+    if (g == null || board == null || g.stage != AiStage.image || !g.isDone || _changes.isEmpty) return null;
+    if (_changes.values.any((c) => c.text.trim().isEmpty)) return null;
+    final slots = _changes.keys.toList()..sort();
+    final mixed = board.any((b) => b.generationId != g.id);
+    return AiAction(
+      stage: AiStage.image,
+      operation: 'REFINE',
+      parentId: g.id,
+      edits: [for (final i in slots) (imageIndex: i, instructions: _changes[i]!.text)],
+      // Only needed when the creator switched a slot to another version.
+      slotSources: mixed ? [for (final b in board) (generationId: b.generationId, index: b.index)] : const [],
+    );
+  }
+
+  /// Every version of each slot across this set's family (same script, same size), oldest
+  /// first, without repeats — what the per-image version switcher offers.
+  List<List<_Slot>> _versions(AiGeneration g) {
+    final family = (_workspace?.generations ?? const <AiGeneration>[])
+        .where((x) => x.stage == AiStage.image && x.isDone && x.scriptId == g.scriptId && x.imageUrls.length == g.imageUrls.length)
+        .toList()
+      ..sort((a, b) => a.versionNumber.compareTo(b.versionNumber));
+    if (!family.any((x) => x.id == g.id)) family.add(g);
+    return [
+      for (var i = 0; i < g.imageUrls.length; i++)
+        () {
+          final seen = <String>{};
+          return [
+            for (final x in family)
+              if (seen.add(_imagePath(x.imageUrls[i]))) _Slot(x.id, i, x.imageUrls[i], x.versionNumber),
+          ];
+        }(),
+    ];
+  }
+
+  void _toggleChange(int slot) {
+    setState(() {
+      final existing = _changes.remove(slot);
+      if (existing != null) {
+        existing.dispose();
+      } else {
+        _changes[slot] = TextEditingController();
+      }
+    });
+    _requote();
+  }
+
   Future<void> _refreshQuotes() async {
     final g = _gen;
     if (g == null) return;
     try {
       final video = _videoFromImages;
       final iterate = _iterateAction;
+      final imageEdit = _imageEditAction;
       final quotes = await Future.wait([
         if (video != null) _service.quote(widget.campaignId, video) else Future<AiQuote?>.value(null),
         if (iterate != null) _service.quote(widget.campaignId, iterate) else Future<AiQuote?>.value(null),
@@ -186,9 +251,11 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
           _service.quoteEvaluation(widget.campaignId, g.id)
         else
           Future<AiQuote?>.value(null),
+        if (imageEdit != null) _service.quote(widget.campaignId, imageEdit) else Future<AiQuote?>.value(null),
       ]);
       if (!mounted) return;
       setState(() {
+        _imageEditQuote = quotes[3];
         _videoQuote = quotes[0];
         _iterateQuote = quotes[1];
         _evalQuote = quotes[2] ?? _evalQuote;
@@ -250,6 +317,20 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     if (action == null || quote == null) return;
     final gen = await _guard(() => _service.generate(widget.campaignId, action, expectedCredits: quote.credits));
     if (gen != null) await _openNew(gen);
+  }
+
+  /// Redoes the selected images with the creator's changes — a new version of the board.
+  Future<void> _editImage() async {
+    final action = _imageEditAction;
+    final quote = _imageEditQuote;
+    if (action == null || quote == null) return;
+    final gen = await _guard(() => _service.generate(widget.campaignId, action, expectedCredits: quote.credits));
+    if (gen == null || !mounted) return;
+    if (!gen.isDone) {
+      AiUi.toast(context, gen.error ?? "The images couldn't be changed — you weren't charged.");
+      return;
+    }
+    await _openNew(gen);
   }
 
   Future<void> _iterateVideo() async {
@@ -367,14 +448,18 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     final ws = _workspace!;
     final q = _videoQuote;
     final f = ws.format;
+    final board = _board ?? [for (var i = 0; i < g.imageUrls.length; i++) _Slot(g.id, i, g.imageUrls[i], g.versionNumber)];
+    final versions = _versions(g);
+    final scriptSeconds = _scriptGen(ws)?.durationSeconds;
     final options = {
       if (ws.shortClipSeconds > 0 && ws.shortClipSeconds < f.minDurationSeconds) ws.shortClipSeconds,
       f.minDurationSeconds,
       ((f.minDurationSeconds + f.maxDurationSeconds) / 2).round(),
       f.maxDurationSeconds,
-      if (_scriptGen(ws)?.durationSeconds case final scriptSeconds?) scriptSeconds,
     }.toList()..sort();
     final storyboard = g.sceneIndexes.isNotEmpty;
+    final editCount = _changes.length;
+    final eq = _imageEditQuote;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -388,53 +473,85 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
           style: const TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4),
         ),
         const SizedBox(height: 12),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 2,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 9 / 16,
-          children: [
-            for (var i = 0; i < g.imageUrls.length; i++)
-              GestureDetector(
-                key: Key('ai-image-$i'),
-                onTap: () {
-                  setState(() => _picked.contains(i) ? _picked.remove(i) : _picked.add(i));
-                  _requote();
-                },
-                child: Container(
-                  decoration: AiUi.cardDecoration(selected: _picked.contains(i)),
-                  clipBehavior: Clip.antiAlias,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.network(g.imageUrls[i], fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: Colors.white24)),
-                      if (_sceneLabel(g, i) case final label?)
-                        Positioned(
-                          left: 8,
-                          bottom: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(8)),
-                            child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                          ),
-                        ),
-                      if (_picked.contains(i)) const Positioned(top: 8, right: 8, child: Icon(Icons.check_circle, color: AiUi.accent, size: 22)),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const AiSectionTitle('Length'),
-        Wrap(spacing: 8, children: [
-          for (final s in options)
-            ChoiceChip(label: Text('${s}s'), selected: s == _seconds, onSelected: (_) {
-              setState(() => _seconds = s);
-              _requote();
-            }),
+        for (var row = 0; row < board.length; row += 2)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _imageTile(g, board, versions, row)),
+                const SizedBox(width: 10),
+                Expanded(child: row + 1 < board.length ? _imageTile(g, board, versions, row + 1) : const SizedBox.shrink()),
+              ],
+            ),
+          ),
+        AiSectionTitle(editCount > 1 ? 'Change images' : 'Change an image'),
+        const Text('Tap the images to change and say what to change in each — only those are redone.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (var i = 0; i < board.length; i++)
+            FilterChip(
+              key: Key('ai-edit-image-$i'),
+              label: Text('Image ${i + 1}'),
+              selected: _changes.containsKey(i),
+              onSelected: (_) => _toggleChange(i),
+            ),
         ]),
+        for (final i in (_changes.keys.toList()..sort())) ...[
+          const SizedBox(height: 10),
+          TextField(
+            key: Key('ai-image-change-$i'),
+            controller: _changes[i],
+            minLines: 1,
+            maxLines: 3,
+            onChanged: (_) => _requote(),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              prefixIcon: Padding(
+                padding: const EdgeInsets.all(10),
+                child: CircleAvatar(radius: 12, backgroundColor: AiUi.accent, child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800))),
+              ),
+              hintText: 'What should change in image ${i + 1}?',
+              hintStyle: const TextStyle(color: AppColors.textFaint, fontSize: 13),
+              filled: true,
+              fillColor: AiUi.card,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+            ),
+          ),
+        ],
+        if (editCount > 0) ...[
+          const SizedBox(height: 10),
+          AiSecondaryButton(
+            label: editCount == 1 ? 'Update image ${_changes.keys.first + 1}' : 'Update $editCount images',
+            icon: Icons.auto_fix_high_rounded,
+            price: _imageEditAction == null ? null : (eq == null ? '…' : '${eq.credits} credits'),
+            onPressed: _busy || eq == null || !eq.canAfford || _imageEditAction == null ? null : _editImage,
+          ),
+        ],
+        if (scriptSeconds != null) ...[
+          const AiSectionTitle('Length'),
+          Row(
+            key: const Key('ai-fixed-length'),
+            children: [
+              const Icon(Icons.timer_outlined, color: AppColors.textMuted, size: 16),
+              const SizedBox(width: 6),
+              Text('${scriptSeconds}s', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 6),
+              const Text('· set by your script', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            ],
+          ),
+        ] else ...[
+          const AiSectionTitle('Length'),
+          Wrap(spacing: 8, children: [
+            for (final s in options)
+              ChoiceChip(label: Text('${s}s'), selected: s == _seconds, onSelected: (_) {
+                setState(() => _seconds = s);
+                _requote();
+              }),
+          ]),
+        ],
         const SizedBox(height: 20),
         if (_quoteError != null) AiWarningText(_quoteError!),
         if (q != null && !q.canAfford) const AiWarningText('Not enough credits for this video.'),
@@ -443,6 +560,102 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
           busy: _busy,
           onPressed: _picked.isEmpty || q == null || !q.canAfford ? null : _createVideo,
         ),
+      ],
+    );
+  }
+
+  /// One image slot: the chosen version's image (number, scene, picked, "Updated"), and a
+  /// version switcher underneath when the slot has more than one.
+  Widget _imageTile(AiGeneration g, List<_Slot> board, List<List<_Slot>> versions, int i) {
+    final slot = board[i];
+    final updated = slot.generationId == g.id && g.editedImageIndexes.contains(i);
+    final mine = versions[i];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AspectRatio(
+          aspectRatio: 9 / 16,
+          child: GestureDetector(
+            key: Key('ai-image-$i'),
+            onTap: () {
+              setState(() => _picked.contains(i) ? _picked.remove(i) : _picked.add(i));
+              _requote();
+            },
+            child: Container(
+              decoration: AiUi.cardDecoration(selected: _picked.contains(i)),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(slot.url, key: ValueKey(slot.url), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: Colors.white24)),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      key: Key('ai-image-number-$i'),
+                      width: 26,
+                      height: 26,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _changes.containsKey(i) ? AiUi.accent : Colors.black.withValues(alpha: 0.65),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                      ),
+                      child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  if (updated)
+                    Positioned(
+                      top: 10,
+                      left: 40,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AiUi.success.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(6)),
+                        child: const Text('Updated', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                  if (_sceneLabel(g, i) case final label?)
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(8)),
+                        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  if (_picked.contains(i)) const Positioned(top: 8, right: 8, child: Icon(Icons.check_circle, color: AiUi.accent, size: 22)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (mine.length > 1) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final v in mine)
+                GestureDetector(
+                  key: Key('ai-image-$i-version-${v.version}'),
+                  onTap: () {
+                    setState(() => _board = [...board]..[i] = v);
+                    _requote();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _imagePath(v.url) == _imagePath(slot.url) ? AiUi.accent : Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _imagePath(v.url) == _imagePath(slot.url) ? AiUi.accent : Colors.white.withValues(alpha: 0.12)),
+                    ),
+                    child: Text('v${v.version}', style: TextStyle(color: _imagePath(v.url) == _imagePath(slot.url) ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -629,3 +842,16 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     );
   }
 }
+
+/// One image on the board: which set it comes from, its position there, and its version.
+class _Slot {
+  final String generationId;
+  final int index;
+  final String url;
+  final int version;
+
+  const _Slot(this.generationId, this.index, this.url, this.version);
+}
+
+/// The same stored image has a different signed URL on every fetch — compare by path.
+String _imagePath(String url) => Uri.tryParse(url)?.path ?? url;
