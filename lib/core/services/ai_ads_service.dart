@@ -9,6 +9,9 @@
 // Every AI action is quoted first ([quote]) and the creator confirms the price;
 // the backend never charges more than the price it showed ([generate] sends it
 // back as `expectedCredits`). Credits are the brand's, allocated per creator.
+// Prices = what the AI providers charge + the platform's margin, synced by the
+// backend (backend ADR 116). Getting an ad judged is free, up to a number of
+// evaluations per creator.
 import 'api_client.dart';
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
@@ -312,14 +315,10 @@ class AiPrices {
   /// Credits per second (decimal, display only); null = resolution unavailable.
   final Map<String, double?> videoPerSecond;
 
-  /// Credits kept back so the creator can always get their ad judged once.
-  final int reservedForEvaluation;
-
   const AiPrices({
     this.scriptUpTo,
     this.imageEach,
     this.videoPerSecond = const {},
-    this.reservedForEvaluation = 0,
   });
 
   factory AiPrices.fromJson(Map<String, dynamic>? j) {
@@ -329,7 +328,6 @@ class AiPrices {
       scriptUpTo: _intOrNull(p['scriptUpTo']),
       imageEach: _intOrNull(p['imageEach']),
       videoPerSecond: video.map((k, v) => MapEntry(k, v is num ? v.toDouble() : null)),
-      reservedForEvaluation: _int(p['reservedForEvaluation']),
     );
   }
 
@@ -436,6 +434,19 @@ class AiGeneration {
   }} v$versionNumber';
 }
 
+/// Free AI evaluations in this campaign (the platform pays for them).
+class AiFreeEvaluations {
+  final int limit;
+  final int used;
+  final int left;
+
+  const AiFreeEvaluations({this.limit = 0, this.used = 0, this.left = 0});
+
+  factory AiFreeEvaluations.fromJson(dynamic j) => j is Map
+      ? AiFreeEvaluations(limit: _int(j['limit']), used: _int(j['used']), left: _int(j['left']))
+      : const AiFreeEvaluations();
+}
+
 class AiWorkspace {
   final String campaignStatus;
   final DateTime? deadline;
@@ -443,6 +454,7 @@ class AiWorkspace {
   final int creditsLeft;
   final int allocatedCredits;
   final AiPrices prices;
+  final AiFreeEvaluations freeEvaluations;
   final List<AiGeneration> generations;
 
   const AiWorkspace({
@@ -452,6 +464,7 @@ class AiWorkspace {
     required this.allocatedCredits,
     required this.prices,
     required this.generations,
+    this.freeEvaluations = const AiFreeEvaluations(),
     this.deadline,
   });
 
@@ -464,14 +477,12 @@ class AiWorkspace {
       creditsLeft: _int(j['creditsLeft']),
       allocatedCredits: _int(j['allocatedCredits']),
       prices: AiPrices.fromJson(j['prices'] as Map<String, dynamic>?),
+      freeEvaluations: AiFreeEvaluations.fromJson(j['freeEvaluations']),
       generations: _maps(j['generations']).map(AiGeneration.fromJson).toList(),
     );
   }
 
   List<AiGeneration> of(AiStage stage) => generations.where((g) => g.stage == stage).toList();
-
-  /// Credits usable for anything but evaluation.
-  int get spendable => (creditsLeft - prices.reservedForEvaluation).clamp(0, creditsLeft);
 }
 
 /// One AI action to price and run.
@@ -524,16 +535,23 @@ class AiAction {
 class AiQuote {
   final int credits;
   final int creditsLeft;
-  final int reservedForEvaluation;
   final bool canAfford;
   final String note;
+
+  /// Evaluation quotes: free, how many free evaluations are left, and why it
+  /// can't run when [canAfford] is false (used up / already judged).
+  final bool free;
+  final AiFreeEvaluations? freeEvaluations;
+  final String? reason;
 
   const AiQuote({
     required this.credits,
     required this.creditsLeft,
     required this.canAfford,
-    this.reservedForEvaluation = 0,
     this.note = '',
+    this.free = false,
+    this.freeEvaluations,
+    this.reason,
   });
 
   factory AiQuote.fromJson(Map<String, dynamic> j) {
@@ -541,9 +559,11 @@ class AiQuote {
     return AiQuote(
       credits: _int(j['credits']),
       creditsLeft: _int(j['creditsLeft']),
-      reservedForEvaluation: _int(j['reservedForEvaluation']),
       canAfford: j['canAfford'] == true,
       note: '${b['note'] ?? ''}',
+      free: j['free'] == true,
+      freeEvaluations: j['freeEvaluations'] is Map ? AiFreeEvaluations.fromJson(j['freeEvaluations']) : null,
+      reason: j['reason'] as String?,
     );
   }
 }
@@ -816,12 +836,12 @@ class AiAdsService {
     ),
   );
 
-  Future<AiEvaluation> requestEvaluation(String id, String videoGenerationId, {required int expectedCredits}) async =>
-      AiEvaluation.fromJson(Map<String, dynamic>.from(await _call(
-        'POST',
-        '${_campaign(id)}/workspace/generations/$videoGenerationId/evaluate',
-        body: {'expectedCredits': expectedCredits},
-      ) as Map));
+  /// Judging is free (the platform pays) — up to a number per creator.
+  Future<AiEvaluation> requestEvaluation(String id, String videoGenerationId) async => AiEvaluation.fromJson(
+    Map<String, dynamic>.from(
+      await _call('POST', '${_campaign(id)}/workspace/generations/$videoGenerationId/evaluate') as Map,
+    ),
+  );
 
   Future<List<AiEvaluation>> fetchEvaluations(String id) async {
     final data = await _call('GET', '${_campaign(id)}/workspace/evaluations');

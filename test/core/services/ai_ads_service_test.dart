@@ -92,20 +92,20 @@ void main() {
 
   group('workspace', () {
     test('fetchWorkspace parses prices; an unpriced resolution is unavailable', () async {
-      backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1')], creditsLeft: 10, reserve: 3));
+      backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1')], creditsLeft: 10));
 
       final ws = await service.fetchWorkspace(campaignId);
 
       expect(ws.prices.resolutions, ['480p', '720p']);
-      expect(ws.prices.reservedForEvaluation, 3);
-      expect(ws.spendable, 7);
+      expect(ws.freeEvaluations.left, 5);
+      expect(ws.freeEvaluations.limit, 5);
       expect(ws.of(AiStage.script).single.scenes.single.visual, 'Can pops');
       expect(ws.format.maxDurationSeconds, 20);
     });
 
-    test('spendable never goes negative when the reserve exceeds the balance', () {
-      final ws = AiWorkspace.fromJson(workspaceJson(creditsLeft: 2, reserve: 3));
-      expect(ws.spendable, 0);
+    test('a workspace without freeEvaluations (older backend) reads as none', () {
+      final ws = AiWorkspace.fromJson({...workspaceJson(), 'freeEvaluations': null});
+      expect(ws.freeEvaluations.limit, 0);
     });
 
     test('an action serialises only what it sets, with video settings nested', () {
@@ -134,7 +134,7 @@ void main() {
       expect(backend.sent.single.body, {'stage': 'IMAGE', 'operation': 'GENERATE', 'scriptId': 's1', 'imageCount': 3});
       expect(q.credits, 9);
       expect(q.canAfford, isFalse);
-      expect(q.reservedForEvaluation, 3);
+  
       expect(q.note, 'est.');
     });
 
@@ -149,11 +149,11 @@ void main() {
     });
 
     test('402 becomes OutOfAiCreditsException with the backend message', () async {
-      backend.fail('POST $base/workspace/generations', 402, 'Not enough credits — 3 are kept for getting your ad judged');
+      backend.fail('POST $base/workspace/generations', 402, 'This costs 25 credits and you have 10. Ask the brand for more.');
 
       expect(
         () => service.generate(campaignId, const AiAction(stage: AiStage.script), expectedCredits: 2),
-        throwsA(isA<OutOfAiCreditsException>().having((e) => e.message, 'message', contains('kept for getting your ad judged'))),
+        throwsA(isA<OutOfAiCreditsException>().having((e) => e.message, 'message', contains('Ask the brand for more'))),
       );
     });
 
@@ -197,12 +197,12 @@ void main() {
   });
 
   group('evaluation + submission', () {
-    test('requestEvaluation sends expectedCredits and parses the queued job', () async {
+    test('requestEvaluation is free — sends no price — and parses the queued job', () async {
       backend.on('POST $base/workspace/generations/v1/evaluate', evaluationJson(status: 'QUEUED'), status: 202);
 
-      final e = await service.requestEvaluation(campaignId, 'v1', expectedCredits: 3);
+      final e = await service.requestEvaluation(campaignId, 'v1');
 
-      expect(backend.sent.single.body, {'expectedCredits': 3});
+      expect(backend.sent.single.body, isEmpty);
       expect(e.isPending, isTrue);
       expect(e.overallScore, isNull);
     });
@@ -222,10 +222,15 @@ void main() {
     });
 
     test('quoteEvaluation and submitFinal use the generation routes', () async {
-      backend.on('POST $base/workspace/generations/v1/evaluate/quote', quoteJson(3));
+      backend.on('POST $base/workspace/generations/v1/evaluate/quote', evalQuoteJson(left: 0, reason: 'Used up'));
       backend.on('POST $base/workspace/generations/v1/submit', {'_id': 'p1', 'status': 'SUBMITTED', 'finalGenerationId': 'v1', 'finalScore': 72});
 
-      expect((await service.quoteEvaluation(campaignId, 'v1')).credits, 3);
+      final eq = await service.quoteEvaluation(campaignId, 'v1');
+      expect(eq.credits, 0);
+      expect(eq.free, isTrue);
+      expect(eq.canAfford, isFalse);
+      expect(eq.reason, 'Used up');
+      expect(eq.freeEvaluations!.left, 0);
       final p = await service.submitFinal(campaignId, 'v1');
       expect(p.status, 'SUBMITTED');
       expect(p.finalScore, 72);

@@ -235,10 +235,17 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     }
   }
 
+  /// "Free · 4 left" — judging costs no credits (the platform pays), up to a limit.
+  String _evalLabel(AiQuote? q) {
+    if (q == null) return '…';
+    final left = q.freeEvaluations?.left;
+    return left == null ? 'Free' : 'Free · $left left';
+  }
+
   Future<void> _evaluate() async {
     final quote = _evalQuote;
     if (quote == null) return;
-    final e = await _guard(() => _service.requestEvaluation(widget.campaignId, widget.generationId, expectedCredits: quote.credits));
+    final e = await _guard(() => _service.requestEvaluation(widget.campaignId, widget.generationId));
     if (e != null) await _load();
   }
 
@@ -410,9 +417,10 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
           const SizedBox(height: 12),
-          if (_evalQuote != null && !_evalQuote!.canAfford) const AiWarningText('Not enough credits to get it judged.'),
+          if (_evalQuote != null && !_evalQuote!.canAfford)
+            AiWarningText(_evalQuote!.reason ?? "You can't get this video judged right now."),
           AiPrimaryButton(
-            label: '${eval == null ? 'Get AI score' : 'Try again'}${_evalQuote == null ? ' · …' : ' · ${_evalQuote!.credits} credits'}',
+            label: '${eval == null ? 'Get AI score' : 'Try again'} · ${_evalLabel(_evalQuote)}',
             busy: _busy,
             onPressed: _evalQuote == null || !_evalQuote!.canAfford ? null : _evaluate,
           ),

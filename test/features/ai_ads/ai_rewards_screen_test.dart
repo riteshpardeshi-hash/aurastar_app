@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:aura_app/features/ai_ads/screens/ai_rewards_screen.dart';
