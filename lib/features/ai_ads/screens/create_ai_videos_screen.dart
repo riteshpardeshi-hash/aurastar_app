@@ -148,6 +148,15 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     return '$label · ${_quotes[key]!.credits} credits';
   }
 
+  /// Price pill text for a secondary button: "3 credits", "…" while quoting, none on a quote error.
+  String? _priceTag(AiAction? action) {
+    if (action == null) return null;
+    final key = _key(action);
+    if (_quoteErrors.containsKey(key)) return null;
+    final q = _quotes[key];
+    return q == null ? '…' : '${q.credits} credits';
+  }
+
   AiQuote? _quote(AiAction? a) => a == null ? null : _quotes[_key(a)];
 
   /// Runs a paid action at its quoted price, handling every way it can be refused.
@@ -361,7 +370,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
             }),
             const SizedBox(height: 8),
             AiSecondaryButton(
-              label: _priced('Refine with AI', _refineAction),
+              label: 'Refine with AI',
+              price: _priceTag(_refineAction),
               onPressed: _busy || _directionController.text.trim().isEmpty || !(_quote(_refineAction)?.canAfford ?? false) ? null : _refine,
             ),
             const SizedBox(height: 14),
@@ -369,23 +379,17 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         ],
         _textField(_scriptController, scripts.isEmpty ? 'Write your script, or an idea for the AI…' : 'Start a new script…', minLines: 4),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: AiSecondaryButton(
-                label: _priced('Write with AI', _aiScriptAction),
-                onPressed: _busy || !(scriptQuote?.canAfford ?? false) ? null : _writeWithAi,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: AiSecondaryButton(
-                label: 'Use my text (free)',
-                icon: Icons.check_rounded,
-                onPressed: _busy || _scriptController.text.trim().isEmpty ? null : _useOwnScript,
-              ),
-            ),
-          ],
+        AiSecondaryButton(
+          label: 'Write with AI',
+          price: _priceTag(_aiScriptAction),
+          onPressed: _busy || !(scriptQuote?.canAfford ?? false) ? null : _writeWithAi,
+        ),
+        const SizedBox(height: 8),
+        AiSecondaryButton(
+          label: 'Use my text',
+          price: 'Free',
+          icon: Icons.check_rounded,
+          onPressed: _busy || _scriptController.text.trim().isEmpty ? null : _useOwnScript,
         ),
 
         const AiSectionTitle('How do you want to create it?'),
@@ -397,7 +401,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
           Wrap(
             spacing: 8,
             children: [
-              for (final s in _lengthOptions(ws.format))
+              for (final s in _lengthOptions(ws))
                 ChoiceChip(
                   label: Text('${s}s'),
                   selected: s == _seconds,
@@ -408,6 +412,15 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                 ),
             ],
           ),
+          if (_seconds != null && _seconds! < ws.format.minDurationSeconds)
+            Padding(
+              key: const Key('ai-short-take-hint'),
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, so extend it before you submit.',
+                style: const TextStyle(color: AiUi.warning, fontSize: 12, height: 1.4),
+              ),
+            ),
           if (ws.prices.resolutions.length > 1) ...[
             const AiSectionTitle('Quality'),
             Wrap(
@@ -446,9 +459,16 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     );
   }
 
-  List<int> _lengthOptions(AiAdFormat f) {
+  /// The brand's min / middle / max, plus the always-allowed short first take (5s).
+  List<int> _lengthOptions(AiWorkspace ws) {
+    final f = ws.format;
     final mid = ((f.minDurationSeconds + f.maxDurationSeconds) / 2).round();
-    return {f.minDurationSeconds, mid, f.maxDurationSeconds}.toList()..sort();
+    return {
+      if (ws.shortClipSeconds > 0 && ws.shortClipSeconds < f.minDurationSeconds) ws.shortClipSeconds,
+      f.minDurationSeconds,
+      mid,
+      f.maxDurationSeconds,
+    }.toList()..sort();
   }
 
   Widget _textField(TextEditingController c, String hint, {int minLines = 4, ValueChanged<String>? onChanged}) {

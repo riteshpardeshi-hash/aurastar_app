@@ -461,6 +461,9 @@ class AiWorkspace {
   final AiFreeEvaluations freeEvaluations;
   final List<AiGeneration> generations;
 
+  /// A new video may always be this short, even below the brand's minimum (0 = not offered).
+  final int shortClipSeconds;
+
   const AiWorkspace({
     required this.campaignStatus,
     required this.format,
@@ -470,6 +473,7 @@ class AiWorkspace {
     required this.generations,
     this.freeEvaluations = const AiFreeEvaluations(),
     this.deadline,
+    this.shortClipSeconds = 0,
   });
 
   factory AiWorkspace.fromJson(Map<String, dynamic> j) {
@@ -483,6 +487,7 @@ class AiWorkspace {
       prices: AiPrices.fromJson(j['prices'] as Map<String, dynamic>?),
       freeEvaluations: AiFreeEvaluations.fromJson(j['freeEvaluations']),
       generations: _maps(j['generations']).map(AiGeneration.fromJson).toList(),
+      shortClipSeconds: _int(j['shortClipSeconds']),
     );
   }
 

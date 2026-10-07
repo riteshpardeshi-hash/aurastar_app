@@ -29,9 +29,13 @@ users whose profile `role` is `creator`.
    Both show the ownership-terms dialog first and send `acceptTerms: true`.
    A request waits for the brand's approval (`REQUESTED` → `ACTIVE`).
 2. **Script** — *Write with AI* (paid), *Refine with AI* (paid), *Use my text*
-   (free) or *Edit* an existing version (free; creates a new version).
+   (free) or *Edit* an existing version (free; creates a new version). Each
+   script button shows its price in a pill on the right (`⚡ 3 credits` / `Free`,
+   `AiSecondaryButton.price`), and a disabled button greys out but stays readable.
 3. **Create** — *Text to video* (length + quality) or *Images first* (4
-   keyframes → pick → video). Videos run in the background; the detail screen
+   keyframes → pick → video). Length chips are the brand's min / middle / max,
+   plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
+   minimum is longer. Picking it shows a hint to extend the clip before submitting. Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
 4. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
    campaign, shown as "Free · N left"; a background job). The score card shows the

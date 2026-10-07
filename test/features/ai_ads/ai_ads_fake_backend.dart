@@ -157,7 +157,7 @@ Map<String, dynamic> generationJson({
       },
 };
 
-Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = const [], int creditsLeft = 100, int freeLeft = 5}) => {
+Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = const [], int creditsLeft = 100, int freeLeft = 5, int? shortClipSeconds}) => {
   'campaign': {'status': 'LIVE', 'deadline': '2026-12-01T00:00:00.000Z', 'format': {'minDurationSeconds': 10, 'maxDurationSeconds': 20}},
   'creditsLeft': creditsLeft,
   'allocatedCredits': 100,
@@ -167,6 +167,7 @@ Map<String, dynamic> workspaceJson({List<Map<String, dynamic>> generations = con
     'videoPerSecond': {'480p': 1.5, '720p': 2.5, '1080p': null},
   },
   'freeEvaluations': {'limit': 5, 'used': 5 - freeLeft, 'left': freeLeft},
+  if (shortClipSeconds != null) 'shortClipSeconds': shortClipSeconds,
   'generations': generations,
 };
 

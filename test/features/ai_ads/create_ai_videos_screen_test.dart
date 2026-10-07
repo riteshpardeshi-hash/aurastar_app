@@ -31,7 +31,9 @@ void main() {
     quotes();
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    expect(find.text('Write with AI · 2 credits'), findsOneWidget);
+    expect(find.text('Write with AI'), findsOneWidget);
+    expect(find.text('2 credits'), findsOneWidget);
+    expect(find.text('Free'), findsOneWidget);
     expect(find.text('Get a script first — write it, or let the AI write it.'), findsOneWidget);
     expect(find.text('Getting your ad judged by AI is free — 5 of 5 left.'), findsOneWidget);
     final generate = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Generate video'));
@@ -50,7 +52,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).last, 'A can pops. Zing!');
     await settle(tester);
-    await tester.tap(find.text('Use my text (free)'));
+    await tester.tap(find.text('Use my text'));
     await settle(tester);
 
     expect(backend.calls('POST', '$base/workspace/scripts').single.body, {'text': 'A can pops. Zing!'});
@@ -159,5 +161,31 @@ void main() {
 
     expect(find.text('v2'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('ai-selected-script')), matching: find.text('Shorter version')), findsOneWidget);
+  });
+
+  testWidgets('offers a 5s first take below the brand minimum, with a hint to extend it', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(shortClipSeconds: 5));
+    quotes();
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    for (final s in ['5s', '10s', '15s', '20s']) {
+      expect(find.widgetWithText(ChoiceChip, s), findsOneWidget);
+    }
+    expect(find.byKey(const Key('ai-short-take-hint')), findsNothing);
+
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '5s'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '5s'));
+    await settle(tester);
+
+    expect(find.byKey(const Key('ai-short-take-hint')), findsOneWidget);
+  });
+
+  testWidgets('without shortClipSeconds (older backend) only the brand lengths are offered', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson());
+    quotes();
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    expect(find.widgetWithText(ChoiceChip, '5s'), findsNothing);
+    expect(find.widgetWithText(ChoiceChip, '10s'), findsOneWidget);
   });
 }
