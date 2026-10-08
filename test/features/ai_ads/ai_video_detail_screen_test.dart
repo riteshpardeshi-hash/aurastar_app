@@ -157,12 +157,12 @@ void main() {
     expect(find.byKey(const Key('ai-image-0-version-1')), findsNothing);
     expect(find.byKey(const Key('ai-image-1-version-1')), findsOneWidget);
     expect(find.byKey(const Key('ai-image-1-version-2')), findsOneWidget);
-    expect(find.text('Updated'), findsOneWidget);
+    expect(find.text('Edited · v2'), findsOneWidget);
 
     await tester.ensureVisible(find.byKey(const Key('ai-image-1-version-1')));
     await tester.tap(find.byKey(const Key('ai-image-1-version-1')));
     await settle(tester);
-    expect(find.text('Updated'), findsNothing); // slot 2 now shows v1's image
+    expect(find.byKey(const Key('ai-image-1-edited')), findsNothing); // slot 2 now shows its original
 
     await tester.tap(find.byKey(const Key('ai-image-0')));
     await tester.tap(find.byKey(const Key('ai-image-1')));
@@ -175,6 +175,32 @@ void main() {
       {'generationId': 'i2', 'index': 0},
       {'generationId': 'i1', 'index': 1},
     ]);
+  });
+
+  testWidgets('versions are counted per image, so images edited in different sets line up', (tester) async {
+    // Set v1: originals. Set v2: image 2 edited. Set v3: images 1 and 3 edited (image 2 kept from v2).
+    final v1 = generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b.png', 'https://s3/c.png'],
+    });
+    final v2 = generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2, output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b2.png', 'https://s3/c.png'],
+    });
+    final v3 = generationJson(id: 'i3', stage: 'IMAGE', scriptId: 's1', version: 3, output: {
+      'imageUrls': ['https://s3/a3.png', 'https://s3/b2.png', 'https://s3/c3.png'],
+    });
+    backend.on('GET $base/workspace/generations/i3', v3);
+    backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1'), v1, v2, v3]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'i3'));
+
+    for (var i = 0; i < 3; i++) {
+      // Every image: its original (v1) and one edit (v2) — whichever set the edit was made in.
+      expect(find.byKey(Key('ai-image-$i-version-1')), findsOneWidget);
+      expect(find.byKey(Key('ai-image-$i-version-2')), findsOneWidget);
+      expect(find.byKey(Key('ai-image-$i-version-3')), findsNothing);
+      expect(find.descendant(of: find.byKey(Key('ai-image-$i-edited')), matching: find.text('Edited · v2')), findsOneWidget);
+    }
   });
 
   testWidgets('an edit from a switched board sends the version in every slot', (tester) async {
