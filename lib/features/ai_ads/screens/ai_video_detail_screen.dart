@@ -564,12 +564,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     );
   }
 
-  /// One image slot: the chosen version's image (number, scene, picked, "Updated"), and a
-  /// version switcher underneath when the slot has more than one.
+  /// One image slot: the chosen version's image (number, scene, picked, "Edited · v2"), and
+  /// a version switcher underneath when the slot has more than one. Versions are counted
+  /// per image — this image's v1 is its original, v2 its first edit, and so on — so the
+  /// numbers line up across images whatever set each edit happened in.
   Widget _imageTile(AiGeneration g, List<_Slot> board, List<List<_Slot>> versions, int i) {
     final slot = board[i];
-    final updated = slot.generationId == g.id && g.editedImageIndexes.contains(i);
     final mine = versions[i];
+    final current = mine.indexWhere((v) => _imagePath(v.url) == _imagePath(slot.url));
+    final edited = current > 0; // not this image's original
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -604,14 +607,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
                       child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
                     ),
                   ),
-                  if (updated)
+                  if (edited)
                     Positioned(
                       top: 10,
                       left: 40,
                       child: Container(
+                        key: Key('ai-image-$i-edited'),
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(color: AiUi.success.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(6)),
-                        child: const Text('Updated', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800)),
+                        child: Text('Edited · v${current + 1}', style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800)),
                       ),
                     ),
                   if (_sceneLabel(g, i) case final label?)
@@ -636,9 +640,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              for (final v in mine)
+              for (final (k, v) in mine.indexed)
                 GestureDetector(
-                  key: Key('ai-image-$i-version-${v.version}'),
+                  key: Key('ai-image-$i-version-${k + 1}'),
                   onTap: () {
                     setState(() => _board = [...board]..[i] = v);
                     _requote();
@@ -650,7 +654,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: _imagePath(v.url) == _imagePath(slot.url) ? AiUi.accent : Colors.white.withValues(alpha: 0.12)),
                     ),
-                    child: Text('v${v.version}', style: TextStyle(color: _imagePath(v.url) == _imagePath(slot.url) ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+                    child: Text('v${k + 1}', style: TextStyle(color: _imagePath(v.url) == _imagePath(slot.url) ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
                   ),
                 ),
             ],

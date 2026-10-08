@@ -49,8 +49,10 @@ users whose profile `role` is `creator`.
    improvise that scene) → video. Every image carries a **number** (1, 2, 3).
    *Change images*: tap any number of images, say what to change in each, *Update 2
    images · N credits* → only those are redone (billed per image) and a new version
-   opens with them marked *Updated*. Each image with more than one version shows a
-   **version switcher** (v1 · v2 · v3); the video and any further edits use the version
+   opens. Versions are counted **per image**: v1 is that image's original, v2 its
+   first edit, … — so the numbers line up whichever set an edit was made in. Any image
+   that isn't its original carries **Edited · v2**, and each image with more than one
+   version shows a **version switcher** (v1 · v2 · v3); the video and any further edits use the version
    showing in each slot (`slotSources`). The length is fixed by the script here
    ("10s · set by your script").
    When the selected script already has a storyboard, *Images first* shows it
