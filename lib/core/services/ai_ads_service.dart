@@ -394,6 +394,14 @@ class AiGeneration {
 
   /// The video length this version was made for (a script's target, a video's length).
   final int? durationSeconds;
+
+  /// A video's quality ("720p") and whether its on-screen text was on.
+  final String? resolution;
+  final bool onScreenText;
+
+  /// A running video: when it started and how long it should take in total.
+  final DateTime? etaStartedAt;
+  final int? etaSeconds;
   final List<String> imageUrls;
 
   /// Storyboard images: the script scene each image shows (parallel to [imageUrls]).
@@ -425,6 +433,10 @@ class AiGeneration {
     this.scriptHook = '',
     this.scriptCallToAction = '',
     this.durationSeconds,
+    this.resolution,
+    this.onScreenText = true,
+    this.etaStartedAt,
+    this.etaSeconds,
     this.imageUrls = const [],
     this.sceneIndexes = const [],
     this.editedImageIndexes = const [],
@@ -453,6 +465,10 @@ class AiGeneration {
       scriptTitle: '${script?['title'] ?? ''}',
       scriptHook: '${script?['hook'] ?? ''}',
       scriptCallToAction: '${script?['callToAction'] ?? ''}',
+      resolution: j['settings'] is Map ? (j['settings'] as Map)['resolution'] as String? : null,
+      onScreenText: !(j['settings'] is Map && (j['settings'] as Map)['onScreenText'] == false),
+      etaStartedAt: j['eta'] is Map ? _date((j['eta'] as Map)['startedAt']) : null,
+      etaSeconds: j['eta'] is Map && (j['eta'] as Map)['estimatedSeconds'] is num ? ((j['eta'] as Map)['estimatedSeconds'] as num).toInt() : null,
       durationSeconds: j['settings'] is Map && (j['settings'] as Map)['durationSeconds'] is num
           ? ((j['settings'] as Map)['durationSeconds'] as num).toInt()
           : null,
@@ -561,6 +577,9 @@ class AiAction {
   final String? resolution;
   final int? durationSeconds;
 
+  /// VIDEO: show the script's on-screen text (captions / titles). Null = the backend default (on).
+  final bool? onScreenText;
+
   const AiAction({
     required this.stage,
     this.operation = 'GENERATE',
@@ -575,6 +594,7 @@ class AiAction {
     this.keyframes = const [],
     this.resolution,
     this.durationSeconds,
+    this.onScreenText,
   });
 
   Map<String, dynamic> toJson() => {
@@ -589,10 +609,11 @@ class AiAction {
     if (edits.isNotEmpty) 'edits': [for (final e in edits) {'imageIndex': e.imageIndex, 'instructions': e.instructions.trim()}],
     if (slotSources.isNotEmpty) 'slotSources': [for (final s in slotSources) {'generationId': s.generationId, 'index': s.index}],
     if (keyframes.isNotEmpty) 'keyframes': [for (final k in keyframes) {'generationId': k.generationId, 'index': k.index}],
-    if (resolution != null || durationSeconds != null)
+    if (resolution != null || durationSeconds != null || onScreenText != null)
       'settings': {
         if (resolution != null) 'resolution': resolution,
         if (durationSeconds != null) 'durationSeconds': durationSeconds,
+        if (onScreenText != null) 'onScreenText': onScreenText,
       },
   };
 }

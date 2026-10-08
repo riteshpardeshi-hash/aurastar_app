@@ -45,7 +45,7 @@ void main() {
     expect(body['expectedCredits'], 20);
     expect(body['scriptId'], 's1');
     expect(body['keyframes'], [{'generationId': 'i1', 'index': 0}, {'generationId': 'i1', 'index': 1}]);
-    expect(find.text('Generating your video…'), findsOneWidget);
+    expect(find.text('Making your video'), findsOneWidget);
   });
 
   testWidgets('a storyboard labels each frame with its scene and time, and starts with all of them picked', (tester) async {
@@ -233,6 +233,39 @@ void main() {
     ]);
   });
 
+  testWidgets('a generating video shows elapsed vs. the estimate, the current step and what is being made', (tester) async {
+    final script = generationJson(id: 's1', output: {
+      'text': 'flat',
+      'script': {
+        'scenes': [
+          {'durationSeconds': 5, 'visual': 'Rain on a balcony'},
+          {'durationSeconds': 5, 'visual': 'A sip and a smile'},
+        ],
+      },
+    });
+    final running = generationJson(id: 'v1', stage: 'VIDEO', status: 'RUNNING', scriptId: 's1');
+    running['settings'] = {'durationSeconds': 10, 'resolution': '720p', 'onScreenText': false};
+    running['eta'] = {
+      'startedAt': DateTime.now().subtract(const Duration(seconds: 60)).toUtc().toIso8601String(),
+      'estimatedSeconds': 300,
+    };
+    backend.on('GET $base/workspace/generations/v1', running);
+    backend.on('GET $base/workspace', workspaceJson(generations: [script, running]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+
+    expect(find.text('Making your video'), findsOneWidget);
+    expect(find.text('10s · 720p'), findsOneWidget);
+    expect(find.text('About 4 min left'), findsOneWidget);
+    expect(find.textContaining('elapsed'), findsOneWidget);
+    final bar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('ai-video-progress-bar')));
+    expect(bar.value, closeTo(0.2, 0.05));
+    expect(find.text('Generating your scenes'), findsOneWidget);
+    expect(find.text('Rain on a balcony'), findsOneWidget);
+    expect(find.text('On-screen text: off'), findsOneWidget);
+  });
+
   testWidgets('a running video can be cancelled (refunded)', (tester) async {
     var status = 'RUNNING';
     backend.routes['GET $base/workspace/generations/v1'] =
@@ -267,7 +300,7 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await settle(tester);
 
-    expect(find.text('Generating your video…'), findsNothing);
+    expect(find.text('Making your video'), findsNothing);
     expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
   });
 

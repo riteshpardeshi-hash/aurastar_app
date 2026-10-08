@@ -36,6 +36,8 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
   bool _loading = true;
   bool _busy = false;
   Timer? _poll;
+  Timer? _ticker; // redraws the elapsed / remaining time while a video generates
+  bool _onScreenText = true;
   Timer? _debounce;
 
   final Set<int> _picked = {};
@@ -64,6 +66,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _ticker?.cancel();
     _debounce?.cancel();
     _instructions.dispose();
     for (final c in _changes.values) {
@@ -125,6 +128,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     _poll?.cancel();
     final waiting = (_gen?.isRunning ?? false) || (_latestEval?.isPending ?? false);
     if (waiting) _poll = Timer(const Duration(seconds: 5), _load);
+    final generating = _gen?.isRunning ?? false;
+    if (generating && _ticker == null) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!generating) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
   }
 
   // ─── Quotes ───────────────────────────────────────────────────────────────
@@ -165,6 +177,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
       stage: AiStage.video,
       scriptId: _scriptForVideo,
       durationSeconds: _seconds,
+      onScreenText: _onScreenText,
       keyframes: [
         for (final i in (_picked.toList()..sort())) (generationId: _board?[i].generationId ?? g.id, index: _board?[i].index ?? i),
       ],
@@ -423,26 +436,169 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     );
   }
 
+  /// "4:05" / "45s".
+  static String _span(Duration d) {
+    final m = d.inMinutes;
+    final sec = d.inSeconds % 60;
+    return m > 0 ? '$m:${sec.toString().padLeft(2, '0')}' : '${d.inSeconds}s';
+  }
+
+  /// The waiting screen for a generating video: elapsed vs. the backend's estimate as a
+  /// progress bar, what's happening now, and what's being made.
   Widget _progress(AiGeneration g) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 30),
-      child: Column(
-        children: [
-          const CircularProgressIndicator(color: AiUi.accent),
-          const SizedBox(height: 16),
-          const Text('Generating your video…', style: TextStyle(color: Colors.white, fontSize: 14)),
-          const SizedBox(height: 6),
-          const Text(
-            'You can leave this screen. It will be here when you come back.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+    final started = g.etaStartedAt ?? g.createdAt;
+    final total = g.etaSeconds;
+    final elapsed = started == null ? Duration.zero : DateTime.now().difference(started);
+    final fraction = total == null || total == 0 ? null : (elapsed.inSeconds / total).clamp(0.0, 1.0);
+    final overdue = total != null && elapsed.inSeconds > total;
+    final remaining = total == null ? null : Duration(seconds: (total - elapsed.inSeconds).clamp(0, total));
+    // Steps track the estimate: sent → generating → finishing.
+    final step = elapsed.inSeconds < 15 ? 0 : (fraction ?? 0) < 0.85 ? 1 : 2;
+    const steps = ['Sending your script to the video AI', 'Generating your scenes', 'Finishing and checking the video'];
+    final scenes = _scriptGen(_workspace!)?.scenes ?? const <AiScriptScene>[];
+    return Column(
+      key: const Key('ai-video-progress'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AiUi.accent.withValues(alpha: 0.28), AiUi.card],
+            ),
+            border: Border.all(color: AiUi.accent.withValues(alpha: 0.4)),
           ),
-          const SizedBox(height: 16),
-          TextButton(onPressed: _busy ? null : _cancel, child: const Text('Cancel (refunded)', style: TextStyle(color: AiUi.danger))),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.movie_creation_outlined, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Making your video', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
+                  ),
+                  Text(
+                    [if (g.durationSeconds != null) '${g.durationSeconds}s', if (g.resolution != null) g.resolution!].join(' · '),
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  key: const Key('ai-video-progress-bar'),
+                  value: overdue ? null : fraction,
+                  minHeight: 8,
+                  color: AiUi.accent,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text('${_span(elapsed)} elapsed', style: const TextStyle(color: AppColors.textMuted, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  const Spacer(),
+                  Text(
+                    remaining == null
+                        ? 'Usually a few minutes'
+                        : overdue
+                        ? 'Taking a little longer than usual…'
+                        : remaining.inSeconds < 60
+                        ? 'Almost there'
+                        : 'About ${(remaining.inSeconds / 60).ceil()} min left',
+                    key: const Key('ai-video-eta'),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              for (var k = 0; k < steps.length; k++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: k < step
+                            ? const Icon(Icons.check_circle_rounded, color: AiUi.success, size: 18)
+                            : k == step
+                            ? const CircularProgressIndicator(strokeWidth: 2, color: AiUi.accent)
+                            : Icon(Icons.radio_button_unchecked_rounded, color: Colors.white.withValues(alpha: 0.25), size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        steps[k],
+                        style: TextStyle(
+                          color: k <= step ? Colors.white : AppColors.textFaint,
+                          fontSize: 13,
+                          fontWeight: k == step ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (scenes.isNotEmpty) ...[
+          const AiSectionTitle("What's being made"),
+          for (final (k, sc) in scenes.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 11,
+                    backgroundColor: AiUi.accent.withValues(alpha: 0.25),
+                    child: Text('${k + 1}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(sc.visual, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4)),
+                  ),
+                ],
+              ),
+            ),
         ],
-      ),
+        if (!g.onScreenText)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('On-screen text: off', style: TextStyle(color: AppColors.textFaint, fontSize: 12)),
+          ),
+        const SizedBox(height: 14),
+        const Text(
+          "You can leave this screen — the video keeps generating and will be here when you come back.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppColors.textFaint, fontSize: 12, height: 1.4),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton(onPressed: _busy ? null : _cancel, child: const Text('Cancel (refunded)', style: TextStyle(color: AiUi.danger))),
+        ),
+      ],
     );
   }
+
+  Widget _textToggle() => SwitchListTile(
+    key: const Key('ai-onscreen-text'),
+    contentPadding: EdgeInsets.zero,
+    value: _onScreenText,
+    activeThumbColor: AiUi.accent,
+    title: const Text('Show on-screen text', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+    subtitle: const Text("Captions and titles from your script. Turn off for a clean video — the voiceover stays.", style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+    onChanged: (v) {
+      setState(() => _onScreenText = v);
+      _requote();
+    },
+  );
 
   Widget _imagePicker(AiGeneration g) {
     final ws = _workspace!;
@@ -552,7 +708,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
               }),
           ]),
         ],
-        const SizedBox(height: 20),
+        const SizedBox(height: 8),
+        _textToggle(),
+        const SizedBox(height: 12),
         if (_quoteError != null) AiWarningText(_quoteError!),
         if (q != null && !q.canAfford) const AiWarningText('Not enough credits for this video.'),
         AiPrimaryButton(
