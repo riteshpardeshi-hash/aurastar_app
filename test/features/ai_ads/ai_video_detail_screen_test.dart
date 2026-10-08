@@ -75,8 +75,9 @@ void main() {
     expect(find.text('Scene 1 · 0–3s'), findsOneWidget);
     expect(find.text('Scene 2 · 3–7s'), findsOneWidget);
     expect(find.text('Scene 3 · 7–10s'), findsOneWidget);
-    // Length follows the script it was drawn from.
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '10s')).selected, isTrue);
+    // The script set the length — no choice here.
+    expect(find.descendant(of: find.byKey(const Key('ai-fixed-length')), matching: find.text('10s')), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, '10s'), findsNothing);
 
     await tester.ensureVisible(find.text('Create video · 20 credits'));
     await tester.tap(find.text('Create video · 20 credits'));
@@ -89,6 +90,121 @@ void main() {
       {'generationId': 'i1', 'index': 2},
     ]);
     expect(body['settings'], containsPair('durationSeconds', 10));
+  });
+
+  testWidgets('change images: pick several by number, say what to change in each → one priced REFINE', (tester) async {
+    final set = generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b.png', 'https://s3/c.png'],
+    });
+    serve(gen: set);
+    backend.on(
+      'POST $base/workspace/generations',
+      generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2, operation: 'REFINE'),
+      status: 201,
+    );
+    backend.on('GET $base/workspace/generations/i2', generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2));
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'i1'));
+
+    for (var i = 0; i < 3; i++) {
+      expect(find.descendant(of: find.byKey(Key('ai-image-number-$i')), matching: find.text('${i + 1}')), findsOneWidget);
+    }
+    for (final i in [1, 2]) {
+      await tester.ensureVisible(find.byKey(Key('ai-edit-image-$i')));
+      await tester.tap(find.byKey(Key('ai-edit-image-$i')));
+      await settle(tester);
+    }
+    await tester.enterText(find.byKey(const Key('ai-image-change-1')), 'Make the can bigger');
+    await tester.enterText(find.byKey(const Key('ai-image-change-2')), 'Golden hour light');
+    await tester.pump(const Duration(milliseconds: 600));
+    await settle(tester);
+
+    expect(backend.calls('POST', '$base/workspace/quote').last.body, {
+      'stage': 'IMAGE',
+      'operation': 'REFINE',
+      'parentId': 'i1',
+      'edits': [
+        {'imageIndex': 1, 'instructions': 'Make the can bigger'},
+        {'imageIndex': 2, 'instructions': 'Golden hour light'},
+      ],
+    });
+    await tester.ensureVisible(find.text('Update 2 images'));
+    await tester.tap(find.text('Update 2 images'));
+    await settle(tester);
+
+    final body = backend.calls('POST', '$base/workspace/generations').single.body!;
+    expect(body, containsPair('operation', 'REFINE'));
+    expect(body, containsPair('expectedCredits', 9));
+    expect((body['edits'] as List).length, 2);
+  });
+
+  testWidgets('each image can switch between its versions; the video and edits use the ones picked', (tester) async {
+    final v1 = generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {
+      'imageUrls': ['https://s3/a.png?sig=1', 'https://s3/b.png?sig=1'],
+    });
+    final v2 = generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2, output: {
+      'imageUrls': ['https://s3/a.png?sig=2', 'https://s3/b2.png?sig=2'],
+    });
+    v2['settings'] = {'editedImageIndexes': [1]};
+    backend.on('GET $base/workspace/generations/i2', v2);
+    backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1'), v1, v2]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    backend.on('POST $base/workspace/generations', generationJson(id: 'v9', stage: 'VIDEO', status: 'RUNNING'), status: 201);
+    backend.on('GET $base/workspace/generations/v9', generationJson(id: 'v9', stage: 'VIDEO', status: 'RUNNING'));
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'i2'));
+
+    // Slot 1 never changed — one version, no switcher. Slot 2 has v1 and v2.
+    expect(find.byKey(const Key('ai-image-0-version-1')), findsNothing);
+    expect(find.byKey(const Key('ai-image-1-version-1')), findsOneWidget);
+    expect(find.byKey(const Key('ai-image-1-version-2')), findsOneWidget);
+    expect(find.text('Updated'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('ai-image-1-version-1')));
+    await tester.tap(find.byKey(const Key('ai-image-1-version-1')));
+    await settle(tester);
+    expect(find.text('Updated'), findsNothing); // slot 2 now shows v1's image
+
+    await tester.tap(find.byKey(const Key('ai-image-0')));
+    await tester.tap(find.byKey(const Key('ai-image-1')));
+    await settle(tester);
+    await tester.ensureVisible(find.text('Create video · 20 credits'));
+    await tester.tap(find.text('Create video · 20 credits'));
+    await settle(tester);
+
+    expect(backend.calls('POST', '$base/workspace/generations').single.body!['keyframes'], [
+      {'generationId': 'i2', 'index': 0},
+      {'generationId': 'i1', 'index': 1},
+    ]);
+  });
+
+  testWidgets('an edit from a switched board sends the version in every slot', (tester) async {
+    final v1 = generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b.png'],
+    });
+    final v2 = generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2, output: {
+      'imageUrls': ['https://s3/a.png', 'https://s3/b2.png'],
+    });
+    backend.on('GET $base/workspace/generations/i2', v2);
+    backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1'), v1, v2]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'i2'));
+
+    await tester.ensureVisible(find.byKey(const Key('ai-image-1-version-1')));
+    await tester.tap(find.byKey(const Key('ai-image-1-version-1')));
+    await settle(tester);
+    await tester.ensureVisible(find.byKey(const Key('ai-edit-image-0')));
+    await tester.tap(find.byKey(const Key('ai-edit-image-0')));
+    await settle(tester);
+    await tester.enterText(find.byKey(const Key('ai-image-change-0')), 'More rain');
+    await tester.pump(const Duration(milliseconds: 600));
+    await settle(tester);
+
+    final quoted = backend.calls('POST', '$base/workspace/quote').last.body!;
+    expect(quoted['slotSources'], [
+      {'generationId': 'i2', 'index': 0},
+      {'generationId': 'i1', 'index': 1},
+    ]);
   });
 
   testWidgets('a running video can be cancelled (refunded)', (tester) async {

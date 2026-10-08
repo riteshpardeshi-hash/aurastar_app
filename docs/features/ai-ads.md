@@ -43,7 +43,13 @@ users whose profile `role` is `creator`.
 4. **Create** — *Text to video* (length + quality) or *Images first*: a
    **storyboard** (`perScene: true`) — one keyframe per scene of the script, each
    labelled "Scene 2 · 3–7s" and all picked by default (untick one to let the AI
-   improvise that scene) → video. The video pins each frame to its scene's time,
+   improvise that scene) → video. Every image carries a **number** (1, 2, 3).
+   *Change images*: tap any number of images, say what to change in each, *Update 2
+   images · N credits* → only those are redone (billed per image) and a new version
+   opens with them marked *Updated*. Each image with more than one version shows a
+   **version switcher** (v1 · v2 · v3); the video and any further edits use the version
+   showing in each slot (`slotSources`). The length is fixed by the script here
+   ("10s · set by your script"). The video pins each frame to its scene's time,
    and its length defaults to the script's. Length chips are the brand's min / middle / max,
    plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
    minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
