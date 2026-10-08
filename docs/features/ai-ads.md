@@ -28,6 +28,9 @@ users whose profile `role` is `creator`.
 1. **Join** — open campaigns: *Ask to join*; invite-only: *Accept invite*.
    Both show the ownership-terms dialog first and send `acceptTerms: true`.
    A request waits for the brand's approval (`REQUESTED` → `ACTIVE`).
+   **Your images & videos** — once anything exists, the workspace opens with a strip
+   of everything made (image sets with their first image + count, videos, a spinner
+   while generating), newest first; tap to open it, *See all* for the full list.
 2. **Length first** — the *Length* chips sit above the script: the script **and**
    the video are made for it. *Write with AI* / *Refine with AI* send it as
    `settings.durationSeconds`; the backend makes the scene timings add up to it.
@@ -49,7 +52,11 @@ users whose profile `role` is `creator`.
    opens with them marked *Updated*. Each image with more than one version shows a
    **version switcher** (v1 · v2 · v3); the video and any further edits use the version
    showing in each slot (`slotSources`). The length is fixed by the script here
-   ("10s · set by your script"). The video pins each frame to its scene's time,
+   ("10s · set by your script").
+   When the selected script already has a storyboard, *Images first* shows it
+   ("Your storyboard for this script is ready — Images v3, 3 images") with **Open your
+   storyboard** as the main action; *Make a new storyboard · N credits* is secondary,
+   so a creator never pays for a new set by accident. The video pins each frame to its scene's time,
    and its length defaults to the script's. Length chips are the brand's min / middle / max,
    plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
    minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
