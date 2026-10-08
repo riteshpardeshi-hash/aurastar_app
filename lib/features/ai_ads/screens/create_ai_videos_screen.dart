@@ -280,6 +280,87 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     if (mounted) _load();
   }
 
+  Future<void> _openGeneration(AiGeneration gen) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AiVideoDetailScreen(campaignId: widget.campaignId, generationId: gen.id)),
+    );
+    if (mounted) _load();
+  }
+
+  /// Image sets and videos made so far (not failed or cancelled), newest first.
+  List<AiGeneration> _work(AiWorkspace ws) => ws.generations
+      .where((g) => g.stage != AiStage.script && (g.isDone || g.isRunning))
+      .toList()
+    ..sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)));
+
+  /// The newest finished image set drawn from the selected script — its storyboard.
+  AiGeneration? _latestBoard(AiWorkspace ws) {
+    AiGeneration? best;
+    for (final g in ws.generations) {
+      if (g.stage == AiStage.image && g.isDone && g.scriptId == _scriptId && (best == null || g.versionNumber > best.versionNumber)) {
+        best = g;
+      }
+    }
+    return best;
+  }
+
+  Widget _workStrip(List<AiGeneration> work) {
+    return SizedBox(
+      height: 150,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: work.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          final g = work[i];
+          return GestureDetector(
+            key: Key('ai-work-${g.id}'),
+            onTap: () => _openGeneration(g),
+            child: SizedBox(
+              width: 72,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 112,
+                    decoration: AiUi.cardDecoration(),
+                    clipBehavior: Clip.antiAlias,
+                    child: g.stage == AiStage.image && g.imageUrls.isNotEmpty
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(g.imageUrls.first, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image_outlined, color: Colors.white24)),
+                              if (g.imageUrls.length > 1)
+                                Positioned(
+                                  right: 4,
+                                  bottom: 4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(6)),
+                                    child: Text('${g.imageUrls.length}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : Center(
+                            child: g.isRunning
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AiUi.accent))
+                                : const Icon(Icons.play_circle_outline_rounded, color: Colors.white70, size: 28),
+                          ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(g.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _openMyVideos() async {
     await Navigator.push(
       context,
@@ -329,6 +410,17 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
             'Getting your ad judged by AI is free — ${ws.freeEvaluations.left} of ${ws.freeEvaluations.limit} left.',
             style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
           ),
+        if (_work(ws) case final work when work.isNotEmpty) ...[
+          AiSectionTitle(
+            'Your images & videos',
+            trailing: GestureDetector(
+              key: const Key('ai-see-all-work'),
+              onTap: _openMyVideos,
+              child: const Text('See all', style: TextStyle(color: AiUi.accent, fontSize: 13, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          _workStrip(work),
+        ],
         const AiSectionTitle('Brand brief'),
         Container(
           padding: const EdgeInsets.all(16),
@@ -468,11 +560,47 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
           ),
           TextButton(onPressed: _askForCredits, child: const Text('Ask the brand for more credits')),
         ],
-        AiPrimaryButton(
-          label: _priced(_method == AiGenerationMethod.textToVideo ? 'Generate video' : 'Generate images', _createAction),
-          busy: _busy,
-          onPressed: _scriptId == null || !(createQuote?.canAfford ?? false) ? null : _create,
-        ),
+        if (_method == AiGenerationMethod.imagesFirst && _latestBoard(ws) != null) ...[
+          // This script already has a storyboard — open it rather than paying for a new one.
+          Container(
+            key: const Key('ai-existing-storyboard'),
+            padding: const EdgeInsets.all(12),
+            decoration: AiUi.cardDecoration(),
+            child: Row(
+              children: [
+                for (final url in _latestBoard(ws)!.imageUrls.take(4))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(url, width: 34, height: 60, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox(width: 34, height: 60)),
+                    ),
+                  ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Your storyboard for this script is ready — ${_latestBoard(ws)!.label}, ${_latestBoard(ws)!.imageUrls.length} images.',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          AiPrimaryButton(label: 'Open your storyboard', onPressed: _busy ? null : () => _openGeneration(_latestBoard(ws)!)),
+          const SizedBox(height: 8),
+          AiSecondaryButton(
+            label: 'Make a new storyboard',
+            icon: Icons.refresh_rounded,
+            price: _createAction == null ? null : (createQuote == null ? '…' : '${createQuote.credits} credits'),
+            onPressed: _busy || _scriptId == null || !(createQuote?.canAfford ?? false) ? null : _create,
+          ),
+        ] else
+          AiPrimaryButton(
+            label: _priced(_method == AiGenerationMethod.textToVideo ? 'Generate video' : 'Generate images', _createAction),
+            busy: _busy,
+            onPressed: _scriptId == null || !(createQuote?.canAfford ?? false) ? null : _create,
+          ),
       ],
     );
   }

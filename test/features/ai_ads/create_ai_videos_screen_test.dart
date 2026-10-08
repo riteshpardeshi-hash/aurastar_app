@@ -246,4 +246,51 @@ void main() {
     // The new script was written for 20s, so the video length follows it.
     expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '20s')).selected, isTrue);
   });
+
+  testWidgets('shows the images and videos already made, and opens one on tap', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(generations: [
+      generationJson(id: 's1'),
+      generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {'imageUrls': ['https://s3/a.png', 'https://s3/b.png']}),
+      generationJson(id: 'v1', stage: 'VIDEO', scriptId: 's1', status: 'RUNNING'),
+    ]));
+    backend.on('GET $base/workspace/generations/i1', generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1'));
+    backend.on('GET $base/workspace/evaluations', []);
+    quotes();
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    expect(find.text('Your images & videos'), findsOneWidget);
+    expect(find.byKey(const Key('ai-work-i1')), findsOneWidget);
+    expect(find.byKey(const Key('ai-work-v1')), findsOneWidget);
+    expect(find.byKey(const Key('ai-work-s1')), findsNothing); // scripts live in "Your script"
+
+    await tester.tap(find.byKey(const Key('ai-work-i1')));
+    await settle(tester);
+    expect(backend.calls('GET', '$base/workspace/generations/i1'), isNotEmpty);
+  });
+
+  testWidgets('with a storyboard already made for the script, Images first opens it instead of charging again', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(generations: [
+      generationJson(id: 's1'),
+      generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {'imageUrls': ['https://s3/a.png', 'https://s3/b.png', 'https://s3/c.png']}),
+      generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2, output: {'imageUrls': ['https://s3/a2.png', 'https://s3/b.png', 'https://s3/c.png']}),
+    ]));
+    backend.on('GET $base/workspace/generations/i2', generationJson(id: 'i2', stage: 'IMAGE', scriptId: 's1', version: 2));
+    backend.on('GET $base/workspace/evaluations', []);
+    quotes();
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    await tester.ensureVisible(find.text('Images first'));
+    await tester.tap(find.text('Images first'));
+    await settle(tester);
+
+    expect(find.byKey(const Key('ai-existing-storyboard')), findsOneWidget);
+    expect(find.textContaining('Images v2, 3 images'), findsOneWidget);
+    expect(find.text('Make a new storyboard'), findsOneWidget);
+    await tester.ensureVisible(find.text('Open your storyboard'));
+    await tester.tap(find.text('Open your storyboard'));
+    await settle(tester);
+
+    expect(backend.calls('GET', '$base/workspace/generations/i2'), isNotEmpty);
+    expect(backend.calls('POST', '$base/workspace/generations'), isEmpty);
+  });
 }
