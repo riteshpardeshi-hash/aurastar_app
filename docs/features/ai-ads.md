@@ -46,7 +46,7 @@ users whose profile `role` is `creator`.
    improvise that scene) → video. The video pins each frame to its scene's time,
    and its length defaults to the script's. Length chips are the brand's min / middle / max,
    plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
-   minimum is longer. Picking it shows a hint to extend the clip before submitting. Videos run in the background; the detail screen
+   minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
 5. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
    campaign, shown as "Free · N left"; a background job). The score card shows the

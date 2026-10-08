@@ -361,7 +361,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
             key: const Key('ai-short-take-hint'),
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, so extend it before you submit.',
+              'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, you can extend it before you submit.',
               style: const TextStyle(color: AiUi.warning, fontSize: 12, height: 1.4),
             ),
           ),
