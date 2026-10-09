@@ -8,6 +8,8 @@ import '../../../core/services/screen_cache.dart';
 import '../../../core/services/video_prewarm_cache.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
+import '../../../shared/widgets/account_unavailable.dart';
+import '../../../shared/widgets/safety_sheets.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
 import '../../video/widgets/video_player_widget.dart';
@@ -48,9 +50,13 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   // count / follow state converge on that background refresh.
   String get _cacheKey => 'creator.${widget.creatorId}';
 
+  // Own profile: no report / block menu.
+  bool _isMe = true;
+
   // Own-profile views are excluded (the sheet's viewer != profile rule).
   Future<void> _logProfileView() async {
     final me = await ApiClient().userId;
+    if (mounted) setState(() => _isMe = me == widget.creatorId);
     if (me == widget.creatorId) return;
     AnalyticsService().logProfileView(widget.creatorId, widget.source);
   }
@@ -128,8 +134,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: _accent))
             : _creator == null
-                ? const Center(
-                    child: Text('Creator not found', style: TextStyle(color: AppColors.textMuted)))
+                ? AccountUnavailable(
+                    backButton: _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
+                  )
                 : _buildBody(context, _creator!),
       ),
     );
@@ -153,6 +160,23 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             child: Row(
               children: [
                 _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
+                const Spacer(),
+                if (!_isMe)
+                  KeyedSubtree(
+                    key: const Key('profile-safety-menu'),
+                    child: _circleIconButton(
+                      Icons.more_horiz_rounded,
+                      () => showProfileSafetyMenu(
+                        context,
+                        userId: widget.creatorId,
+                        name: displayName,
+                        onBlocked: () {
+                          ScreenCache.invalidate(_cacheKey);
+                          if (mounted) Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

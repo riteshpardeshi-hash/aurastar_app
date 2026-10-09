@@ -10,6 +10,7 @@ import '../../../core/utils/legal_links.dart';
 import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import 'notification_preferences_screen.dart';
+import 'blocked_accounts_screen.dart';
 import '../../auth/screens/phone_auth_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
@@ -85,6 +86,15 @@ class SettingsScreen extends StatelessWidget {
               context,
               MaterialPageRoute(
                   builder: (_) => const NotificationPreferencesScreen()),
+            ),
+          ),
+          _tile(
+            context,
+            icon: Icons.block_rounded,
+            label: 'Blocked accounts',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BlockedAccountsScreen()),
             ),
           ),
           _tile(

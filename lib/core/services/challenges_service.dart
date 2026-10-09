@@ -373,6 +373,9 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'difficulty': c['difficulty'] as String? ?? '',
     'sourceType': c['sourceType'] as String? ?? '',
     'creatorId': _extractRefId(c['creatorId']),
+    // Who posted it and its reference video — for the report / block menu (ADR 117).
+    'creatorName': c['creatorId'] is Map ? ((c['creatorId'] as Map)['displayName'] as String? ?? '') : '',
+    'videoId': _extractRefId(c['videoId']),
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
     'isActive': c['isActive'] as bool? ?? true,

@@ -5,6 +5,10 @@ import '../../../core/services/brands_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
+import '../../../shared/widgets/account_unavailable.dart';
+import '../../../shared/widgets/safety_sheets.dart';
+import '../../../core/services/api_client.dart';
+import '../../../core/services/screen_cache.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../ai_ads/screens/ai_campaigns_screen.dart';
@@ -38,12 +42,21 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
   /// so the entry point is only shown to creators.
   bool _isCreator = false;
 
+  /// Own brand page: no report / block menu.
+  bool _isMe = true;
+
+  Future<void> _loadMe() async {
+    final me = await ApiClient().userId;
+    if (mounted) setState(() => _isMe = me == widget.brandId);
+  }
+
   @override
   void initState() {
     super.initState();
     AnalyticsService().logBrandPageView(widget.brandId, widget.source);
     _load();
     _loadRole();
+    _loadMe();
   }
 
   Future<void> _loadRole() async {
@@ -106,10 +119,10 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             _loading
                 ? const Center(child: CircularProgressIndicator(color: _accent))
                 : _brand == null
-                ? const Center(
-                  child: Text(
-                    'Brand not found',
-                    style: TextStyle(color: AppColors.textMuted),
+                ? AccountUnavailable(
+                  backButton: _circleIconButton(
+                    Icons.arrow_back_ios_new_rounded,
+                    () => Navigator.pop(context),
                   ),
                 )
                 : _buildBody(context, _brand!),
@@ -142,6 +155,25 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                   Icons.ios_share_rounded,
                   () => _share(brand),
                 ),
+                if (!_isMe) ...[
+                  const SizedBox(width: 10),
+                  KeyedSubtree(
+                    key: const Key('profile-safety-menu'),
+                    child: _circleIconButton(
+                      Icons.more_horiz_rounded,
+                      () => showProfileSafetyMenu(
+                        context,
+                        userId: widget.brandId,
+                        name: displayName,
+                        isBrand: true,
+                        onBlocked: () {
+                          ScreenCache.clear();
+                          if (mounted) Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
