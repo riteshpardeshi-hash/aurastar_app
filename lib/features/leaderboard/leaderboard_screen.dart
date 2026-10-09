@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../../core/services/api_client.dart';
@@ -8,6 +10,7 @@ import '../../core/services/screen_cache.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/challenge_leaderboard_row.dart';
+import '../../core/services/safety_service.dart';
 import '../../shared/widgets/safety_sheets.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 
@@ -156,10 +159,15 @@ class _ApiBoardState extends State<_ApiBoard>
       _loadMore();
     }
     _scrollCtrl.addListener(_onScroll);
+    // Blocking / unblocking someone elsewhere reloads the board at once.
+    _safetySub = SafetyService.changes.listen((_) => _refresh());
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -313,6 +321,18 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
       }
     });
     _loadChallenges();
+    // Blocking / unblocking someone elsewhere reloads the selected board at once.
+    _safetySub = SafetyService.changes.listen((_) {
+      if (_challengeId != null) _loadBoard();
+    });
+  }
+
+  StreamSubscription<void>? _safetySub;
+
+  @override
+  void dispose() {
+    _safetySub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadChallenges() async {

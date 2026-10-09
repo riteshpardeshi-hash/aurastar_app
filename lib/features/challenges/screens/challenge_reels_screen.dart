@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/services/challenge_analytics_service.dart';
@@ -7,6 +9,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/aura_score_badge.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import 'challenge_detail.dart';
+import '../../../core/services/safety_service.dart';
 
 /// Full-screen vertical video feed opened from the bottom nav's center
 /// star button — for every role (player, creator, brand, admin alike).
@@ -39,10 +42,15 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
   void initState() {
     super.initState();
     _loadInitial();
+    // Blocking / unblocking someone elsewhere reloads this (kept-alive) screen at once.
+    _safetySub = SafetyService.changes.listen((_) => _loadInitial());
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _pageController.dispose();
     super.dispose();
   }

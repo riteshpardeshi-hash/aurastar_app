@@ -15,6 +15,14 @@ account. Product decisions and the server side are in the backend's ADR 117
 | Leaderboards (global, friends, per-challenge) | Tapping another player opens *Report account* · *Block …* under a "Player profiles are private" note — players have no profile screen, so this is where a player can be reported or blocked. After a block the board reloads without them |
 | Settings → *Blocked accounts* | Everyone you blocked, with *Unblock* |
 
+## Blocked content leaves open screens at once
+
+Apple guideline 1.2 requires that blocking removes the content straight away. `SafetyService.changes` fires after every successful block or unblock. The screens that stay mounted reload on it, so a blocked account disappears from them, and reappears on unblock, with no manual refresh:
+- the shell's Home (`Dashboard`) and Search (`AllGeneralChallengesScreen`) tabs;
+- the leaderboards;
+- open search results;
+- the reels feed.
+
 ## How it works
 
 ```mermaid

@@ -29,6 +29,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../core/utils/error_message.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/screen_skeleton.dart';
+import '../../core/services/safety_service.dart';
 
 int profileAutoRetryDelaySeconds(int attemptNumber) {
   return (8 * (1 << (attemptNumber - 1))).clamp(0, 60);
@@ -109,10 +110,15 @@ class _DashboardState extends State<Dashboard> {
       if (uid != null && _autoRetryTimer == null) _loadProfile(uid);
     });
     PushNotificationService().initialize();
+    // Blocking / unblocking someone elsewhere reloads this (kept-alive) screen at once.
+    _safetySub = SafetyService.changes.listen((_) => _refresh());
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _profilePollTimer?.cancel();
     _autoRetryTimer?.cancel();
     super.dispose();

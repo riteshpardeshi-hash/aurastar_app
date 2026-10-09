@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'api_client.dart';
 
 /// Report and block (backend ADR 117).
@@ -7,6 +9,13 @@ import 'api_client.dart';
 /// ad campaigns. A report goes to the admin Moderation Queue.
 class SafetyService {
   final _client = ApiClient();
+
+  static final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  /// Fires after a successful block or unblock. Screens that stay mounted (the shell's
+  /// tabs, open search results, the reels feed) reload on it, so a blocked account's
+  /// content leaves them at once — and comes back on unblock (Apple guideline 1.2).
+  static Stream<void> get changes => _changes.stream;
 
   /// Reasons the backend accepts, with the label shown to the user.
   static const reasons = <String, String>{
@@ -21,11 +30,13 @@ class SafetyService {
   Future<void> block(String userId) async {
     final res = await _client.post('/users/$userId/block', {}, auth: true);
     _ok(res, "Couldn't block this account");
+    _changes.add(null);
   }
 
   Future<void> unblock(String userId) async {
     final res = await _client.delete('/users/$userId/block', auth: true);
     _ok(res, "Couldn't unblock this account");
+    _changes.add(null);
   }
 
   /// Accounts the signed-in user blocked, newest first.
