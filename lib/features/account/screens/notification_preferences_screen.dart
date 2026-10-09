@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/notifications_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../core/services/app_config_service.dart';
 
 class NotificationPreferencesScreen extends StatefulWidget {
   const NotificationPreferencesScreen({super.key});
@@ -184,6 +185,8 @@ class _NotificationPreferencesScreenState
                     child: Column(
                       children: [
                         for (final meta in _categoryMeta)
+                          // No "Offers & Rewards" choice while coupons are off (ADR 119).
+                          if (meta.$1 != 'offer' || AppConfigService.instance.couponsEnabled.value)
                           SwitchListTile(
                             contentPadding: EdgeInsets.zero,
                             activeThumbColor: _accent,
