@@ -18,6 +18,7 @@ import '../../challenges/screens/post_score_action_screen.dart';
 import '../../account/screens/settings_screen.dart';
 import '../../account/screens/edit_profile_screen.dart';
 import '../../shell/main_shell.dart';
+import '../../../core/services/app_config_service.dart';
 
 class PreviewScreen extends StatefulWidget {
   final String videoPath;
@@ -265,7 +266,9 @@ class _PreviewScreenState extends State<PreviewScreen> {
       // worth pausing the flow for — show them before routing on, wherever
       // the flow goes next. The same coupons also live permanently on
       // RewardsScreen.
-      if (result.coupons.isNotEmpty) {
+      // Skipped when an admin has switched coupons off (ADR 119) — the backend grants
+      // none then, this is just belt and braces for an in-flight switch.
+      if (result.coupons.isNotEmpty && AppConfigService.instance.couponsEnabled.value) {
         await showCouponsSheet(context, result.coupons);
         if (!mounted) return;
       }

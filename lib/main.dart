@@ -12,6 +12,7 @@ import 'core/config/api_config.dart';
 import 'core/globals.dart';
 import 'core/services/analytics_service.dart';
 import 'core/services/api_client.dart';
+import 'core/services/app_config_service.dart';
 import 'core/services/auth_api_service.dart';
 import 'core/services/boot_gate.dart';
 import 'core/services/crash_reporter.dart';
@@ -82,6 +83,7 @@ class _MyAppState extends State<MyApp> {
   // Future.wait of several authed calls) each firing onSessionExpired and
   // triggering a duplicate navigation reset.
   bool _handlingSessionExpiry = false;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void initState() {
@@ -93,6 +95,12 @@ class _MyAppState extends State<MyApp> {
     }, onError: (_) => AnalyticsService().logAppOpen('organic'));
     _sessionExpiredSub =
         ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
+    // Admin feature switches (coupons on/off, backend ADR 119): on launch, and again
+    // whenever the app comes back to the foreground.
+    AppConfigService.instance.init();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => AppConfigService.instance.refresh(),
+    );
   }
 
   // Two things handled here:
@@ -232,6 +240,7 @@ class _MyAppState extends State<MyApp> {
     _sessionExpiredSub?.cancel();
     _notificationTapSub?.cancel();
     _foregroundMsgSub?.cancel();
+    _lifecycle?.dispose();
     super.dispose();
   }
 

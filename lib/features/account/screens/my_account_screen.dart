@@ -28,6 +28,7 @@ import 'settings_screen.dart';
 import 'rewards_screen.dart';
 import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
+import '../../../core/services/app_config_service.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -308,6 +309,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted) setState(() => _isCreator = v);
     });
+    // The rewards list follows the coupons switch (ADR 119): coupons are left out while
+    // it's off, so re-fetch when it flips — otherwise the "N to claim" badge stays stale.
+    AppConfigService.instance.couponsEnabled.addListener(_reloadRewards);
+  }
+
+  @override
+  void dispose() {
+    AppConfigService.instance.couponsEnabled.removeListener(_reloadRewards);
+    super.dispose();
   }
 
   void _cacheBundle() {
@@ -1699,7 +1709,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ],
               _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
               // Streak card disabled for now — see _buildStreakCard.
-              _buildRewardsRow(context),
+              // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
+              ValueListenableBuilder<bool>(
+                valueListenable: AppConfigService.instance.couponsEnabled,
+                builder: (context, on, _) => on ? _buildRewardsRow(context) : const SizedBox.shrink(),
+              ),
               const SizedBox(height: 8),
               _buildReferralCard(context),
               _AchievementCardsSection(
