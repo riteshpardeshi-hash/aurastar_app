@@ -9,6 +9,7 @@ import '../../../core/services/search_service.dart';
 import '../../shared/theme/app_text_styles.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
+import '../../core/services/safety_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -61,10 +62,17 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadRecent();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+    // Blocking someone from a result (e.g. their profile) re-runs the search at once.
+    _safetySub = SafetyService.changes.listen((_) {
+      if (_query.trim().isNotEmpty) _search(_query);
+    });
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();

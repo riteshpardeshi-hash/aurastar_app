@@ -11,14 +11,15 @@ import 'api_client.dart';
 ///
 /// The last value is remembered across launches so a cold start while coupons are off
 /// doesn't flash coupon UI before the first fetch returns. If the fetch fails the last
-/// known value stays (default: on — the backend still refuses coupons when they're off).
+/// known value stays. A fresh install starts with coupons OFF until the server says
+/// they're on, so no coupon UI can appear before the setting is known (App Review 3.1.1).
 class AppConfigService {
   AppConfigService._();
   static final AppConfigService instance = AppConfigService._();
 
   static const _prefsKey = 'app_config.coupons_enabled';
 
-  final ValueNotifier<bool> couponsEnabled = ValueNotifier<bool>(true);
+  final ValueNotifier<bool> couponsEnabled = ValueNotifier<bool>(false);
 
   /// Restores the remembered value, then fetches the current one.
   Future<void> init() async {

@@ -34,6 +34,23 @@ class AnalyticsService {
     }
   }
 
+  /// Analytics only, nothing for ads: deny every ad-related consent signal so Firebase
+  /// never stores ad identifiers or passes data on for ad personalisation (App Store
+  /// 5.1.2(i) — "shares no data with ad networks or data brokers"). The manifest /
+  /// Info.plist set the same defaults before any Dart code runs; this enforces them.
+  Future<void> applyNoAdsConsent() async {
+    try {
+      await _analytics?.setConsent(
+        analyticsStorageConsentGranted: true,
+        adStorageConsentGranted: false,
+        adUserDataConsentGranted: false,
+        adPersonalizationSignalsConsentGranted: false,
+      );
+    } catch (e) {
+      debugPrint('Analytics setConsent failed: $e');
+    }
+  }
+
   Future<void> logEvent(String name, [Map<String, Object>? params]) async {
     final s = sink;
     if (s != null) {
