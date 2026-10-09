@@ -63,7 +63,7 @@ void main() {
             as TapGestureRecognizer;
     privacyRecognizer.onTap!();
     await tester.pumpAndSettle();
-    expect(mockLauncher.launchedUrls.single, endsWith('#privacy'));
+    expect(mockLauncher.launchedUrls.single, endsWith('/legal/privacy.html'));
 
     final termsRecognizer =
         (spans.firstWhere((s) => (s as TextSpan).text == 'Terms of Service') as TextSpan)
@@ -71,7 +71,7 @@ void main() {
             as TapGestureRecognizer;
     termsRecognizer.onTap!();
     await tester.pumpAndSettle();
-    expect(mockLauncher.launchedUrls.last, endsWith('#terms'));
+    expect(mockLauncher.launchedUrls.last, endsWith('/legal/terms.html'));
   });
 }
 
