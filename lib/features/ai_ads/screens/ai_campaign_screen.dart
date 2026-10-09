@@ -7,6 +7,7 @@ import '../widgets/ai_ui.dart';
 import 'ai_brand_assets_row.dart';
 import 'ai_rewards_screen.dart';
 import 'create_ai_videos_screen.dart';
+import '../../../core/services/app_config_service.dart';
 
 /// One campaign: the brief, the brand's assets, and the creator's standing —
 /// join (with the ownership terms), answer an invite, wait for approval, or
@@ -205,11 +206,13 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
       'WINNER' => Column(children: [
           const Text('Your ad won! 🏆', style: TextStyle(color: AiUi.warning, fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
-          AiSecondaryButton(
-            label: 'See my rewards',
-            icon: Icons.card_giftcard_rounded,
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiRewardsScreen())),
-          ),
+          // Prizes follow the coupons switch (ADR 119): no rewards entry while it's off.
+          if (AppConfigService.instance.couponsEnabled.value)
+            AiSecondaryButton(
+              label: 'See my rewards',
+              icon: Icons.card_giftcard_rounded,
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiRewardsScreen())),
+            ),
         ]),
       _ => Text(
           switch (status) {

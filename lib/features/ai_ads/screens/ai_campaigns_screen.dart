@@ -5,6 +5,7 @@ import '../widgets/ai_job_status_badge.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_campaign_screen.dart';
 import 'ai_rewards_screen.dart';
+import '../../../core/services/app_config_service.dart';
 
 /// Live AI ad campaigns a creator can take part in — one brand's (from its
 /// profile) or all of them — plus the campaigns they're already in.
@@ -63,10 +64,16 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
       appBar: AiUi.appBar(
         widget.brandName == null ? 'AI ad campaigns' : '${widget.brandName} · AI ads',
         actions: [
-          IconButton(
-            tooltip: 'My rewards',
-            icon: const Icon(Icons.card_giftcard_rounded),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiRewardsScreen())),
+          // Prizes follow the coupons switch (ADR 119): no rewards entry while it's off.
+          ValueListenableBuilder<bool>(
+            valueListenable: AppConfigService.instance.couponsEnabled,
+            builder: (context, on, _) => on
+                ? IconButton(
+                    tooltip: 'My rewards',
+                    icon: const Icon(Icons.card_giftcard_rounded),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiRewardsScreen())),
+                  )
+                : const SizedBox.shrink(),
           ),
         ],
       ),

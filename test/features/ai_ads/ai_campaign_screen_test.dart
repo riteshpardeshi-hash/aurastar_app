@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:aura_app/core/services/app_config_service.dart';
 import 'package:aura_app/features/ai_ads/screens/ai_campaign_screen.dart';
 
 import 'ai_ads_fake_backend.dart';
@@ -92,6 +93,8 @@ void main() {
   });
 
   testWidgets('a winner is pointed to their rewards', (tester) async {
+    AppConfigService.instance.couponsEnabled.value = true;
+    addTearDown(() => AppConfigService.instance.couponsEnabled.value = false);
     backend.on('GET $base', campaignJson(myStatus: 'WINNER'));
     backend.on('GET /creator/ai-rewards', []);
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
@@ -100,6 +103,15 @@ void main() {
     await settle(tester);
 
     expect(find.text('My rewards'), findsOneWidget);
+  });
+
+  testWidgets('while coupons are switched off a winner is not pointed to any rewards (Apple 3.1.1)', (tester) async {
+    AppConfigService.instance.couponsEnabled.value = false;
+    backend.on('GET $base', campaignJson(myStatus: 'WINNER'));
+    await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+
+    expect(find.text('Your ad won! 🏆'), findsOneWidget);
+    expect(find.text('See my rewards'), findsNothing);
   });
 
   testWidgets('a closed campaign no longer offers the workspace', (tester) async {
