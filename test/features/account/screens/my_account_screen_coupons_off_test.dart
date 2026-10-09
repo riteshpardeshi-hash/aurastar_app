@@ -77,4 +77,24 @@ void main() {
     await tester.pump();
     expect(find.text('Rewards & Vouchers', skipOffstage: false), findsOneWidget);
   });
+
+  testWidgets('switching coupons back on re-fetches the rewards (so the claim badge is current)', (tester) async {
+    var rewardFetches = 0;
+    final inner = ApiClient.httpClient;
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/profile/rewards')) rewardFetches++;
+      return inner.send(request).then(http.Response.fromStream);
+    });
+    AppConfigService.instance.couponsEnabled.value = false;
+    await pumpAccount(tester);
+    final before = rewardFetches;
+
+    AppConfigService.instance.couponsEnabled.value = true;
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pump();
+
+    expect(rewardFetches, before + 1);
+  });
 }

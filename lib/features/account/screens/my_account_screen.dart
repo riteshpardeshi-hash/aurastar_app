@@ -309,6 +309,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted) setState(() => _isCreator = v);
     });
+    // The rewards list follows the coupons switch (ADR 119): coupons are left out while
+    // it's off, so re-fetch when it flips — otherwise the "N to claim" badge stays stale.
+    AppConfigService.instance.couponsEnabled.addListener(_reloadRewards);
+  }
+
+  @override
+  void dispose() {
+    AppConfigService.instance.couponsEnabled.removeListener(_reloadRewards);
+    super.dispose();
   }
 
   void _cacheBundle() {
