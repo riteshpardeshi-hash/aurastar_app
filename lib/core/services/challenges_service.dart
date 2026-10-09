@@ -18,14 +18,16 @@ class ChallengesService {
       if (sourceType != null) 'sourceType': sourceType,
     };
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
-    final res = await _client.get('/challenges?$query');
+    // Sent signed-in (when there is a session) so the backend can leave out blocked accounts
+    // (ADR 117); signed out it's an anonymous read as before.
+    final res = await _client.get('/challenges?$query', auth: true);
     final data = res['data'] as Map<String, dynamic>;
     return (data['challenges'] as List).cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>?> fetchChallenge(String id) async {
     try {
-      final res = await _client.get('/challenges/$id');
+      final res = await _client.get('/challenges/$id', auth: true); // blocked owner → 404 (ADR 117)
       final data = res['data'] as Map<String, dynamic>;
       return data['challenge'] as Map<String, dynamic>;
     } catch (_) {
@@ -53,8 +55,10 @@ class ChallengesService {
     int limit = 20,
   }) async {
     try {
+      // The per-challenge leaderboard: signed in, so blocked players are left out (ADR 117).
       final res = await _client.get(
         '/challenges/$challengeId/submissions?limit=$limit',
+        auth: true,
       );
       final data = res['data'] as Map<String, dynamic>;
       return (data['submissions'] as List).cast<Map<String, dynamic>>();
