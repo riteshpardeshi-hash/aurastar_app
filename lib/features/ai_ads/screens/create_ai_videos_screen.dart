@@ -39,6 +39,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   String? _scriptId;
   AiGenerationMethod _method = AiGenerationMethod.textToVideo;
   int? _seconds;
+  bool _onScreenText = true;
   String? _resolution;
 
   // Quotes per action key; null = loading, absent = not asked yet.
@@ -119,7 +120,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   AiAction? get _createAction {
     if (_scriptId == null) return null;
     return _method == AiGenerationMethod.textToVideo
-        ? AiAction(stage: AiStage.video, scriptId: _scriptId, durationSeconds: _seconds, resolution: _resolution)
+        ? AiAction(stage: AiStage.video, scriptId: _scriptId, durationSeconds: _seconds, resolution: _resolution, onScreenText: _onScreenText)
         : AiAction(stage: AiStage.image, scriptId: _scriptId, perScene: true);
   }
 
@@ -548,6 +549,19 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
               ],
             ),
           ],
+          const SizedBox(height: 8),
+          SwitchListTile(
+            key: const Key('ai-onscreen-text'),
+            contentPadding: EdgeInsets.zero,
+            value: _onScreenText,
+            activeThumbColor: AiUi.accent,
+            title: const Text('Show on-screen text', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+            subtitle: const Text('Captions and titles from your script. Turn off for a clean video — the voiceover stays.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            onChanged: (v) {
+              setState(() => _onScreenText = v);
+              _quoteFor(_createAction);
+            },
+          ),
         ],
         const SizedBox(height: 20),
         if (_scriptId == null)

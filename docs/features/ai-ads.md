@@ -63,6 +63,14 @@ users whose profile `role` is `creator`.
    plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
    minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
+   **Making a video:** *Show on-screen text* (on by default) sits next to Quality and on
+   the storyboard screen — off sends `settings.onScreenText: false` (no captions /
+   subtitles / titles; the voiceover stays). While it generates, the screen shows a
+   progress bar of elapsed time vs. the backend's estimate (`eta`), "About N min left"
+   ("Taking a little longer than usual…" past it), the current step (sending → generating
+   → finishing) and the script's scenes as *What's being made*.
+   **The player** (`AiVideoPlayer`) plays **once** and stops on a Replay button — it never
+   loops; play / pause, a seek bar with the time, mute, controls fade while playing.
 5. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
    campaign, shown as "Free · N left"; a background job). The score card shows the
    0–100 score, per-criterion scores, missing mandatory brand assets, forbidden

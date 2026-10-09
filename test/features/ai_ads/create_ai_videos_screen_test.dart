@@ -75,8 +75,8 @@ void main() {
     expect(body['expectedCredits'], 25);
     expect(body['stage'], 'VIDEO');
     expect(body['scriptId'], 's1');
-    expect(body['settings'], {'resolution': '720p', 'durationSeconds': 10});
-    expect(find.text('Generating your video…'), findsOneWidget);
+    expect(body['settings'], {'resolution': '720p', 'durationSeconds': 10, 'onScreenText': true});
+    expect(find.text('Making your video'), findsOneWidget);
   });
 
   testWidgets('choosing length and images-first changes what is quoted', (tester) async {
@@ -87,7 +87,7 @@ void main() {
     await tester.tap(find.text('20s'));
     await settle(tester);
     final lastVideoQuote = backend.calls('POST', '$base/workspace/quote').lastWhere((r) => r.body!['stage'] == 'VIDEO');
-    expect(lastVideoQuote.body!['settings'], {'resolution': '720p', 'durationSeconds': 20});
+    expect(lastVideoQuote.body!['settings'], {'resolution': '720p', 'durationSeconds': 20, 'onScreenText': true});
 
     await tester.tap(find.text('Images first'));
     await settle(tester);
@@ -292,5 +292,18 @@ void main() {
 
     expect(backend.calls('GET', '$base/workspace/generations/i2'), isNotEmpty);
     expect(backend.calls('POST', '$base/workspace/generations'), isEmpty);
+  });
+
+  testWidgets('on-screen text can be turned off for the video — it is sent with the request', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1')]));
+    quotes();
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    await tester.ensureVisible(find.byKey(const Key('ai-onscreen-text')));
+    await tester.tap(find.byKey(const Key('ai-onscreen-text')));
+    await settle(tester);
+
+    final quoted = backend.calls('POST', '$base/workspace/quote').where((c) => c.body!['stage'] == 'VIDEO').last.body!;
+    expect((quoted['settings'] as Map)['onScreenText'], false);
   });
 }
