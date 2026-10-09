@@ -3,6 +3,7 @@ import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/challenge_leaderboard_row.dart';
+import '../../../shared/widgets/safety_sheets.dart';
 
 // Pushed from ChallengeDetail's "See Leaderboard" button — only reachable
 // once the viewer has taken this specific challenge (see _mySubmission gate
@@ -128,8 +129,14 @@ class _ChallengeLeaderboardScreenState
                         score: e['score'] as int,
                         stars: e['stars'] as int,
                         isCurrentUser: isMe,
-                        onTap:
-                            isMe ? null : () => showPrivateProfileNotice(context),
+                        onTap: isMe
+                            ? null
+                            : () => showPlayerSafetyMenu(
+                                  context,
+                                  userId: e['id'] as String,
+                                  name: username,
+                                  onBlocked: _load,
+                                ),
                       );
                     },
                   ),

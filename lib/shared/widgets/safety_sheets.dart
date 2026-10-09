@@ -20,9 +20,10 @@ Future<void> showProfileSafetyMenu(
   bool isBrand = false,
   SafetyService? service,
   VoidCallback? onBlocked,
+  String? header,
 }) {
   final svc = service ?? SafetyService();
-  return showSafetyMenu(context, [
+  return showSafetyMenu(context, header: header, [
     SafetyMenuItem(
       key: const Key('safety-report-account'),
       icon: Icons.flag_outlined,
@@ -51,6 +52,23 @@ Future<void> showProfileSafetyMenu(
     ),
   ]);
 }
+
+/// Tapping another player on a leaderboard. Player profiles are private, so there's no
+/// profile screen to put a "⋯" on — this sheet is where a player can be reported or blocked.
+Future<void> showPlayerSafetyMenu(
+  BuildContext context, {
+  required String userId,
+  required String name,
+  SafetyService? service,
+  VoidCallback? onBlocked,
+}) => showProfileSafetyMenu(
+  context,
+  userId: userId,
+  name: name,
+  service: service,
+  onBlocked: onBlocked,
+  header: 'Player profiles are private — keep playing to climb the board!',
+);
 
 /// "⋯" on a video: report the video, or block whoever posted it.
 Future<void> showVideoSafetyMenu(
@@ -316,8 +334,8 @@ class SafetyMenuItem {
   });
 }
 
-/// A bottom-sheet menu of report / block actions.
-Future<void> showSafetyMenu(BuildContext context, List<SafetyMenuItem> items) {
+/// A bottom-sheet menu of report / block actions, optionally under a short [header] note.
+Future<void> showSafetyMenu(BuildContext context, List<SafetyMenuItem> items, {String? header}) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -331,6 +349,17 @@ Future<void> showSafetyMenu(BuildContext context, List<SafetyMenuItem> items) {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (header != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.lock_outline_rounded, color: Colors.white54, size: 16),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(header, style: const TextStyle(color: AppColors.textMuted, fontSize: 13))),
+                      ],
+                    ),
+                  ),
                 for (final item in items)
                   ListTile(
                     key: item.key,

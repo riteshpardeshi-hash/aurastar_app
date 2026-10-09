@@ -11,6 +11,7 @@ account. Product decisions and the server side are in the backend's ADR 117
 | Creator profile | `⋯` (top right, hidden on your own profile) → *Report account* · *Block …* |
 | Brand profile | `⋯` next to share → *Report brand* · *Block …* |
 | Challenge screen | The flag button opens a menu: *Report challenge* (existing), *Report video* (the challenge's video), *Block …* (whoever posted it; not for platform challenges or your own) |
+| Leaderboards (global, friends, per-challenge) | Tapping another player opens *Report account* · *Block …* under a "Player profiles are private" note — players have no profile screen, so this is where a player can be reported or blocked. After a block the board reloads without them |
 | Settings → *Blocked accounts* | Everyone you blocked, with *Unblock* |
 
 ## How it works
@@ -39,7 +40,7 @@ flowchart TD
 ## Files
 
 - `lib/core/services/safety_service.dart`: block, unblock, list blocked, report user or video.
-- `lib/shared/widgets/safety_sheets.dart`: the menus, the report sheet, the block confirmation.
+- `lib/shared/widgets/safety_sheets.dart`: the menus (incl. `showPlayerSafetyMenu` for leaderboard rows), the report sheet, the block confirmation.
 - `lib/shared/widgets/account_unavailable.dart`: the unavailable-profile view.
 - `lib/features/account/screens/blocked_accounts_screen.dart`: Settings → Blocked accounts.
 

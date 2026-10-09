@@ -8,6 +8,7 @@ import '../../core/services/screen_cache.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/challenge_leaderboard_row.dart';
+import '../../shared/widgets/safety_sheets.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 
 class LeaderboardScreen extends StatefulWidget {
@@ -256,6 +257,7 @@ class _ApiBoardState extends State<_ApiBoard>
         showCurrentUserFooter: !userInList && _myId != null,
         scrollController: _scrollCtrl,
         loadingMore: _loading,
+        onBlocked: _refresh,
       ),
     );
   }
@@ -464,7 +466,12 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                           isCurrentUser: isMe,
                           onTap: isMe
                               ? null
-                              : () => showPrivateProfileNotice(context),
+                              : () => showPlayerSafetyMenu(
+                                    context,
+                                    userId: e['id'] as String,
+                                    name: username,
+                                    onBlocked: _loadBoard,
+                                  ),
                         );
                       },
                     ),
@@ -528,6 +535,8 @@ class _EntryList extends StatelessWidget {
   final bool showCurrentUserFooter;
   final ScrollController? scrollController;
   final bool loadingMore;
+  /// Reloads the board after the viewer blocks someone on it.
+  final VoidCallback? onBlocked;
 
   const _EntryList({
     required this.entries,
@@ -536,6 +545,7 @@ class _EntryList extends StatelessWidget {
     this.showCurrentUserFooter = false,
     this.scrollController,
     this.loadingMore = false,
+    this.onBlocked,
   });
 
   @override
@@ -562,7 +572,12 @@ class _EntryList extends StatelessWidget {
             onTap:
                 e['id'] == currentId
                     ? null
-                    : () => showPrivateProfileNotice(context),
+                    : () => showPlayerSafetyMenu(
+                          context,
+                          userId: e['id'] as String,
+                          name: (e['username'] as String).isNotEmpty ? e['username'] as String : e['name'] as String,
+                          onBlocked: onBlocked,
+                        ),
           );
         }
 
