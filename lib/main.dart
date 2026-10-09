@@ -52,6 +52,7 @@ void main() async {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .timeout(const Duration(seconds: 10));
     await CrashReporter.init();
+    await AnalyticsService().applyNoAdsConsent();
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }

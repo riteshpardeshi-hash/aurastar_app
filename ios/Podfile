@@ -2,6 +2,10 @@ platform :ios, '13.0'
 
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# Firebase Analytics without the IDFA (no AdSupport framework): the app has no ads and
+# shares nothing with ad networks (App Store 5.1.2(i)).
+$FirebaseAnalyticsWithoutAdIdSupport = true
+
 project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,
