@@ -295,6 +295,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                 builder: (_) => _VideoViewerScreen(
                   videoUrl: v['videoUrl'] as String,
                   aiScore: v['aiScore'] as int?,
+                  // Report the video / block its creator (ADR 117) — not on your own videos.
+                  videoId: _isMe ? null : v['id'] as String?,
+                  ownerId: widget.creatorId,
+                  ownerName: (_creator?['displayName'] as String?) ?? 'this creator',
+                  onBlocked: () {
+                    ScreenCache.invalidate(_cacheKey);
+                    if (mounted) Navigator.pop(context); // the profile is gone for them now
+                  },
                 ),
               ),
             ),
@@ -535,8 +543,20 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
 class _VideoViewerScreen extends StatelessWidget {
   final String videoUrl;
   final int? aiScore;
+  /// Set for someone else's video: shows a flag button to report it or block [ownerId].
+  final String? videoId;
+  final String? ownerId;
+  final String? ownerName;
+  final VoidCallback? onBlocked;
 
-  const _VideoViewerScreen({required this.videoUrl, this.aiScore});
+  const _VideoViewerScreen({
+    required this.videoUrl,
+    this.aiScore,
+    this.videoId,
+    this.ownerId,
+    this.ownerName,
+    this.onBlocked,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -547,6 +567,22 @@ class _VideoViewerScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          if (videoId != null && videoId!.isNotEmpty)
+            IconButton(
+              key: const Key('video-safety-menu'),
+              tooltip: 'Report or block',
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () => showVideoSafetyMenu(
+                context,
+                videoId: videoId!,
+                ownerId: ownerId,
+                ownerName: ownerName,
+                onBlocked: () {
+                  Navigator.pop(context); // close the viewer…
+                  onBlocked?.call(); // …and let the profile close itself
+                },
+              ),
+            ),
           if (aiScore != null)
             Padding(
               padding: const EdgeInsets.only(right: 16),
