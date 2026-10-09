@@ -9,6 +9,7 @@ account. Product decisions and the server side are in the backend's ADR 117
 | Place | What's there |
 | --- | --- |
 | Creator profile | `⋯` (top right, hidden on your own profile) → *Report account* · *Block …* |
+| Creator's video (profile → video viewer) | Flag button → *Report video* · *Block …* (not on your own videos); blocking closes the viewer and the profile |
 | Brand profile | `⋯` next to share → *Report brand* · *Block …* |
 | Challenge screen | The flag button opens a menu: *Report challenge* (existing), *Report video* (the challenge's video), *Block …* (whoever posted it; not for platform challenges or your own) |
 | Leaderboards (global, friends, per-challenge) | Tapping another player opens *Report account* · *Block …* under a "Player profiles are private" note — players have no profile screen, so this is where a player can be reported or blocked. After a block the board reloads without them |
