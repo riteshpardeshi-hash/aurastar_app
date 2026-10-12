@@ -17,7 +17,7 @@ An admin can turn the whole coupons feature off and back on with the backend App
 | Profile → **Rewards & Vouchers** row (entry point to `RewardsScreen`) | Hidden; reappears when switched on (`ValueListenableBuilder`). |
 | "You won a coupon!" sheet after a submission (`preview_screen.dart`) | Not shown. The backend grants none anyway. |
 | Level-up sheet "Unlocked: …" perk line | Hidden. |
-| Notification preferences → "Offers & Rewards" | Hidden. |
+| Notification preferences → "Offers & Rewards" | Hidden. The push subtitle never mentions offers ("scores, streaks, challenges and more"). |
 | AI ad campaigns → "My rewards" / a winner's "See my rewards" (prize codes) | Hidden; the backend also lists no prizes while off (added for Apple 3.1.1). |
 | In-app admin → Offers tab (staff only) | Hidden. |
 

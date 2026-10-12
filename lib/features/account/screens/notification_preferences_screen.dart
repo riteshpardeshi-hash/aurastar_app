@@ -170,7 +170,7 @@ class _NotificationPreferencesScreenState
                     title: const Text('Push Notifications',
                         style: TextStyle(color: Colors.white, fontSize: 15)),
                     subtitle: const Text(
-                      'Get notified about scores, streaks, offers and more',
+                      'Get notified about scores, streaks, challenges and more',
                       style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                     ),
                     value: _pushEnabled,
