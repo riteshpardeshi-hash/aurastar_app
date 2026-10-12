@@ -179,7 +179,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Brand',
           title: m['displayName'] as String? ?? '',
-          subtitle: '@${m['username'] ?? ''}',
+          subtitle: _SearchItem.handle(m['username']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'brand',
         ));
@@ -190,7 +190,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Creator',
           title: m['displayName'] as String? ?? '',
-          subtitle: '@${m['username'] ?? ''}',
+          subtitle: _SearchItem.handle(m['username']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'creator',
         ));
@@ -223,7 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
             id: m['_id'] as String? ?? '',
             type: type == 'brands' ? 'Brand' : 'Creator',
             title: m['displayName'] as String? ?? '',
-            subtitle: '@${m['username'] ?? ''}',
+            subtitle: _SearchItem.handle(m['username']),
             imageUrl: m['avatar'] as String? ?? '',
             entityType: type == 'brands' ? 'brand' : 'creator',
           ));
@@ -510,6 +510,13 @@ class _SearchItem {
     required this.entityType,
   });
 
+  /// "@handle", or '' when the account has no username (brands often don't), so the row
+  /// shows just "Brand" instead of a dangling "Brand · @".
+  static String handle(Object? username) {
+    final u = username is String ? username.trim() : '';
+    return u.isEmpty ? '' : '@$u';
+  }
+
   static _SearchItem fromApiItem(Map<String, dynamic> item) {
     final type = item['type'] as String? ?? '';
     final entity = item['entity'] as Map<String, dynamic>? ?? {};
@@ -529,7 +536,7 @@ class _SearchItem {
           id: entity['_id'] as String? ?? '',
           type: type == 'brand' ? 'Brand' : 'Creator',
           title: entity['displayName'] as String? ?? '',
-          subtitle: '@${entity['username'] ?? ''}',
+          subtitle: _SearchItem.handle(entity['username']),
           imageUrl: entity['avatar'] as String? ?? '',
           entityType: type,
         );

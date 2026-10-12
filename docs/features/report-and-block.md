@@ -59,3 +59,13 @@ flowchart TD
   like that whole legacy screen. Moving it to `POST /videos/:id/report` belongs with that
   screen's migration to the REST API.
 - The dead `_SubmissionReportSheet` (also Firestore, never shown) was removed.
+
+## After blocking: Home and Search stay tidy
+
+- **Home:** Brand Videos, Trending videos and More Challenges all list the same challenge feed.
+  When it loads empty (for example, after blocking every creator and brand that had
+  challenges), those sections disappear instead of leaving headings with nothing under them
+  (`Dashboard._hideWhenNoChallenges`). While the feed is loading they stay, so the layout
+  doesn't jump.
+- **Search:** a brand without a username shows just "Brand", not "Brand · @"
+  (`_SearchItem.handle`). The same applies in Blocked accounts.
