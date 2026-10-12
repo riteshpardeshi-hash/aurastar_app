@@ -445,14 +445,14 @@ class _DashboardState extends State<Dashboard> {
                   SliverToBoxAdapter(
                     child: _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
                   ),
-                  SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
+                  SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildBrandVideosSection(context))),
                   SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                   SliverToBoxAdapter(child: _buildBannersSection(context)),
-                  SliverToBoxAdapter(child: _buildTrendingSection(context)),
+                  SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildTrendingSection(context))),
                   if (isAdmin)
                     SliverToBoxAdapter(child: _buildAdminButton(context)),
                   SliverToBoxAdapter(
-                    child: _buildEndlessChallengesHeader(context),
+                    child: _hideWhenNoChallenges(_buildEndlessChallengesHeader(context)),
                   ),
                   _buildEndlessChallengesGrid(context),
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -744,6 +744,21 @@ class _DashboardState extends State<Dashboard> {
   }
 
   // ── Brand Videos ──────────────────────────────────────────────────────────
+  // Brand Videos, Trending and More Challenges all list _challengesFuture. Once it has
+  // loaded empty (e.g. after blocking the only creators/brands with challenges) drop the
+  // whole section instead of leaving a heading with nothing under it. While loading the
+  // section stays, so the layout doesn't jump.
+  Widget _hideWhenNoChallenges(Widget section) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _challengesFuture,
+      builder: (context, snap) {
+        final loadedEmpty =
+            snap.connectionState == ConnectionState.done && (snap.data ?? []).isEmpty;
+        return loadedEmpty ? const SizedBox.shrink() : section;
+      },
+    );
+  }
+
   Widget _buildBrandVideosSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
