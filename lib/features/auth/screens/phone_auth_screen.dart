@@ -64,7 +64,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      await _authService.requestOtp(phone: phone, countryCode: '+91');
+      final sent = await _authService.requestOtp(phone: phone, countryCode: '+91');
       if (!mounted) return;
       setState(() {
         _otpSent   = true;
@@ -75,7 +75,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       });
       _startResendCooldown();
       _listenForSmsCode();
-      _snack('OTP sent successfully');
+      // A resend inside Message Central's own timer sends no new SMS — say so,
+      // instead of claiming a fresh code is on its way (backend ADR 121).
+      _snack(sent.resent ? 'OTP sent successfully' : sent.message);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);

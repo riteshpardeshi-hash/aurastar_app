@@ -33,6 +33,41 @@ void main() {
       expect(res.expiresAt, DateTime.utc(2026, 8, 30, 10, 3));
     });
 
+    // Backend ADR 121: Message Central sends no new SMS while a code is live.
+    test('reads resent:false and the backend message for a reused code', () async {
+      ApiClient.httpClient = MockClient((_) async => http.Response(
+            jsonEncode({
+              'status': 'success',
+              'data': {
+                'message':
+                    'We already sent a code to this number. Please enter that code.',
+                'validitySeconds': 212,
+                'resent': false,
+              },
+            }),
+            200,
+          ));
+
+      final res = await AuthApiService()
+          .requestOtp(phone: '9876543210', countryCode: '+91');
+
+      expect(res.resent, isFalse);
+      expect(res.message, contains('already sent a code'));
+      expect(res.validitySeconds, 212);
+    });
+
+    test('treats a response without resent as a fresh SMS', () async {
+      ApiClient.httpClient = MockClient((_) async => http.Response(
+            jsonEncode({'status': 'success', 'data': {'validitySeconds': 180}}),
+            200,
+          ));
+
+      final res = await AuthApiService()
+          .requestOtp(phone: '9876543210', countryCode: '+91');
+
+      expect(res.resent, isTrue);
+    });
+
     test('defaults validitySeconds to 180 when the field is absent', () async {
       ApiClient.httpClient = MockClient((_) async => http.Response(
             jsonEncode({'status': 'success', 'data': {}}),

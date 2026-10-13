@@ -24,6 +24,15 @@ typedef OtpRequest = ({
 
   /// When the code stops being accepted, if the backend supplied it.
   DateTime? expiresAt,
+
+  /// False when no new SMS went out because the code sent a moment ago is
+  /// still live — Message Central refuses a second code until its own timer
+  /// runs out (backend ADR 121). The user should enter the code they have.
+  bool resent,
+
+  /// The backend's user-facing message ("OTP sent successfully." /
+  /// "We already sent a code to this number. Please enter that code.").
+  String message,
 });
 
 class AuthApiService {
@@ -51,6 +60,9 @@ class AuthApiService {
     return (
       validitySeconds: (data['validitySeconds'] as num?)?.toInt() ?? 180,
       expiresAt: expiresRaw == null ? null : DateTime.tryParse(expiresRaw),
+      // Older backends omit `resent`; every send there was a fresh SMS.
+      resent: data['resent'] as bool? ?? true,
+      message: data['message'] as String? ?? 'OTP sent successfully',
     );
   }
 

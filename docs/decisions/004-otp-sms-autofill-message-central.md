@@ -123,6 +123,20 @@ with no code change.
 - `expiresAt` is parsed but not yet surfaced in the UI; a visible "code
   expires in N:NN" is possible follow-up.
 
+## Amendment (2026-10-13) — "already sent" resends
+
+Message Central refuses a second code for a number while one is live, and its
+timer on our account (300 s) outlasts the 60 s resend countdown. Backend
+ADR 121 turns that case into a success with `resent: false` and the message
+"We already sent a code to this number. Please enter that code." (it used to
+be a 500 "Failed to send the verification code").
+
+- `requestOtp()` now also returns `bool resent` (default `true` when the field
+  is absent, i.e. an older backend) and the backend's `String message`.
+- `PhoneAuthScreen` shows that message instead of "OTP sent successfully" when
+  `resent` is false, so the user enters the code they already have rather
+  than waiting for an SMS that won't come.
+
 ## Verification
 
 `flutter test test/features/auth/` — all green. New coverage:
