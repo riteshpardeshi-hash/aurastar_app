@@ -136,6 +136,42 @@ void main() {
     expect(find.textContaining('Please wait 58 seconds'), findsOneWidget);
   });
 
+  // Backend ADR 121: inside Message Central's own timer no new SMS goes out;
+  // the screen must say so rather than claim a fresh code was sent.
+  testWidgets('a reused code says so instead of "OTP sent successfully"',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/auth/otp/request')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'message':
+                  'We already sent a code to this number. Please enter that code.',
+              'validitySeconds': 200,
+              'resent': false,
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
+    ));
+    await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.text('Get OTP'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('We already sent a code'), findsOneWidget);
+    expect(find.text('OTP sent successfully'), findsNothing);
+    // Still moves on to code entry — the earlier code is valid.
+    expect(find.textContaining('Resend OTP in'), findsOneWidget);
+  });
+
   testWidgets('resend is gated by a 60s countdown, then requests a new OTP',
       (tester) async {
     var requests = 0;
