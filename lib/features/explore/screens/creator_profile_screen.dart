@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../core/services/analytics_service.dart';
@@ -469,10 +471,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             child: FollowButton(
               targetUserId: widget.creatorId,
               initialIsFollowing: isFollowing,
-              // Follower count + isFollowing in the cached page are now stale —
-              // drop it so the next visit re-fetches instead of showing the
-              // pre-toggle numbers.
-              onChanged: (_) => ScreenCache.invalidate(_cacheKey),
+              // Server confirmed the toggle: move the on-screen count with it
+              // (it used to stay put until the page was reopened), and drop the
+              // cached page so the next visit re-fetches the real numbers.
+              onChanged: (nowFollowing) {
+                setState(() => _followerCount =
+                    math.max(0, _followerCount + (nowFollowing ? 1 : -1)));
+                ScreenCache.invalidate(_cacheKey);
+              },
             ),
           ),
         ],
