@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/services/analytics_service.dart';
@@ -364,6 +366,9 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
             light: true,
             followFn: _service.followBrand,
             unfollowFn: _service.unfollowBrand,
+            // Server confirmed the toggle — keep the Followers stat in step.
+            onChanged: (nowFollowing) => setState(() => _followerCount =
+                math.max(0, _followerCount + (nowFollowing ? 1 : -1))),
           ),
           if (_isCreator) ...[
           const SizedBox(height: 10),
