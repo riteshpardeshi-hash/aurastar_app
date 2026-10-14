@@ -11,6 +11,7 @@ import 'edit_profile_screen.dart';
 import 'archived_videos_screen.dart';
 import 'notification_preferences_screen.dart';
 import 'blocked_accounts_screen.dart';
+import '../widgets/leaderboard_consent_tile.dart';
 import '../../auth/screens/phone_auth_screen.dart';
 import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
@@ -88,6 +89,8 @@ class SettingsScreen extends StatelessWidget {
                   builder: (_) => const NotificationPreferencesScreen()),
             ),
           ),
+          // Apple 5.1.2 (backend ADR 129): give or withdraw leaderboard consent any time.
+          const LeaderboardConsentTile(),
           _tile(
             context,
             icon: Icons.block_rounded,
@@ -110,6 +113,22 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.help_outline_rounded,
             label: 'Help & Rules',
             onTap: () => _showHelpSheet(context),
+          ),
+          _tile(
+            context,
+            icon: Icons.support_agent_outlined,
+            label: 'Contact Support',
+            subtitle: LegalLinks.supportEmail,
+            onTap: () async {
+              final ok = await LegalLinks.emailSupport();
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text(
+                          'No mail app found. Email us at ${LegalLinks.supportEmail}')),
+                );
+              }
+            },
           ),
           const SizedBox(height: 24),
           _section('Legal'),
@@ -631,7 +650,7 @@ class _HelpSheet extends StatelessWidget {
                   icon: Icons.support_agent_outlined,
                   title: 'Contact Support',
                   body:
-                      'For issues or appeals, reach out via the in-app feedback option or email support@aura.app.',
+                      'For issues or appeals, email ${LegalLinks.supportEmail} (Settings → Contact Support).',
                 ),
               ],
             ),

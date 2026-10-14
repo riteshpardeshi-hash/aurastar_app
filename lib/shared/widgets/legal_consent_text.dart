@@ -76,8 +76,8 @@ class _LegalConsentTextState extends State<LegalConsentText> {
                 TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
                 const TextSpan(
                     text: '. There is no tolerance for objectionable content '
-                        'or abusive users. Your display name, avatar and score '
-                        'appear on public leaderboards.'),
+                        'or abusive users. We\'ll ask before your display name, '
+                        'avatar and score appear on public leaderboards.'),
               ]
             : [
                 const TextSpan(text: 'By continuing you agree to our '),
@@ -85,8 +85,8 @@ class _LegalConsentTextState extends State<LegalConsentText> {
                 const TextSpan(text: ' and '),
                 TextSpan(text: 'Terms of Service', style: link, recognizer: _terms),
                 const TextSpan(
-                    text: '. Your display name, avatar and score appear on '
-                        'public leaderboards.'),
+                    text: '. We\'ll ask before your display name, avatar and '
+                        'score appear on public leaderboards.'),
               ],
       ),
     );

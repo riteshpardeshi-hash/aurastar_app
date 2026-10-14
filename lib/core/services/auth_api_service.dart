@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'api_client.dart';
 import 'push_notification_service.dart';
+import '../utils/legal_links.dart';
+import 'leaderboard_consent_service.dart';
 
 typedef AuthResult = ({
   String accessToken,
@@ -86,6 +88,7 @@ class AuthApiService {
       refreshToken: data['refreshToken'] as String,
       userId: user['id'] as String,
     );
+    await _recordTermsAcceptance();
     return (
       accessToken: data['accessToken'] as String,
       refreshToken: data['refreshToken'] as String,
@@ -152,6 +155,7 @@ class AuthApiService {
       refreshToken: data['refreshToken'] as String,
       userId: userId,
     );
+    await _recordTermsAcceptance();
     return (
       accessToken: data['accessToken'] as String,
       refreshToken: data['refreshToken'] as String,
@@ -159,6 +163,44 @@ class AuthApiService {
       isNewUser: data['isNewUser'] as bool? ?? false,
       deletionCancelled: data['deletionCancelled'] as bool? ?? false,
     );
+  }
+
+  // Every sign-in path is gated on the required "I agree to the Terms" box (Apple 1.2), so a
+  // successful sign-in IS the acceptance — record it (backend ADR 129). Best effort: a failed
+  // record must never block sign-in; the next sign-in records it again.
+  Future<void> _recordTermsAcceptance() async {
+    // A new sign-in may be a different account — drop the cached consent.
+    LeaderboardConsentService.instance.reset();
+    try {
+      await acceptTerms();
+    } catch (_) {}
+  }
+
+  /// POST /profile/terms-acceptance — stamps when and which Terms version was accepted.
+  Future<void> acceptTerms({String version = LegalLinks.termsVersion}) async {
+    final res = await _client.post(
+      '/profile/terms-acceptance',
+      {'version': version},
+      auth: true,
+    );
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Could not record Terms acceptance';
+    }
+  }
+
+  /// PUT /profile/leaderboard-consent — show me on public leaderboards, or not (Apple 5.1.2,
+  /// backend ADR 129). Returns the stored status ('granted' | 'declined').
+  Future<String> setLeaderboardConsent(bool granted) async {
+    final res = await _client.put(
+      '/profile/leaderboard-consent',
+      {'granted': granted},
+    );
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Could not save your leaderboard choice';
+    }
+    final data = res['data'] as Map<String, dynamic>;
+    final consent = data['leaderboardConsent'] as Map<String, dynamic>?;
+    return consent?['status'] as String? ?? (granted ? 'granted' : 'declined');
   }
 
   Future<void> logout() async {
@@ -173,6 +215,7 @@ class AuthApiService {
       } catch (_) {}
     }
     await _client.clearSession();
+    LeaderboardConsentService.instance.reset();
   }
 
   /// Revokes every refresh token for this user (all devices), then clears
@@ -184,6 +227,7 @@ class AuthApiService {
       await _client.post('/auth/logout-all', {}, auth: true);
     } catch (_) {}
     await _client.clearSession();
+    LeaderboardConsentService.instance.reset();
   }
 
   /// Requests deletion of the signed-in user's account (ADR 098 on the
@@ -205,6 +249,7 @@ class AuthApiService {
     }
     final raw = res['deletionScheduledFor'] as String?;
     await _client.clearSession();
+    LeaderboardConsentService.instance.reset();
     return raw == null ? null : DateTime.tryParse(raw);
   }
 
@@ -220,6 +265,7 @@ class AuthApiService {
       throw res['message'] as String? ?? 'Failed to deactivate account';
     }
     await _client.clearSession();
+    LeaderboardConsentService.instance.reset();
   }
 
   /// Cancels a pending deactivation/deletion request without requiring a
