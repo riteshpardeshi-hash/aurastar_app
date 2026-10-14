@@ -32,25 +32,31 @@ class CreatorChallengesService {
     }
   }
 
+  /// Throws on a failed request so the list screen can show the real reason
+  /// with a retry. Returning [] made a 403/network/shape failure render as
+  /// "No challenges yet", indistinguishable from a creator with none.
+  /// Per the spec this endpoint omits legacy challenges whose
+  /// `submissionStatus` is null (created before the draft pipeline).
   Future<List<Map<String, dynamic>>> fetchMyChallenges({
     String? submissionStatus,
     int page = 1,
     int limit = 20,
   }) async {
-    try {
-      final q = [
-        'page=$page',
-        'limit=$limit',
-        if (submissionStatus != null) 'submissionStatus=$submissionStatus',
-      ].join('&');
-      final res =
-          await _client.get('/creator/challenges/submissions?$q', auth: true);
-      if (res['status'] != 'success') return [];
-      final data = res['data'] as Map<String, dynamic>?;
-      return (data?['responses'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    } catch (_) {
-      return [];
+    final q = [
+      'page=$page',
+      'limit=$limit',
+      // The spec names this query param `status`, not `submissionStatus`.
+      if (submissionStatus != null) 'status=$submissionStatus',
+    ].join('&');
+    final res = await _client.get('/creator/challenges/submissions?$q', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to load challenges');
     }
+    final data = res['data'];
+    final list = data is Map ? (data['responses'] ?? data['data']) : data;
+    return list is List
+        ? list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : [];
   }
 
   /// `videoId` must be passed back to [createDraft] to claim this placeholder.

@@ -394,31 +394,15 @@ class _BootScreenState extends State<_BootScreen> {
     _setStep('loading local preferences');
     final prefs = await SharedPreferences.getInstance();
 
-    // Validate the stored session BEFORE showing the app. getProfile() makes
-    // an authed call that itself attempts a refresh on 401; if the session is
-    // genuinely dead the refresh fails and clearSession() wipes the tokens.
-    // Re-checking isLoggedIn() right after catches that and sends the user
-    // straight to Sign In — instead of MainShell, whose tabs would then all
-    // 401 and sit stuck on skeletons (looks like "the navbar doesn't work").
-    // A network failure leaves the tokens intact and returns null here, so an
-    // offline returning user still gets through (handled below as
-    // apiUnavailable). This probe runs even on the local `setup_complete`
-    // fast path — one boot round-trip is cheaper than a dead-session app.
     _setStep('validating session');
     final profile = await authService.getProfile();
     if (!await authService.isLoggedIn()) return const PhoneAuthScreen();
 
-    // Fast path: local flag set when this user finished onboarding.
+    // Fast path - local flag set when this user finished onboarding.
     final localComplete =
         uid != null && (prefs.getBool('setup_complete_$uid') ?? false);
     if (localComplete) return const MainShell();
 
-    // Consider setup complete if:
-    //   • API explicitly says so, OR
-    //   • Profile already has a username/name (completed before local flag
-    //     was introduced), OR
-    //   • API call failed entirely (don't block a logged-in returning user
-    //     due to a network hiccup).
     final apiSaysComplete = profile?['isProfileComplete'] as bool? ?? false;
     final hasUsername = (profile?['profileName'] as String? ??
             profile?['username'] as String? ??
@@ -458,7 +442,6 @@ class _BootScreenState extends State<_BootScreen> {
       }
       return (status: _VersionStatus.ok, storeUrl: storeUrl);
     } catch (_) {
-      // Non-fatal: version check failure must never block app launch.
       return (status: _VersionStatus.ok, storeUrl: '');
     }
   }

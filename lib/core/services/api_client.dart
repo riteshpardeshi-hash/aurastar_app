@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'analytics_service.dart';
 import 'screen_cache.dart';
+import 'creator_page_service.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._();
@@ -105,6 +106,7 @@ class ApiClient {
     // account to sign in never briefly sees the previous user's profile,
     // leaderboard position, etc.
     ScreenCache.clear();
+    CreatorPageService.invalidateCreatorCache();
     AnalyticsService().setUserId(null);
     return _storage.deleteAll();
   }

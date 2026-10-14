@@ -84,6 +84,7 @@ class CreatorPageService {
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create creator page';
     }
+    invalidateCreatorCache();
     return res['data'] as Map<String, dynamic>;
   }
 
@@ -94,12 +95,27 @@ class CreatorPageService {
   // `creator` role via `POST /admin/users/{id}/role` without the self-serve
   // `/creator/page` record ever being created, so checking page existence
   // alone misses that account.
-  static Future<bool>? _isCreatorFuture;
-  Future<bool> isCreatorCached() {
-    return _isCreatorFuture ??= AuthApiService().getProfile().then((profile) {
-      final role = profile?['role'] as String?;
-      return role == 'creator' || role == 'brand' || role == 'admin';
-    });
+  //
+  // Only a positive answer is cached. This used to cache whatever the first
+  // call returned — including `false` from a failed/slow profile fetch or from
+  // before the user became a creator — for the whole session, so a creator kept
+  // seeing "Become a Creator". A creator page also counts: the role flag can lag
+  // the page that was just created.
+  static bool _isCreatorCache = false;
+
+  /// Call after anything that can change creator status (page created, logout).
+  static void invalidateCreatorCache() => _isCreatorCache = false;
+
+  Future<bool> isCreatorCached() async {
+    if (_isCreatorCache) return true;
+    final profile = await AuthApiService().getProfile();
+    final role = profile?['role'] as String?;
+    var isCreator = role == 'creator' || role == 'brand' || role == 'admin';
+    if (!isCreator && profile != null) {
+      isCreator = await fetchOwnPage() != null;
+    }
+    _isCreatorCache = isCreator;
+    return isCreator;
   }
 
   /// Returns null if the caller has no creator page yet.

@@ -7,16 +7,8 @@ import 'category_challenges_screen.dart';
 
 const _categoryTileColor = Color(0xFF7B2CBF);
 
-// Categories without a designed icon below (e.g. a new one an admin adds)
-// fall back to this icon.
 const _fallbackIcon = Icons.category_rounded;
 
-// Maps the backend's actual category names (GET /categories, checked live
-// 2026-08-10 — 15 categories) to their designed icon in
-// assets/images/new category icons/. Names not listed here fall back to
-// _fallbackIcon instead of breaking. Public — also used by
-// AllGeneralChallengesScreen and the home feed's Categories section for the
-// same icon set.
 const categoryIconAsset = <String, String>{
   'Action': 'assets/images/new category icons/action.svg',
   'Animal Dancing': 'assets/images/new category icons/animals.svg',
@@ -49,11 +41,6 @@ class AllCategoriesScreen extends StatefulWidget {
 class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   static const _bg = Color(0xFF080810);
 
-  // The list passed in is whatever the caller had already fetched at
-  // navigation time — if the user tapped through before that fetch
-  // resolved, it's still the hardcoded placeholder. Seed from it for an
-  // instant first paint, then independently refetch so this screen is
-  // correct even when it got here first.
   late List<Map<String, dynamic>> _categories = widget.categories;
 
   @override

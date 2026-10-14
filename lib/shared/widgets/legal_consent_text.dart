@@ -3,10 +3,25 @@ import 'package:flutter/material.dart';
 import '../../core/utils/legal_links.dart';
 
 /// "By continuing you agree to our Privacy Policy and Terms of Service."
-/// with both names tappable.
+/// with both names tappable, plus a disclosure that scores are shown on public
+/// leaderboards (App Store guideline 5.1.2 — users must be told their data is
+/// uploaded and shown publicly).
 class LegalConsentText extends StatefulWidget {
   final Color accent;
-  const LegalConsentText({super.key, this.accent = const Color(0xFF7B2CBF)});
+
+  /// When [onChanged] is set the widget renders as an explicit-consent
+  /// checkbox row (App Store guideline 1.2: users must actively agree to the
+  /// terms before registering or logging in) instead of passive
+  /// "by continuing" text.
+  final bool checked;
+  final ValueChanged<bool>? onChanged;
+
+  const LegalConsentText({
+    super.key,
+    this.accent = const Color(0xFF7B2CBF),
+    this.checked = false,
+    this.onChanged,
+  });
 
   @override
   State<LegalConsentText> createState() => _LegalConsentTextState();
@@ -46,19 +61,53 @@ class _LegalConsentTextState extends State<LegalConsentText> {
       decoration: TextDecoration.underline,
       decorationColor: widget.accent,
     );
-    return RichText(
-      textAlign: TextAlign.center,
+    final checkbox = widget.onChanged != null;
+
+    final text = RichText(
+      textAlign: checkbox ? TextAlign.start : TextAlign.center,
       text: TextSpan(
         style: TextStyle(
             color: Colors.white.withValues(alpha: 0.55), fontSize: 12, height: 1.4),
-        children: [
-          const TextSpan(text: 'By continuing you agree to our '),
-          TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
-          const TextSpan(text: ' and '),
-          TextSpan(text: 'Terms of Service', style: link, recognizer: _terms),
-          const TextSpan(text: '.'),
-        ],
+        children: checkbox
+            ? [
+                const TextSpan(text: 'I agree to the '),
+                TextSpan(text: 'Terms of Service', style: link, recognizer: _terms),
+                const TextSpan(text: ' and '),
+                TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
+                const TextSpan(
+                    text: '. There is no tolerance for objectionable content '
+                        'or abusive users. Your display name, avatar and score '
+                        'appear on public leaderboards.'),
+              ]
+            : [
+                const TextSpan(text: 'By continuing you agree to our '),
+                TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
+                const TextSpan(text: ' and '),
+                TextSpan(text: 'Terms of Service', style: link, recognizer: _terms),
+                const TextSpan(
+                    text: '. Your display name, avatar and score appear on '
+                        'public leaderboards.'),
+              ],
       ),
+    );
+    if (!checkbox) return text;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: widget.checked,
+            onChanged: (v) => widget.onChanged!(v ?? false),
+            activeColor: widget.accent,
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.55)),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: text),
+      ],
     );
   }
 }

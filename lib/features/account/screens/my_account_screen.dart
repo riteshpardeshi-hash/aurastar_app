@@ -306,12 +306,16 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       _loading = false;
     }
     _loadAll();
-    CreatorPageService().isCreatorCached().then((v) {
-      if (mounted) setState(() => _isCreator = v);
-    });
+    _refreshCreatorStatus();
     // The rewards list follows the coupons switch (ADR 119): coupons are left out while
     // it's off, so re-fetch when it flips — otherwise the "N to claim" badge stays stale.
     AppConfigService.instance.couponsEnabled.addListener(_reloadRewards);
+  }
+
+  void _refreshCreatorStatus() {
+    CreatorPageService().isCreatorCached().then((v) {
+      if (mounted && v != _isCreator) setState(() => _isCreator = v);
+    });
   }
 
   @override
@@ -653,16 +657,18 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // ── Become Creator banner (regular users only) ─────────────────────────────
   Widget _buildBecomeCreatorBanner(BuildContext context, int points) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (points < 500) {
           _showCreatorGateSheet(context, points);
           return;
         }
         AnalyticsService().logAuraCreatorJoinClick('profile_banner');
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
         );
+        // This tab stays mounted in the shell, so it won't re-init on return.
+        _refreshCreatorStatus();
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),

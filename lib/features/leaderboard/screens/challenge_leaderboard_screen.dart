@@ -5,14 +5,6 @@ import '../../../core/services/challenges_service.dart';
 import '../../../shared/widgets/challenge_leaderboard_row.dart';
 import '../../../shared/widgets/safety_sheets.dart';
 
-// Pushed from ChallengeDetail's "See Leaderboard" button — only reachable
-// once the viewer has taken this specific challenge (see _mySubmission gate
-// in challenge_detail.dart). Reuses ChallengesService().fetchSubmissions(),
-// same as leaderboard_screen.dart's per-challenge tab: GET
-// /leaderboard/challenge/{id} is empirically broken server-side (returns an
-// empty `responses` array for challenges with real scored submissions),
-// while GET /challenges/{id}/submissions is already sorted by aiScore
-// descending and doubles as the real per-challenge leaderboard.
 class ChallengeLeaderboardScreen extends StatefulWidget {
   final String challengeId;
   final String challengeTitle;
@@ -36,10 +28,6 @@ class _ChallengeLeaderboardScreenState
   List<Map<String, dynamic>> _entries = [];
   bool _loading = true;
   String? _myId;
-  // GET /challenges/{id}/submissions populates the submitter's displayName
-  // only when they set one — see normaliseSubmissionEntry — so rows without
-  // one still fall back to "Player N". For the viewer's own row we skip that
-  // guesswork: GET /profile already has their real name/handle.
   String? _myUsername;
 
   @override

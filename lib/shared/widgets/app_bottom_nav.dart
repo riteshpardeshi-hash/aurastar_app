@@ -5,6 +5,7 @@ import '../../core/utils/nav_diag.dart';
 import '../../features/challenges/screens/challenge_reels_screen.dart';
 import '../../features/shell/main_shell_controller.dart';
 import '../theme/app_colors.dart';
+import '../../core/services/profile_avatar_notifier.dart';
 import 'avatar_widget.dart';
 
 /// Which of [AppBottomNav]'s tabs (if any) corresponds to the screen it's
@@ -51,7 +52,20 @@ class _AppBottomNavState extends State<AppBottomNav> {
   @override
   void initState() {
     super.initState();
+    profileAvatarNotifier.addListener(_onAvatarChanged);
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    profileAvatarNotifier.removeListener(_onAvatarChanged);
+    super.dispose();
+  }
+
+  void _onAvatarChanged() {
+    final url = profileAvatarNotifier.value;
+    if (!mounted || url == null) return;
+    setState(() => _photoUrl = url);
   }
 
   Future<void> _loadProfile() async {
@@ -224,8 +238,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     final initial =
         _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'U';
     return GestureDetector(
-      // Opaque + full pill height (see [_navItem]) so the whole slot is the
-      // tap target, not just the painted avatar/label pixels.
       behavior: HitTestBehavior.opaque,
       onTap: () => _switchTab(context, AppNavTab.profile),
       child: SizedBox(
@@ -274,9 +286,6 @@ class _AppBottomNavState extends State<AppBottomNav> {
     bool active = false,
   }) {
     return GestureDetector(
-      // Opaque + full pill height so the whole slot — not just the 22px glyph
-      // and the tiny label — registers the tap. Small hit targets here were
-      // making taps miss and forcing users to tap 2–3 times.
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(

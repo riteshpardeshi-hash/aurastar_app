@@ -100,14 +100,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 }
 
-// ── API-backed Board (Global) ────────────────────────────────────────────────
+// API-backed Board (Global)
 
 class _ApiBoard extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> Function(int page, int limit)
   fetchPage;
-  // ScreenCache key for this board's first page, so re-opening the
-  // Leaderboard tab shows the last-known standings immediately instead of a
-  // spinner while it re-fetches.
+
   final String cacheKey;
   final String scoreSuffix;
   final String emptyTitle;
@@ -271,7 +269,7 @@ class _ApiBoardState extends State<_ApiBoard>
   }
 }
 
-// ── Challenge Board ────────────────────────────────────────────────────────────
+// Challenge Board
 
 class _ChallengeBoard extends StatefulWidget {
   const _ChallengeBoard();
@@ -294,10 +292,6 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   List<Map<String, dynamic>> _entries = [];
   bool _loadingBoard = false;
   String? _myId;
-  // GET /challenges/{id}/submissions populates the submitter's displayName
-  // only when they set one — see normaliseSubmissionEntry — so rows without
-  // one still fall back to "Player N". For the viewer's own row we skip that
-  // guesswork: GET /profile already has their real name/handle.
   String? _myUsername;
 
   @override
@@ -374,7 +368,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // ── Challenge chip picker ──────────────────────────────────────────────
+        // Challenge chip picker
         if (_loadingChallenges)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
@@ -422,7 +416,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
           ),
         const Divider(color: Colors.white10, height: 1),
 
-        // ── Scores for selected challenge ──────────────────────────────────────
+        // Scores for selected challenge
         if (_challengeId == null)
           Expanded(
             child: leaderboardEmptyState(
@@ -546,7 +540,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   }
 }
 
-// ── Entry List (Global + Friends, API-backed) ───────────────────────────────────
+// Entry List (Global + Friends, API-backed)
 
 class _EntryList extends StatelessWidget {
   final List<Map<String, dynamic>> entries;
@@ -686,7 +680,7 @@ class _EntryList extends StatelessWidget {
   }
 }
 
-// ── Player Row ─────────────────────────────────────────────────────────────────
+// Player Row
 
 class _PlayerRow extends StatelessWidget {
   final int rank;

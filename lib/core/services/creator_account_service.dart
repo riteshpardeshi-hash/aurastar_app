@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 
 /// The `/creator/followers`, `/creator/following`, `/creator/insights`,
@@ -36,19 +37,49 @@ class CreatorAccountService {
     }
   }
 
+  /// Throws on a failed request (403, network, non-success envelope) so the
+  /// list screen can show the real reason with a retry. Returning [] here made
+  /// a failure render as "No followers yet", indistinguishable from a creator
+  /// who genuinely has none.
   Future<List<Map<String, dynamic>>> _fetchFollowList(
     String path, {
     required int page,
     required int limit,
   }) async {
-    try {
-      final res = await _client.get('$path?page=$page&limit=$limit', auth: true);
-      if (res['status'] != 'success') return [];
-      final data = res['data'] as Map<String, dynamic>?;
-      return (data?['data'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    } catch (_) {
-      return [];
+    final res = await _client.get('$path?page=$page&limit=$limit', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to load the list');
     }
+    final data = res['data'];
+    lastFollowListShape = data is Map
+        ? 'keys: ${data.keys.join(', ')}'
+        : data.runtimeType.toString();
+    return extractFollowEntries(data);
+  }
+
+  /// Top-level shape of the last follow-list response, shown by the list screen
+  /// when the server's count and the returned rows disagree (diagnostic aid for
+  /// testers who can't attach a debugger).
+  static String lastFollowListShape = '';
+
+  /// The spec says `data.data[]`, but most list endpoints on this backend wrap
+  /// their rows in `responses` (and a few use `followers`/`items`), and a
+  /// strict read turned any such shape into a silently empty list. Accept all
+  /// of them, or a bare array.
+  @visibleForTesting
+  static List<Map<String, dynamic>> extractFollowEntries(dynamic data) {
+    List? list;
+    if (data is List) {
+      list = data;
+    } else if (data is Map) {
+      for (final key in const ['data', 'responses', 'followers', 'following', 'items']) {
+        if (data[key] is List) {
+          list = data[key] as List;
+          break;
+        }
+      }
+    }
+    return list?.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
   }
 
   Future<Map<String, dynamic>> fetchInsights() async {

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../core/utils/error_message.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/creator_challenges_service.dart';
@@ -156,6 +157,9 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
     if (!_isEdit && _pickedVideo == null) return _snack('Please add a reference video');
 
     setState(() => _saving = true);
+    // Which request was in flight, so a failure says where it stopped instead
+    // of a bare timeout that could be any of three calls.
+    var step = 'save the challenge';
     try {
       final service = CreatorChallengesService();
       final timeLimit = int.tryParse(_timeLimitCtrl.text.trim());
@@ -175,11 +179,14 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
           challengeInstructions: instructions.isEmpty ? null : instructions,
         );
       } else {
+        step = 'request the video upload';
         final uploadData = await service.getReferenceVideoUploadUrl();
         final uploadUrl = uploadData['uploadUrl'] as String;
         final videoId = uploadData['videoId'] as String;
+        step = 'upload the reference video';
         await ApiClient().uploadToS3(uploadUrl, _pickedVideo!, contentType: 'video/mp4');
 
+        step = 'create the challenge';
         await service.createDraft(
           title: title,
           category: _categoryId!,
@@ -196,7 +203,8 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _snack(e.toString());
+      debugPrint('[CreateChallenge] failed to $step: $e');
+      _snack("Couldn't $step. ${humanizeError(e)}");
     }
   }
 

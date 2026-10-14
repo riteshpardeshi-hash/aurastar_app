@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../../core/services/profile_avatar_notifier.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
@@ -150,6 +151,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         // keeps rendering the old cached bytes even after a correct save.
         PaintingBinding.instance.imageCache.evict(NetworkImage(publicUrl));
         _currentPhotoUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+        // The persistent bottom nav loaded its avatar once at startup.
+        profileAvatarNotifier.value = _currentPhotoUrl;
       }
 
       // Update profile fields

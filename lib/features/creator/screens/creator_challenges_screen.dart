@@ -4,6 +4,19 @@ import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_status_screen.dart';
 
+/// The filters endpoint returns each status as an object
+/// (`{value: draft, label: draft}`), not a bare string, and in lowercase.
+/// Calling `toString()` on that rendered the raw map as the chip text.
+/// Normalise to the upper-case status strings the rest of this screen
+/// (labels, counts, card styling, the fallback list) already uses.
+@visibleForTesting
+List<String> parseStatusOptions(List<dynamic> raw) => [
+      for (final e in raw)
+        if ((e is Map ? e['value'] : e)?.toString().trim() case final v?
+            when v.isNotEmpty)
+          v.toUpperCase(),
+    ];
+
 class CreatorChallengesScreen extends StatefulWidget {
   const CreatorChallengesScreen({super.key});
 
@@ -22,6 +35,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
 
   final _service = CreatorChallengesService();
   bool _loading = true;
+  String? _error;
   List<Map<String, dynamic>> _challenges = [];
   List<String> _statusOptions = _allStatuses;
   Map<String, int> _statusCounts = {};
@@ -40,8 +54,11 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
     final filters = await _service.fetchChallengeFilters();
     final statuses = pickField(filters, ['statuses', 'status', 'submissionStatuses']);
     if (!mounted || statuses is! List || statuses.isEmpty) return;
-    setState(() => _statusOptions = statuses.map((e) => e.toString()).toList());
+    final options = parseStatusOptions(statuses);
+    if (options.isEmpty) return;
+    setState(() => _statusOptions = options);
   }
+
 
   Future<void> _loadStatusSummary() async {
     final summary = await _service.fetchStatusSummary();
@@ -54,13 +71,24 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
-    final raw = await _service.fetchMyChallenges(limit: 50, submissionStatus: _statusFilter);
-    if (!mounted) return;
     setState(() {
-      _challenges = raw.map(normaliseCreatorChallenge).toList();
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final raw = await _service.fetchMyChallenges(limit: 50, submissionStatus: _statusFilter);
+      if (!mounted) return;
+      setState(() {
+        _challenges = raw.map(normaliseCreatorChallenge).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _createNew() async {
@@ -163,7 +191,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
                     _load();
                   }),
                   ..._statusOptions.map((s) {
-                    final count = _statusCounts[s];
+                    final count = _statusCounts[s] ?? _statusCounts[s.toLowerCase()];
                     final label = count != null ? '${_statusLabel(s)} ($count)' : _statusLabel(s);
                     return Padding(
                       padding: const EdgeInsets.only(left: 8),
@@ -180,7 +208,9 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator(color: _accent))
-                : _challenges.isEmpty
+                : _error != null
+                    ? _buildError()
+                    : _challenges.isEmpty
                     ? _buildEmpty()
                     : RefreshIndicator(
                         color: _accent,
@@ -221,6 +251,32 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
         child: Text(label,
             style: TextStyle(
                 color: selected ? Colors.white : AppColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
+
+  Widget _buildError() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off_rounded, color: Colors.white24, size: 52),
+            const SizedBox(height: 16),
+            const Text("Couldn't load your challenges",
+                style: TextStyle(color: AppColors.textMuted, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(_error!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white30, fontSize: 13, height: 1.5)),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _load,
+              child: const Text('Retry', style: TextStyle(color: _accent, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
       ),
     );
   }

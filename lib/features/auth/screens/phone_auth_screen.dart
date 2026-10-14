@@ -34,6 +34,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   bool _otpSent      = false;
   bool _isLoading    = false;
+  bool _termsAccepted = false;
 
   // Matches the backend's default `otp.resend_cooldown_seconds` (ADR 080). The
   // backend enforces its own cooldown and returns 429 regardless; this just
@@ -41,6 +42,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   static const _resendCooldownSecs = 60;
   int _resendIn = 0;
   Timer? _resendTimer;
+
+  // The number the current OTP was sent to. Editing the phone field away from
+  // it invalidates the OTP step (see [_onPhoneChanged]).
+  String? _otpPhone;
 
   static const _accent = Color(0xFF9B30FF);
 
@@ -68,6 +73,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       if (!mounted) return;
       setState(() {
         _otpSent   = true;
+        _otpPhone  = phone;
         _isLoading = false;
         // Clear any code left from a previous (expired) send so a stale value
         // can't be submitted, and so autofill has a clean field to write to.
@@ -83,6 +89,22 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       setState(() => _isLoading = false);
       _snack(humanizeError(e));
     }
+  }
+
+  /// The OTP belongs to the number it was sent to. `_otpSent` used to stay true
+  /// after the phone field was edited, so the screen kept the "Get Started"
+  /// (verify) button and the old number's resend cooldown, with no way to
+  /// request a code for the new number. Drop back to the "Get OTP" step.
+  void _onPhoneChanged(String value) {
+    if (!_otpSent || value.trim() == _otpPhone) return;
+    _resendTimer?.cancel();
+    _smsAutofill.cancel();
+    setState(() {
+      _otpSent = false;
+      _otpPhone = null;
+      _resendIn = 0;
+      _otpCtrl.clear();
+    });
   }
 
   /// Waits for the OTP SMS and, on a clean 6-digit read, fills the field and
@@ -174,8 +196,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
   }
 
+  /// Guideline 1.2: the user must actively agree to the Terms before we send
+  /// an OTP or log them in. Returns false (and says why) when they haven't.
+  bool _requireTerms() {
+    if (_termsAccepted) return true;
+    _snack('Please agree to the Terms of Service and Privacy Policy to continue.');
+    return false;
+  }
+
   void _onMainButton() {
-    if (_isLoading) return;
+    if (_isLoading || !_requireTerms()) return;
     _otpSent ? _verifyOtp() : _sendOtp();
   }
 
@@ -273,6 +303,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       const SizedBox(height: 8),
                       _SignInField(
                         controller: _phoneCtrl,
+                        onChanged: _onPhoneChanged,
                         keyboardType: TextInputType.phone,
                         autofillHints: const [AutofillHints.telephoneNumberNational],
                         inputFormatters: [
@@ -328,7 +359,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                               )
                             else
                               GestureDetector(
-                                onTap: busy ? null : _sendOtp,
+                                onTap: busy
+                                    ? null
+                                    : () {
+                                        if (_requireTerms()) _sendOtp();
+                                      },
                                 child: const Text(
                                   'Resend OTP',
                                   style: TextStyle(
@@ -344,10 +379,20 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
                       const SizedBox(height: 32),
 
+                      LegalConsentText(
+                        accent: _accent,
+                        checked: _termsAccepted,
+                        onChanged: (v) => setState(() => _termsAccepted = v),
+                      ),
+
+                      const SizedBox(height: 20),
+
                       // ── Main button ──────────────────────────────────────────
                       GestureDetector(
                         onTap: busy ? null : _onMainButton,
-                        child: Container(
+                        child: Opacity(
+                          opacity: _termsAccepted ? 1 : 0.5,
+                          child: Container(
                           width: double.infinity,
                           height: 52,
                           decoration: BoxDecoration(
@@ -379,11 +424,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                                   ),
                           ),
                         ),
+                        ),
                       ),
-
-                      const SizedBox(height: 20),
-
-                      const Center(child: LegalConsentText(accent: _accent)),
 
                       SizedBox(height: size.height * 0.04),
 
@@ -408,6 +450,7 @@ class _SignInField extends StatelessWidget {
   final bool focused;
   final List<TextInputFormatter>? inputFormatters;
   final Iterable<String>? autofillHints;
+  final ValueChanged<String>? onChanged;
 
   const _SignInField({
     required this.controller,
@@ -415,6 +458,7 @@ class _SignInField extends StatelessWidget {
     this.focused = false,
     this.inputFormatters,
     this.autofillHints,
+    this.onChanged,
   });
 
   @override
@@ -442,6 +486,7 @@ class _SignInField extends StatelessWidget {
       ),
       child: TextField(
         controller: controller,
+        onChanged: onChanged,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
         autofillHints: autofillHints,

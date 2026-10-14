@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/utils/open_coupon_link.dart';
 import '../../../shared/theme/app_colors.dart';
 
 /// One-shot celebration shown right after scoring when the submission won one
@@ -159,11 +159,8 @@ class _CouponCard extends StatelessWidget {
   // Custom Tab) so the user never leaves the app: CATALOG is our own
   // `/r/:grantId` redirect that 302s through the partner network to the
   // merchant; POOL is the brand's own coupon page.
-  Future<void> _open(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-  }
+  Future<void> _open(BuildContext context, String url) =>
+      openCouponLink(context, url);
 
   @override
   Widget build(BuildContext context) {
@@ -202,9 +199,12 @@ class _CouponCard extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: redeemUrl == null
                     ? null
-                    : () => _open(redeemUrl),
-                icon: const Icon(Icons.shopping_bag_rounded, size: 16),
-                label: const Text('Shop now', style: TextStyle(fontSize: 13)),
+                    : () => _open(context, redeemUrl),
+                icon: const Icon(Icons.local_offer_rounded, size: 16),
+                // Not "Shop now": this is a free reward redeemed at a partner,
+                // and that wording made App Review read it as an
+                // out-of-IAP purchase flow (guideline 3.1.1).
+                label: const Text('Redeem offer', style: TextStyle(fontSize: 13)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accent,
                   foregroundColor: Colors.white,
@@ -235,7 +235,7 @@ class _CouponCard extends StatelessWidget {
                 width: double.infinity,
                 height: 38,
                 child: OutlinedButton(
-                  onPressed: () => _open(redeemUrl),
+                  onPressed: () => _open(context, redeemUrl),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.accentLight,
                     side: BorderSide(

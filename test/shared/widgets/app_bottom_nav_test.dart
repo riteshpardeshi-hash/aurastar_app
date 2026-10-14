@@ -9,6 +9,8 @@ import 'package:http/testing.dart';
 import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/features/shell/main_shell_controller.dart';
 import 'package:aura_app/shared/widgets/app_bottom_nav.dart';
+import 'package:aura_app/core/services/profile_avatar_notifier.dart';
+import 'package:aura_app/shared/widgets/avatar_widget.dart';
 
 // AppBottomNav is the single bottom nav every top-level screen uses. The four
 // tab screens live permanently inside MainShell's IndexedStack, so a tab tap
@@ -287,6 +289,26 @@ void main() {
     expect(find.text('Go to Current'), findsNothing);
     // …and the tab switch was requested from MainShellController.
     expect(selections, [AppNavTab.leaderboard.shellIndex]);
+  });
+
+  // Regression: the nav fetched the profile once in initState and the shell
+  // keeps it mounted all session, so a new avatar saved in Edit Profile never
+  // reached it.
+  testWidgets('shows a new avatar published after the nav was built',
+      (tester) async {
+    profileAvatarNotifier.value = null;
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: AppBottomNav()),
+    ));
+    await tester.pump();
+    AvatarWidget avatar() => tester.widget<AvatarWidget>(find.byType(AvatarWidget));
+    expect(avatar().photoUrl, isEmpty);
+
+    profileAvatarNotifier.value = 'https://example.com/new.jpg?v=1';
+    await tester.pump();
+
+    expect(avatar().photoUrl, 'https://example.com/new.jpg?v=1');
+    profileAvatarNotifier.value = null;
   });
 }
 

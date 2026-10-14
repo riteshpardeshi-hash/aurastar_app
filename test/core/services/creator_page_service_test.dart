@@ -90,4 +90,41 @@ void main() {
 
     expect(await CreatorPageService().fetchOwnPage(), isNull);
   });
+
+  // Regression: isCreatorCached() cached its first answer — including `false`
+  // from before the user became a creator — for the whole session, so a creator
+  // kept seeing the "Become a Creator" banner.
+  group('isCreatorCached', () {
+    setUp(CreatorPageService.invalidateCreatorCache);
+
+    http.Response ok(Object data) =>
+        http.Response(jsonEncode({'status': 'success', 'data': data}), 200);
+
+    test('a false answer is not cached once the user becomes a creator',
+        () async {
+      var role = 'user';
+      var hasPage = false;
+      ApiClient.httpClient = MockClient((request) async {
+        if (request.url.path.endsWith('/profile')) {
+          return ok({'user': {'role': role}});
+        }
+        return ok({'profile': hasPage ? {'username': 'neha'} : null});
+      });
+
+      expect(await CreatorPageService().isCreatorCached(), isFalse);
+      role = 'creator';
+      expect(await CreatorPageService().isCreatorCached(), isTrue);
+    });
+
+    test('an existing creator page counts even if the role lags', () async {
+      ApiClient.httpClient = MockClient((request) async {
+        if (request.url.path.endsWith('/profile')) {
+          return ok({'user': {'role': 'user'}});
+        }
+        return ok({'profile': {'username': 'neha'}});
+      });
+
+      expect(await CreatorPageService().isCreatorCached(), isTrue);
+    });
+  });
 }

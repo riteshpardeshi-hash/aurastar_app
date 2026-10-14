@@ -9,9 +9,11 @@ App Store 5.1.2(i) privacy label: "Firebase Analytics shares no data with ad net
 | `ios/Podfile` | `$FirebaseAnalyticsWithoutAdIdSupport = true`: Firebase Analytics without the IDFA, so the AdSupport framework is not linked. |
 | `AnalyticsService.applyNoAdsConsent()` (called at start-up) | Consent Mode: analytics storage granted; ad storage, ad user data and ad personalization denied. |
 
-Still to confirm in the **Firebase / Google Analytics console** (can't be set from code):
+Confirmed on 2026-10-13 in the **Google Analytics console** (account "Aura Arena", property `aura-arena-81e92`; can't be set from code):
 - Google Signals is off;
-- no Google Ads / AdMob / BigQuery-to-ads links;
-- the "data sharing settings" for Google products and services are off.
+- no Google Ads / AdMob / BigQuery / other product links;
+- all Account > Data sharing settings are off (Google products & services, Modeling contributions, Technical support, Recommendations for your business).
+
+Still open: merged-manifest check on a release build, and confirming iOS events reach GA (`IS_ANALYTICS_ENABLED` is `false` in both `GoogleService-Info.plist` files).
 
 Verify a build with the merged manifest (`build/app/intermediates/merged_manifest/.../AndroidManifest.xml`). It must contain no `AD_ID` or `ADSERVICES_` permission.

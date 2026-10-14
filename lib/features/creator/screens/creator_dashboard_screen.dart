@@ -272,10 +272,11 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
   }
 
   Widget _followStat(BuildContext context, String value, String label, FollowListMode mode) {
+    final expected = int.tryParse(value) ?? 0;
     return GestureDetector(
       onTap: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => CreatorFollowListScreen(mode: mode))),
+          MaterialPageRoute(builder: (_) => CreatorFollowListScreen(mode: mode, expectedCount: expected))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
