@@ -165,6 +165,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump();
     await tester.pump();

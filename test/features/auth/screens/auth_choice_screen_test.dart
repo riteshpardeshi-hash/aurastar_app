@@ -17,7 +17,7 @@ import 'package:aura_app/features/auth/screens/phone_auth_screen.dart';
 void main() {
   testWidgets('has no email login option, and Phone still navigates to PhoneAuthScreen',
       (tester) async {
-    SharedPreferences.setMockInitialValues({'privacy_v1_accepted': true});
+    SharedPreferences.setMockInitialValues({'privacy_v2_accepted': true});
     await tester.pumpWidget(const MaterialApp(home: AuthChoiceScreen()));
     await tester.pump();
 
@@ -36,7 +36,7 @@ void main() {
   // policy page's respective tab.
   testWidgets('Privacy Policy and Terms of Service links open the hosted policy page',
       (tester) async {
-    SharedPreferences.setMockInitialValues({'privacy_v1_accepted': false});
+    SharedPreferences.setMockInitialValues({'privacy_v2_accepted': false});
     final mockLauncher = _RecordingUrlLauncher();
     UrlLauncherPlatform.instance = mockLauncher;
 
@@ -53,7 +53,7 @@ void main() {
 
     final privacySpan = tester.widget<RichText>(
       find.byWidgetPredicate((w) =>
-          w is RichText && _spanText(w.text).contains('By continuing you agree')),
+          w is RichText && _spanText(w.text).contains('I agree to the')),
     );
     final spans = (privacySpan.text as TextSpan).children!;
 
@@ -72,6 +72,33 @@ void main() {
     termsRecognizer.onTap!();
     await tester.pumpAndSettle();
     expect(mockLauncher.launchedUrls.last, endsWith('/legal/terms.html'));
+  });
+
+  // Apple 1.2 (backend ADR 129): the first-run sheet needs an explicit "I agree"
+  // tick — "Accept & Continue" does nothing until the box is checked.
+  testWidgets('Accept & Continue stays disabled until the Terms box is ticked',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'privacy_v2_accepted': false});
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: AuthChoiceScreen()));
+    await tester.pumpAndSettle();
+
+    ElevatedButton accept() => tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Accept & Continue'));
+    expect(accept().onPressed, isNull);
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    expect(accept().onPressed, isNotNull);
+
+    await tester.tap(find.text('Accept & Continue'));
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('privacy_v2_accepted'), isTrue);
   });
 }
 

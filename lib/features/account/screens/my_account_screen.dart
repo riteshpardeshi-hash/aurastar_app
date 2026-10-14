@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/leaderboard_consent_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../../core/services/rewards_service.dart';
@@ -360,6 +361,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         RewardsService().fetchRewards(),
       ]);
       if (!mounted) return;
+      // Keeps Settings' leaderboard toggle in sync without another /profile call.
+      LeaderboardConsentService.instance
+          .updateFromProfile(results[0] as Map<String, dynamic>?);
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};

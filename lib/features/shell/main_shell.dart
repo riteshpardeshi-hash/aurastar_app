@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/services/analytics_service.dart';
+import '../../core/services/leaderboard_consent_service.dart';
 import '../../core/utils/nav_diag.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../account/screens/my_account_screen.dart';
@@ -65,6 +66,11 @@ class _MainShellState extends State<MainShell> {
     _selectSub = MainShellController.instance.onSelect.listen(_selectTab);
     AnalyticsService().logScreen(_tabScreenNames[_tab]);
     navDiag('MainShell#$_instanceId initState: subscribed, tab=$_tab');
+    // Apple 5.1.2 (backend ADR 129): a new account is asked once whether to appear on
+    // public leaderboards. A no-op for anyone who already answered (or an older backend).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) LeaderboardConsentService.instance.askIfNeeded(context);
+    });
   }
 
   @override

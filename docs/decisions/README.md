@@ -56,6 +56,7 @@ because it's three pages long isn't documented, it's buried.
 | 029 | [Firebase Crashlytics](029-firebase-crashlytics.md) | Accepted |
 | 030 | [AI Ads UI wired to the backend's campaign model (not a per-brand mock)](030-ai-ads-ui-wired-to-backend-campaigns.md) | Accepted (amended by 031) |
 | 031 | [AI Ads: evaluation is free, no credits kept back](031-ai-ads-free-evaluation.md) | Accepted (amends 030) |
+| 032 | [Leaderboard consent, recorded Terms acceptance, support email](032-leaderboard-consent-terms-acceptance-support-email.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).

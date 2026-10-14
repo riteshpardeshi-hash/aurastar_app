@@ -23,7 +23,9 @@ class AuthChoiceScreen extends StatefulWidget {
 class _AuthChoiceScreenState extends State<AuthChoiceScreen> {
   String? _loading; // 'google' | 'apple' — null means idle
 
-  static const _privacyKey = 'privacy_v1_accepted';
+  // v2: the sheet now needs a ticked "I agree" box (Apple 1.2, backend ADR 129) — anyone who
+  // only saw v1's passive wording is asked again.
+  static const _privacyKey = 'privacy_v2_accepted';
 
   @override
   void initState() {
@@ -456,9 +458,16 @@ class _GoogleGPainter extends CustomPainter {
 
 // ── Privacy notice bottom sheet ───────────────────────────────────────────────
 
-class _PrivacySheet extends StatelessWidget {
+class _PrivacySheet extends StatefulWidget {
   final VoidCallback onAccept;
   const _PrivacySheet({required this.onAccept});
+
+  @override
+  State<_PrivacySheet> createState() => _PrivacySheetState();
+}
+
+class _PrivacySheetState extends State<_PrivacySheet> {
+  bool _agreed = false;
 
   static const _bg = Color(0xFF100A20);
   static const _accent = Color(0xFF7B2CBF);
@@ -564,8 +573,12 @@ class _PrivacySheet extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          // Policy link
-          const LegalConsentText(accent: _accent),
+          // Required agreement (Apple 1.2): Accept stays disabled until ticked.
+          LegalConsentText(
+            accent: _accent,
+            checked: _agreed,
+            onChanged: (v) => setState(() => _agreed = v),
+          ),
 
           const SizedBox(height: 20),
 
@@ -582,7 +595,7 @@ class _PrivacySheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(28),
                 ),
               ),
-              onPressed: onAccept,
+              onPressed: _agreed ? widget.onAccept : null,
               child: const Text(
                 'Accept & Continue',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),

@@ -9,6 +9,7 @@ Legend: [x] done · [ ] pending · (BE) blocked on backend · (ASC) App Store Co
 - [x] Leaderboard disclosure line added to `LegalConsentText` (app, uncommitted)
 - [x] Privacy Policy URL set in ASC: https://www.auraarenaplay.com/legal/privacy.html (ASC)
 - [ ] Open the policy URL in a browser; confirm it loads and mentions leaderboard score sharing
+- [x] Agree / Not now leaderboard consent prompt + Settings toggle; only consenting users on public boards (ADR 032, backend ADR 129)
 
 ## 5.1.2(i) — Tracking / App Tracking Transparency
 - [x] Crash Data label edited: purposes = Analytics + App Functionality, linked to identity = Yes (app calls `setUserIdentifier`), used for tracking = No (ASC)
@@ -29,11 +30,14 @@ Legend: [x] done · [ ] pending · (BE) blocked on backend · (ASC) App Store Co
 
 ## 1.2 — User-generated content
 - [x] Explicit Terms checkbox gate on `PhoneAuthScreen`, with regression tests
+- [x] Acceptance recorded on the backend after sign-in (`POST /profile/terms-acceptance`, ADR 032)
+- [x] Blocks reach the team: a `block` row in the admin Moderation Queue (backend ADR 129)
+- [x] Support email in Settings → Contact Support: info@onadsgroup.com (ADR 032)
 - [x] Stale `auth_choice` link test fixed
 - [x] Website Terms page has the "no tolerance for objectionable content" section
 - [x] Backend request written: `docs/backend-issues/006-user-block-and-report-endpoints-missing.md`
-- [ ] (BE) Block and report endpoints
-- [ ] Block / Report UI: flag content, block users, remove blocked content from the feed instantly
+- [x] (BE) Block and report endpoints (backend ADR 117)
+- [x] Block / Report UI: flag content, block users, remove blocked content from the feed instantly
 - [ ] Process to act on reports within 24 hours (remove content, eject user)
 - [ ] Screen recording on a physical device: Terms before login, flag content, block user
 - [ ] Add the recording to App Review Notes in ASC and reply to Apple

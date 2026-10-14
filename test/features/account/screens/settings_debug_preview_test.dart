@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:aura_app/core/services/leaderboard_consent_service.dart';
 import 'package:aura_app/features/account/screens/settings_screen.dart';
 
 // Regression coverage: the "Preview: Video Rejected" debug tile got stuck on
@@ -18,6 +19,12 @@ import 'package:aura_app/features/account/screens/settings_screen.dart';
 //      DialogRoute<bool> with a String throws inside Route.didPop, so the pop
 //      never completes and the dialog can't be closed.
 void main() {
+  // Settings' leaderboard toggle loads GET /profile when consent isn't known yet;
+  // seed it so the toggle doesn't leave a pending storage-read timer behind.
+  setUp(() => LeaderboardConsentService.instance
+      .updateFromProfile({'leaderboardConsent': {'status': 'granted'}}));
+  tearDown(LeaderboardConsentService.instance.reset);
+
   testWidgets(
       'the "Preview: Video Rejected" debug tile shows the rejected screen and '
       'can be dismissed', (tester) async {
