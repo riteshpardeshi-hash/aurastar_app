@@ -153,7 +153,7 @@ class ApiClient {
         .post(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(effectiveTimeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .post(_uri(path), headers: headers, body: jsonEncode(body))
@@ -174,7 +174,7 @@ class ApiClient {
         .patch(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && await _tryRefresh()) {
+    if (_needsRefresh(res) && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .patch(_uri(path), headers: headers, body: jsonEncode(body))
@@ -195,7 +195,7 @@ class ApiClient {
         .put(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && await _tryRefresh()) {
+    if (_needsRefresh(res) && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .put(_uri(path), headers: headers, body: jsonEncode(body))
@@ -211,7 +211,7 @@ class ApiClient {
     var res =
         await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res =
           await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
@@ -232,7 +232,7 @@ class ApiClient {
     var res =
         await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
     debugPrint('[API] ${res.statusCode} (${res.bodyBytes.length} bytes)');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res =
           await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
@@ -277,7 +277,7 @@ class ApiClient {
     debugPrint('[API] $method ${ApiConfig.baseUrl}$path');
     var res = await once();
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && await _tryRefresh()) {
+    if (_needsRefresh(res) && await _tryRefresh()) {
       res = await once();
       debugPrint('[API] Retry ${res.statusCode} ${res.body}');
     }
@@ -297,7 +297,7 @@ class ApiClient {
         .delete(_uri(path), headers: headers)
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .delete(_uri(path), headers: headers)
@@ -376,6 +376,26 @@ class ApiClient {
   // saved. Dedupe so only one refresh actually hits the network per expiry;
   // the rest await its result and retry with the token it obtained.
   Future<bool>? _refreshInFlight;
+
+  /// 401 = the token expired. A 403 "Access denied. Requires one of: …" means the token's
+  /// *role* is out of date (e.g. the user was just promoted to creator — backend ADR 132): the
+  /// refresh endpoint re-reads the role, so one refresh + retry fixes it too.
+  static bool _needsRefresh(http.BaseResponse res) =>
+      res.statusCode == 401 ||
+      (res.statusCode == 403 && res is http.Response && res.body.contains('Requires one of'));
+
+  /// Store a fresh token pair the backend handed back after a role change
+  /// (`data.tokens` on POST /creator/page and /creator/apply — backend ADR 132).
+  Future<void> saveTokensFrom(Map<String, dynamic>? data) async {
+    final tokens = data?['tokens'];
+    if (tokens is! Map) return;
+    final access = tokens['accessToken'];
+    final refresh = tokens['refreshToken'];
+    if (access is String && refresh is String) {
+      await _storage.write(key: _kAccess, value: access);
+      await _storage.write(key: _kRefresh, value: refresh);
+    }
+  }
 
   Future<bool> _tryRefresh() {
     return _refreshInFlight ??=
