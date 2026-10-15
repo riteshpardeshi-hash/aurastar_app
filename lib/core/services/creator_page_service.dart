@@ -84,6 +84,9 @@ class CreatorPageService {
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create creator page';
     }
+    // The backend promoted this user to creator and sent tokens carrying the new role
+    // (backend ADR 132) — switch to them now so creator screens work immediately.
+    await _client.saveTokensFrom(res['data'] as Map<String, dynamic>?);
     invalidateCreatorCache();
     return res['data'] as Map<String, dynamic>;
   }
