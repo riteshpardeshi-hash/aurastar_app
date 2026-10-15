@@ -59,6 +59,8 @@ because it's three pages long isn't documented, it's buried.
 | 032 | [Leaderboard consent, recorded Terms acceptance, support email](032-leaderboard-consent-terms-acceptance-support-email.md) | Accepted |
 | 033 | [AI ad join requests are an application: pitch, links, demo video](033-ai-ad-join-application-form.md) | Accepted |
 | 034 | [Pick up a role change immediately](034-refresh-token-on-role-change.md) | Accepted |
+| 035 | [Retry-safe challenge creation](035-retry-safe-challenge-creation.md) | Accepted |
+| 036 | [Shipped builds talk only to production](036-production-only-api-url.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).
