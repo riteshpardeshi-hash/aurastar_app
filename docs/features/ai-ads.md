@@ -197,3 +197,12 @@ flowchart LR
 - **Evaluation is free** (`credits: 0`, `free: true`, `freeEvaluations`
   `{limit, used, left}`); the request sends no price. The workspace shows how
   many free evaluations are left. ([ADR 031](../decisions/031-ai-ads-free-evaluation.md))
+
+## Applying to a campaign (ADR 033, backend ADR 131)
+
+"Ask to join" opens the application sheet (`showJoinRequestSheet`): a pitch (why you're the right
+fit, up to 1,000 characters), links to your channels (Instagram, YouTube, X, Facebook, LinkedIn,
+website — at least one; prefilled from your last application or profile), an optional demo video
+(≤ 90 s, ≤ 100 MB; presign → PUT → key) and the ownership-terms checkbox. The brand sees all of it
+in their creator-profile view before approving or rejecting.
+

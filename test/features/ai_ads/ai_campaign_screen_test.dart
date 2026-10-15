@@ -6,9 +6,9 @@ import 'package:aura_app/features/ai_ads/screens/ai_campaign_screen.dart';
 
 import 'ai_ads_fake_backend.dart';
 
-// Joining a campaign: every way in (asking to join, accepting an invite) goes
-// through the ownership-terms dialog, and `acceptTerms` is only ever sent after
-// the creator agreed — the backend rejects a join without it (ADR 113).
+// Joining a campaign: asking to join goes through the application form (pitch, links, demo
+// video, terms — backend ADR 131); accepting an invite goes through the ownership-terms
+// dialog. `acceptTerms` is only ever sent after the creator agreed (ADR 113).
 void main() {
   late FakeAiAdsBackend backend;
 
@@ -25,9 +25,12 @@ void main() {
     expect(find.text('Ask to join'), findsOneWidget);
   });
 
-  testWidgets('ask to join → agree to the terms → request sent with acceptTerms', (tester) async {
+  testWidgets('ask to join opens the application form, prefilled with my links, and sends pitch + links + terms', (tester) async {
     var status = 'NONE';
-    backend.routes['GET $base'] = (_) => FakeAiAdsBackend.ok(campaignJson(myStatus: status == 'NONE' ? null : status));
+    backend.routes['GET $base'] = (_) => FakeAiAdsBackend.ok({
+      ...campaignJson(myStatus: status == 'NONE' ? null : status),
+      'suggestedLinks': {'instagram': 'https://instagram.com/me.films'},
+    });
     backend.routes['POST $base/request'] = (_) {
       status = 'REQUESTED';
       return FakeAiAdsBackend.ok({}, status: 201);
@@ -36,23 +39,40 @@ void main() {
 
     await tester.tap(find.text('Ask to join'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('belongs to the brand'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('ai-terms-accept')));
+    expect(find.text('https://instagram.com/me.films'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('ai-join-pitch')), 'I make warm family reels.');
+    await tester.enterText(find.byKey(const Key('ai-join-link-youtube')), '@mefilms');
+    await tester.ensureVisible(find.byKey(const Key('ai-join-terms')));
+    await tester.tap(find.byKey(const Key('ai-join-terms')));
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('ai-join-send')));
+    await tester.tap(find.byKey(const Key('ai-join-send')));
     await settle(tester);
 
-    expect(backend.calls('POST', '$base/request').single.body, {'acceptTerms': true});
+    expect(backend.calls('POST', '$base/request').single.body, {
+      'acceptTerms': true,
+      'message': 'I make warm family reels.',
+      'links': {'instagram': 'https://instagram.com/me.films', 'youtube': '@mefilms'},
+    });
     expect(find.text('Waiting for the brand to approve you.'), findsOneWidget);
   });
 
-  testWidgets('declining the terms sends nothing', (tester) async {
+  testWidgets('without a link, or without agreeing to the terms, nothing is sent', (tester) async {
     backend.on('GET $base', campaignJson(myStatus: null));
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
 
     await tester.tap(find.text('Ask to join'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Not now'));
-    await settle(tester);
+    await tester.ensureVisible(find.byKey(const Key('ai-join-send')));
+    await tester.tap(find.byKey(const Key('ai-join-send')));
+    await tester.pump();
+    expect(find.textContaining('Add at least one link'), findsOneWidget);
 
+    await tester.enterText(find.byKey(const Key('ai-join-link-instagram')), '@me');
+    await tester.ensureVisible(find.byKey(const Key('ai-join-send')));
+    await tester.tap(find.byKey(const Key('ai-join-send')));
+    await tester.pump();
+    expect(find.textContaining('agree to the campaign terms'), findsOneWidget);
     expect(backend.calls('POST', '$base/request'), isEmpty);
   });
 

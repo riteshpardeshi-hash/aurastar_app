@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../widgets/ai_dialogs.dart';
+import '../widgets/ai_join_request_sheet.dart';
 import '../widgets/ai_job_status_badge.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_brand_assets_row.dart';
@@ -67,9 +68,13 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
     }
   }
 
+  // Asking to join opens the application form (pitch, links, demo video, terms — backend ADR 131);
+  // the sheet sends the request itself.
   Future<void> _join(AiCampaign c) async {
-    if (!await showAiTermsDialog(context, campaignTitle: c.title)) return;
-    await _run(() => _service.requestToJoin(c.id), 'Request sent — the brand will review it.');
+    if (!await showJoinRequestSheet(context, campaign: c)) return;
+    if (!mounted) return;
+    AiUi.toast(context, 'Request sent — the brand will review it.');
+    await _load();
   }
 
   Future<void> _acceptInvite(AiCampaign c) async {

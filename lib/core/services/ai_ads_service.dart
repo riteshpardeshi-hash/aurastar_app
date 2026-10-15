@@ -12,6 +12,8 @@
 // Prices = what the AI providers charge + the platform's margin, synced by the
 // backend (backend ADR 116). Getting an ad judged is free, up to a number of
 // evaluations per creator.
+import 'dart:io';
+
 import 'api_client.dart';
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
@@ -42,6 +44,11 @@ class AiPriceChangedException extends AiAdsException {
 String _id(dynamic v) => v is Map ? '${v['_id'] ?? ''}' : '${v ?? ''}';
 int _int(dynamic v) => v is num ? v.toInt() : int.tryParse('$v') ?? 0;
 int? _intOrNull(dynamic v) => v == null ? null : _int(v);
+
+/// A JSON object of strings, with empty values dropped.
+Map<String, String> _stringMap(dynamic v) => v is Map
+    ? {for (final e in v.entries) if ('${e.value ?? ''}'.isNotEmpty) '${e.key}': '${e.value}'}
+    : const {};
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse('$v');
 List<String> _strings(dynamic v) => v is List ? v.map((e) => '$e').toList() : const [];
 List<Map<String, dynamic>> _maps(dynamic v) =>
@@ -262,6 +269,10 @@ class AiCampaign {
   final List<AiBrandAsset> assets;
   final AiParticipation? myParticipation;
 
+  /// Prefill for the join-request form: the links from the creator's last request, else
+  /// their profile links (backend ADR 131). Keys: instagram, youtube, x, facebook, linkedin, website.
+  final Map<String, String> suggestedLinks;
+
   const AiCampaign({
     required this.id,
     required this.title,
@@ -274,6 +285,7 @@ class AiCampaign {
     this.seatsLeft,
     this.creditsPerCreator,
     this.myParticipation,
+    this.suggestedLinks = const {},
   });
 
   factory AiCampaign.fromJson(Map<String, dynamic> j) => AiCampaign(
@@ -290,6 +302,7 @@ class AiCampaign {
     myParticipation: j['myParticipation'] is Map
         ? AiParticipation.fromJson(Map<String, dynamic>.from(j['myParticipation']))
         : null,
+    suggestedLinks: _stringMap(j['suggestedLinks']),
   );
 
   bool get isLive => status == 'LIVE';
@@ -863,10 +876,37 @@ class AiAdsService {
       AiCampaign.fromJson(Map<String, dynamic>.from(await _call('GET', _campaign(id)) as Map));
 
   /// Ask to join an open campaign. The creator has accepted the terms in the UI.
-  Future<void> requestToJoin(String id, {String? message}) => _call('POST', '${_campaign(id)}/request', body: {
+  /// Ask to join an open campaign (backend ADR 113 / 131): the pitch, the creator's links
+  /// (at least one) and, optionally, the key of a demo video uploaded via [presignDemoVideo].
+  Future<void> requestToJoin(
+    String id, {
+    String? message,
+    Map<String, String> links = const {},
+    String? demoVideoKey,
+  }) => _call('POST', '${_campaign(id)}/request', body: {
     'acceptTerms': true,
     if (message != null && message.trim().isNotEmpty) 'message': message.trim(),
+    'links': {for (final e in links.entries) if (e.value.trim().isNotEmpty) e.key: e.value.trim()},
+    if (demoVideoKey != null) 'demoVideoKey': demoVideoKey,
   });
+
+  /// Upload URL for a demo video to attach to a join request. PUT the file to `uploadUrl`
+  /// with the same content type, then send `key` as `demoVideoKey`.
+  Future<({String key, String uploadUrl, int maxSeconds})> presignDemoVideo(
+    String id, {
+    required String contentType,
+    required int sizeBytes,
+  }) async {
+    final data = Map<String, dynamic>.from(await _call(
+      'POST',
+      '${_campaign(id)}/request/demo-video/presign',
+      body: {'contentType': contentType, 'sizeBytes': sizeBytes},
+    ) as Map);
+    return (key: '${data['key']}', uploadUrl: '${data['uploadUrl']}', maxSeconds: _intOrNull(data['maxSeconds']) ?? 90);
+  }
+
+  Future<void> uploadDemoVideo(String uploadUrl, File file, String contentType, {void Function(double)? onProgress}) =>
+      _client.uploadToS3(uploadUrl, file, contentType: contentType, onProgress: onProgress);
 
   Future<void> respondToInvite(String participationId, {required bool accept}) =>
       _call('POST', '/creator/ai-campaign-invites/$participationId/respond', body: {

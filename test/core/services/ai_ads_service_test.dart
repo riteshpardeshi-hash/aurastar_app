@@ -63,10 +63,20 @@ void main() {
       expect(AiParticipation.fromJson({'_id': 'p', 'status': 'REQUESTED'}).canWork, isFalse);
     });
 
-    test('requestToJoin always sends acceptTerms and a trimmed message', () async {
+    test('requestToJoin always sends acceptTerms, a trimmed pitch and the non-empty links', () async {
       backend.on('POST $base/request', {});
-      await service.requestToJoin(campaignId, message: '  love the brand  ');
-      expect(backend.sent.single.body, {'acceptTerms': true, 'message': 'love the brand'});
+      await service.requestToJoin(
+        campaignId,
+        message: '  love the brand  ',
+        links: {'instagram': ' @me ', 'youtube': '', 'website': 'me.in'},
+        demoVideoKey: 'ai-ads/c1/applications/u1/demo.mp4',
+      );
+      expect(backend.sent.single.body, {
+        'acceptTerms': true,
+        'message': 'love the brand',
+        'links': {'instagram': '@me', 'website': 'me.in'},
+        'demoVideoKey': 'ai-ads/c1/applications/u1/demo.mp4',
+      });
     });
 
     test('accepting an invite accepts the terms; declining does not', () async {
