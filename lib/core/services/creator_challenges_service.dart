@@ -8,6 +8,13 @@ import 'api_client.dart';
 class CreatorChallengesService {
   final _client = ApiClient();
 
+  /// Creating a draft runs the AI content-safety check on the reference video before the
+  /// backend answers (`creatorChallenge.service.js#createDraft` → Gemini). In production that
+  /// takes 25–90 s, far past ApiClient's default 15 s CRUD timeout — so the app said
+  /// "Couldn't reach Aura's servers" while the challenge was in fact created, and creators
+  /// retried into duplicate drafts. Same pattern as `ChallengesService._scoringTimeout`.
+  static const createTimeout = Duration(minutes: 3);
+
   /// Throws with the backend's message (e.g. a 403 "Access denied. Requires
   /// one of: creator") instead of swallowing it, so callers can show the
   /// real reason instead of a silently-empty category list.
@@ -93,6 +100,7 @@ class CreatorChallengesService {
           'challengeInstructions': challengeInstructions,
       },
       auth: true,
+      timeout: createTimeout,
     );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create challenge draft';

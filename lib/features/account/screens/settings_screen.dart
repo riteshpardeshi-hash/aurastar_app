@@ -13,10 +13,8 @@ import 'notification_preferences_screen.dart';
 import 'blocked_accounts_screen.dart';
 import '../widgets/leaderboard_consent_tile.dart';
 import '../../auth/screens/phone_auth_screen.dart';
-import '../../challenges/widgets/aura_submitted_popup.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
-import '../../../core/config/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -148,39 +146,12 @@ class SettingsScreen extends StatelessWidget {
                 }
               },
             ),
-          const SizedBox(height: 24),
-          _section('Debug'),
-          _tile(
-            context,
-            icon: Icons.bug_report_outlined,
-            label: 'Preview: Video Rejected',
-            // Must be showDialog<String>, not <bool>: every dismiss control in
-            // AuraSubmittedPopup pops with the String 'continue'/'retry', and
-            // popping a DialogRoute<bool> with a String throws inside
-            // Route.didPop — which silently swallows the pop and leaves the
-            // dialog undismissable. The fixture also uses the real backend
-            // shape ('scored' + verdict 'INVALID') so submissionStatusFromApi
-            // resolves it to 'rejected' the same way production does; a bare
-            // 'status': 'rejected' is not a real enum value and now falls
-            // through to the ai_error ("Review Unavailable") screen instead.
-            onTap: () => showDialog<String>(
-              context: context,
-              barrierDismissible: false,
-              barrierColor: Colors.black.withValues(alpha: 0.85),
-              builder: (_) => const AuraSubmittedPopup(
-                submissionId: 'debug-preview',
-                challengeTitle: 'Dancing Girl',
-                challengeId: 'debug-preview',
-                initialResult: {
-                  'status': 'scored',
-                  'verdict': 'INVALID',
-                  'aiReason':
-                      'The submission does not contain any dance performance, and no human subject is visible in the frame. Additionally, the video is only 3 seconds long, failing to meet the minimum duration and movement requirements of the challenge.',
-                },
-              ),
-            ),
-          ),
-          if (kDebugMode || _crashTestEnabled)
+          // Developer-only (debug builds, or --dart-define=CRASH_TEST=true). Release builds have
+          // no Debug group: no API-server picker — the app only ever talks to
+          // ApiConfig.production (mobile ADR 036).
+          if (kDebugMode || _crashTestEnabled) ...[
+            const SizedBox(height: 24),
+            _section('Debug'),
             _tile(
               context,
               icon: Icons.warning_amber_rounded,
@@ -188,18 +159,7 @@ class SettingsScreen extends StatelessWidget {
               color: Colors.orangeAccent,
               onTap: CrashReporter.testCrash,
             ),
-          _tile(
-            context,
-            icon: Icons.dns_outlined,
-            label: 'API server',
-            subtitle: ApiConfig.isCompileTimePinned
-                ? '${ApiConfig.baseUrl}  (pinned via --dart-define)'
-                : ApiConfig.baseUrl,
-            onTap: () => showDialog<void>(
-              context: context,
-              builder: (_) => const _ApiServerDialog(),
-            ),
-          ),
+          ],
           const SizedBox(height: 24),
           _section('Danger Zone'),
           _tile(
@@ -790,115 +750,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
               style: TextStyle(
                   color: _canConfirm ? Colors.redAccent : Colors.white24,
                   fontWeight: FontWeight.bold)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Debug-only picker to point the app at a different backend (local dev server
-/// vs. production) without rebuilding — persists via [ApiConfig.setRuntimeOverride].
-class _ApiServerDialog extends StatefulWidget {
-  const _ApiServerDialog();
-
-  @override
-  State<_ApiServerDialog> createState() => _ApiServerDialogState();
-}
-
-class _ApiServerDialogState extends State<_ApiServerDialog> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: ApiConfig.baseUrl);
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _apply(String url) async {
-    setState(() => _saving = true);
-    // '' / the production constant → clear the override (fall back to prod).
-    await ApiConfig.setRuntimeOverride(
-        url.trim() == ApiConfig.production ? '' : url.trim());
-    if (!mounted) return;
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('API server → ${ApiConfig.baseUrl}\n'
-            'Restart the app and log in again (tokens are per-backend).'),
-        duration: const Duration(seconds: 5),
-      ),
-    );
-  }
-
-  Widget _preset(String label, String url) => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-          onPressed: _saving ? null : () => _ctrl.text = url,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            foregroundColor: const Color(0xFF7B2CBF),
-          ),
-          child: Text('$label  ·  $url',
-              style: const TextStyle(fontSize: 12), textAlign: TextAlign.left),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF12102A),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      title: const Text('API server', style: TextStyle(color: Colors.white)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (ApiConfig.isCompileTimePinned)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Pinned by --dart-define=API_BASE_URL — this picker is ignored '
-                'until that build flag is removed.',
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
-              ),
-            ),
-          TextField(
-            controller: _ctrl,
-            enabled: !_saving && !ApiConfig.isCompileTimePinned,
-            autocorrect: false,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: const InputDecoration(
-              hintText: 'http://host:port/api/v1',
-              hintStyle: TextStyle(color: Colors.white24),
-              enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          _preset('Production', ApiConfig.production),
-          _preset('Local · Android emulator', ApiConfig.localAndroidEmulator),
-          _preset('Local · simulator / adb reverse', ApiConfig.localLoopback),
-          const SizedBox(height: 6),
-          const Text(
-            'Physical device on the same wifi: use http://<your-machine-LAN-IP>:3000/api/v1',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
-        ),
-        TextButton(
-          onPressed: _saving || ApiConfig.isCompileTimePinned
-              ? null
-              : () => _apply(_ctrl.text),
-          child: const Text('Save',
-              style: TextStyle(
-                  color: Color(0xFF7B2CBF), fontWeight: FontWeight.w700)),
         ),
       ],
     );

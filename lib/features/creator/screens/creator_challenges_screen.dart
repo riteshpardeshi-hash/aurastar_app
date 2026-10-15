@@ -91,12 +91,20 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
     }
   }
 
+  /// Reloads the list AND the per-status chip counts. Reloading only the list
+  /// left the chips stale ("Draft (2)" above three drafts) after creating a
+  /// challenge or changing one on its status screen.
+  void _refresh() {
+    _load();
+    _loadStatusSummary();
+  }
+
   Future<void> _createNew() async {
     final created = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const CreatorChallengeDraftScreen()),
     );
-    if (created == true) _load();
+    if (created == true) _refresh();
   }
 
   Future<void> _openChallenge(String id) async {
@@ -104,7 +112,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
       context,
       MaterialPageRoute(builder: (_) => CreatorChallengeStatusScreen(challengeId: id)),
     );
-    _load();
+    _refresh();
   }
 
   void _snack(String msg) {
@@ -144,8 +152,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
     try {
       await _service.archive(id);
       _snack('Challenge archived');
-      _load();
-      _loadStatusSummary();
+      _refresh();
     } catch (e) {
       _snack(e.toString());
     }
@@ -155,8 +162,7 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
     try {
       await _service.duplicate(id);
       _snack('Duplicated as a new draft');
-      _load();
-      _loadStatusSummary();
+      _refresh();
     } catch (e) {
       _snack(e.toString());
     }

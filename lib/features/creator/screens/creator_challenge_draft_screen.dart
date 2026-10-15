@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/utils/error_message.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/services/challenge_create_flow.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -39,6 +40,25 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
   bool _loadingCategories = true;
   String? _categoriesError;
   bool _saving = false;
+  // What the save button says while saving — creating runs a slow AI check on the video.
+  String _savingLabel = '';
+  // Kept across Save taps so a retry after a lost answer reuses the uploaded video instead of
+  // creating a duplicate challenge (see ChallengeCreateFlow).
+  late final ChallengeCreateFlow _createFlow = ChallengeCreateFlow(
+    presign: () async {
+      final data = await CreatorChallengesService().getReferenceVideoUploadUrl();
+      return ChallengeVideoUpload(uploadUrl: data['uploadUrl'] as String, videoId: data['videoId'] as String);
+    },
+    upload: (url, video, onProgress) => ApiClient().uploadToS3(url, video, contentType: 'video/mp4', onProgress: onProgress),
+    create: (videoId) => CreatorChallengesService().createDraft(
+      title: _titleCtrl.text.trim(),
+      category: _categoryId!,
+      difficulty: _difficulty,
+      videoId: videoId,
+      description: _descCtrl.text.trim(),
+      challengeInstructions: _instructionsPayload(),
+    ),
+  );
 
   static const _difficulties = ['Easy', 'Medium', 'Hard'];
 
@@ -125,6 +145,7 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
     final picked = await ImagePicker().pickVideo(source: source);
     if (picked != null && mounted) {
       setState(() => _pickedVideo = File(picked.path));
+      _createFlow.reset();
     }
   }
 
@@ -161,39 +182,31 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
     // of a bare timeout that could be any of three calls.
     var step = 'save the challenge';
     try {
-      final service = CreatorChallengesService();
-      final timeLimit = int.tryParse(_timeLimitCtrl.text.trim());
-      final instructions = <String, dynamic>{
-        if (_whatToCopyCtrl.text.trim().isNotEmpty) 'whatToCopy': _whatToCopyCtrl.text.trim(),
-        if (timeLimit != null) 'timeLimit': timeLimit,
-        if (_scoringCriteria.isNotEmpty) 'scoringCriteria': _scoringCriteria,
-      };
-
       if (_isEdit) {
-        await service.updateDraft(
+        final instructions = _instructionsPayload();
+        await CreatorChallengesService().updateDraft(
           widget.existingDraft!['id'] as String,
           title: title,
           category: _categoryId,
           difficulty: _difficulty,
           description: _descCtrl.text.trim(),
-          challengeInstructions: instructions.isEmpty ? null : instructions,
+          challengeInstructions: instructions,
         );
       } else {
-        step = 'request the video upload';
-        final uploadData = await service.getReferenceVideoUploadUrl();
-        final uploadUrl = uploadData['uploadUrl'] as String;
-        final videoId = uploadData['videoId'] as String;
-        step = 'upload the reference video';
-        await ApiClient().uploadToS3(uploadUrl, _pickedVideo!, contentType: 'video/mp4');
-
-        step = 'create the challenge';
-        await service.createDraft(
-          title: title,
-          category: _categoryId!,
-          difficulty: _difficulty,
-          videoId: videoId,
-          description: _descCtrl.text.trim(),
-          challengeInstructions: instructions.isEmpty ? null : instructions,
+        await _createFlow.run(
+          _pickedVideo!,
+          onStep: (s) {
+            step = s;
+            if (!mounted) return;
+            setState(() => _savingLabel = switch (s) {
+              'request the video upload' => 'Preparing upload…',
+              'upload the reference video' => 'Uploading video… 0%',
+              _ => 'Checking your video… this can take a minute',
+            });
+          },
+          onUploadProgress: (p) {
+            if (mounted) setState(() => _savingLabel = 'Uploading video… ${(p * 100).round()}%');
+          },
         );
       }
 
@@ -202,10 +215,23 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() {
+        _saving = false;
+        _savingLabel = '';
+      });
       debugPrint('[CreateChallenge] failed to $step: $e');
       _snack("Couldn't $step. ${humanizeError(e)}");
     }
+  }
+
+  Map<String, dynamic>? _instructionsPayload() {
+    final timeLimit = int.tryParse(_timeLimitCtrl.text.trim());
+    final instructions = <String, dynamic>{
+      if (_whatToCopyCtrl.text.trim().isNotEmpty) 'whatToCopy': _whatToCopyCtrl.text.trim(),
+      if (timeLimit != null) 'timeLimit': timeLimit,
+      if (_scoringCriteria.isNotEmpty) 'scoringCriteria': _scoringCriteria,
+    };
+    return instructions.isEmpty ? null : instructions;
   }
 
   void _snack(String msg) {
@@ -464,9 +490,25 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                   textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
                 child: _saving
-                    ? const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)),
+                          if (_savingLabel.isNotEmpty) ...[
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Text(
+                                _savingLabel,
+                                key: const Key('create-challenge-progress'),
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ],
+                      )
                     : Text(_isEdit ? 'Save Changes' : 'Save Draft'),
               ),
             ),
