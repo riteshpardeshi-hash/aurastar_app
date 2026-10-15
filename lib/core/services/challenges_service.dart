@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'creator_challenges_service.dart';
 
 class ChallengesService {
   final _client = ApiClient();
@@ -149,6 +150,9 @@ class ChallengesService {
 
   Future<Map<String, dynamic>> presignChallenge() async {
     final res = await _client.post('/challenges/presign', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to get an upload URL');
+    }
     return res['data'] as Map<String, dynamic>;
   }
 
@@ -160,6 +164,9 @@ class ChallengesService {
     required String difficulty,
     required String videoId,
   }) async {
+    // POST /challenges runs the AI safety gate + rubric generation on the reference video
+    // before answering (backend challenges.service.js#create, ADR 039) — slower than the
+    // default 15 s, so the app reported "Submission failed" for a challenge that was created.
     final res = await _client.post('/challenges', {
       'title': title,
       'description': description,
@@ -168,7 +175,12 @@ class ChallengesService {
       'category': categoryId,
       'difficulty': difficulty,
       'videoId': videoId,
-    }, auth: true);
+    }, auth: true, timeout: CreatorChallengesService.createTimeout);
+    // The backend's message (e.g. 409 "This video has already been claimed.") — never a
+    // TypeError from reading data on an error envelope.
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to create the challenge');
+    }
     return res['data']['challenge'] as Map<String, dynamic>;
   }
 
