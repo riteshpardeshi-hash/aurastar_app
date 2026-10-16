@@ -62,6 +62,7 @@ because it's three pages long isn't documented, it's buried.
 | 035 | [Retry-safe challenge creation](035-retry-safe-challenge-creation.md) | Accepted |
 | 036 | [Shipped builds talk only to production](036-production-only-api-url.md) | Accepted |
 | 037 | [Every share sheet is anchored for iPad; photo-library purpose strings](037-ipad-share-sheet-origin.md) | Accepted |
+| 038 | [The iOS build uses Runner.entitlements (push + universal links)](038-ios-entitlements-linked.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).

@@ -54,6 +54,13 @@ Legend: [x] done · [ ] pending · (BE) blocked on backend · (ASC) App Store Co
 - [x] Add `NSPhotoLibraryAddUsageDescription`; make `NSPhotoLibraryUsageDescription` specific (ADR 037)
 - [ ] TestFlight on a physical iPad: every share button opens the sheet; Save Image asks for photo access
 
+## Push + universal links (2026-10-16 readiness review, not a review blocker)
+- [x] Link `Runner.entitlements` in the Runner build configs; add `aps-environment` (ADR 038)
+- [ ] Apple Developer portal: enable Push Notifications + Associated Domains on both App IDs before merging ADR 038
+- [ ] Firebase console: upload the APNs key
+- [ ] Redeploy Firebase Hosting so the live apple-app-site-association lists the app (it serves an empty one)
+- [ ] Fix `public/.well-known/assetlinks.json`: package `com.onadsgroup.auraapp` + the Play App Signing SHA-256 from Play Console
+
 ## Before resubmitting
 - [ ] `flutter test test/shared/widgets/app_bottom_nav_test.dart test/features/shell/main_shell_test.dart` passes
 - [ ] Live tap check of all four tabs from a drill-down screen (nav is touched by uncommitted changes)
