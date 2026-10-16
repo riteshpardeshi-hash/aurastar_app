@@ -75,7 +75,6 @@ class _OverviewTab extends StatefulWidget {
 
 class _OverviewTabState extends State<_OverviewTab> {
   static const _accent = Color(0xFF7B2CBF);
-  static const _card   = Color(0xFF100A20);
 
   bool _loading = true;
   Map<String, dynamic> _insights = {};
@@ -119,13 +118,7 @@ class _OverviewTabState extends State<_OverviewTab> {
             const Text('Overview',
                 style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.7,
+            _InsightStatGrid(
               children: [
                 _stat('Total Challenges', _int(summary, 'totalChallenges'), Icons.flash_on, Colors.amber),
                 _stat('Live Challenges', _int(summary, 'activeChallenges'), Icons.bolt_rounded, _accent),
@@ -167,34 +160,8 @@ class _OverviewTabState extends State<_OverviewTab> {
     );
   }
 
-  Widget _stat(String label, int value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 16, backgroundColor: color.withValues(alpha: 0.15), child: Icon(icon, color: color, size: 16)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$value', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
-                Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _stat(String label, int value, IconData icon, Color color) =>
+      _InsightStat(label: label, value: value, icon: icon, color: color);
 }
 
 class _PerformanceTab extends StatefulWidget {
@@ -343,13 +310,7 @@ class _PerformanceTabState extends State<_PerformanceTab> {
               child: Center(child: CircularProgressIndicator(color: _accent)),
             )
           else ...[
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 1.7,
+            _InsightStatGrid(
               children: [
                 _stat('Views', views, Icons.visibility_rounded, Colors.blue),
                 _stat('Participants', participants, Icons.groups_rounded, Colors.purple),
@@ -418,34 +379,8 @@ class _PerformanceTabState extends State<_PerformanceTab> {
     );
   }
 
-  Widget _stat(String label, int value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 16, backgroundColor: color.withValues(alpha: 0.15), child: Icon(icon, color: color, size: 16)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$value', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
-                Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _stat(String label, int value, IconData icon, Color color) =>
+      _InsightStat(label: label, value: value, icon: icon, color: color);
 }
 
 class _TopChallengesTab extends StatefulWidget {
@@ -672,6 +607,79 @@ class _TopChallengesTabState extends State<_TopChallengesTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One Insights stat card: icon, value and label, vertically centred. Shared
+/// by the Overview and Performance tabs so both look the same.
+class _InsightStat extends StatelessWidget {
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  const _InsightStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF100A20),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(radius: 16, backgroundColor: color.withValues(alpha: 0.15), child: Icon(icon, color: color, size: 16)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$value', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Two-column grid of [_InsightStat] cards with a fixed row height (grown with
+/// the user's text size). A width-based aspect ratio made the cards very tall
+/// on phones, leaving the value and label stranded at the top.
+class _InsightStatGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _InsightStatGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final extent = MediaQuery.textScalerOf(context).scale(44) + 28;
+    return GridView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        mainAxisExtent: extent,
+      ),
+      children: children,
     );
   }
 }

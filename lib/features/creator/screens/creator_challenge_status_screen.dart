@@ -22,7 +22,8 @@ class CreatorChallengeStatusScreen extends StatefulWidget {
   State<CreatorChallengeStatusScreen> createState() => _CreatorChallengeStatusScreenState();
 }
 
-class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScreen> {
+class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScreen>
+    with WidgetsBindingObserver {
   static const _bg     = Color(0xFF080810);
   static const _card   = Color(0xFF100A20);
   static const _accent = Color(0xFF7B2CBF);
@@ -42,11 +43,32 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() => _loading = true);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // The review happens elsewhere (admin panel), so the status shown here goes
+  // stale — it used to keep saying "In Review" after the admin approved until
+  // the screen was closed and reopened. Re-fetch quietly when the app returns
+  // to the foreground (e.g. from the approval notification), and on
+  // pull-to-refresh.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_loading && !_acting) {
+      _load(silent: true);
+    }
+  }
+
+  /// [silent] keeps the current content on screen while re-fetching instead
+  /// of swapping it for the full-screen spinner.
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _loading = true);
     final raw = await _service.fetchDraft(widget.challengeId);
     final challenge = raw != null ? normaliseCreatorChallenge(raw) : null;
     List<String> feedback = [];
@@ -253,7 +275,11 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           : _challenge == null
               ? const Center(
                   child: Text('Challenge not found', style: TextStyle(color: AppColors.textMuted)))
-              : _buildBody(_challenge!),
+              : RefreshIndicator(
+                  color: _accent,
+                  onRefresh: () => _load(silent: true),
+                  child: _buildBody(_challenge!),
+                ),
     );
   }
 
@@ -267,6 +293,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     final adminFeedback = c['adminFeedback'] as String?;
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,15 +648,22 @@ class _SubmissionRulesDialogState extends State<SubmissionRulesDialog> {
       backgroundColor: const Color(0xFF12102A),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: const Text('Submission Rules', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      // Scrollable: with 7+ rules the column outgrew the dialog, overflowing and
-      // pushing the acknowledge checkbox and Cancel/Submit off screen.
+      // Only the rules scroll: with 7+ rules the column outgrew the dialog. The
+      // acknowledge checkbox stays pinned under them, right above Cancel/Submit
+      // — inside the scroll view it started off screen, so Submit looked
+      // disabled for no visible reason.
       content: SizedBox(
         width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             ...widget.rules.map((r) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Row(
@@ -655,7 +689,11 @@ class _SubmissionRulesDialogState extends State<SubmissionRulesDialog> {
                     ],
                   ),
                 )),
-            const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 16),
             CheckboxListTile(
               value: _accepted,
               onChanged: (v) => setState(() => _accepted = v ?? false),
@@ -666,7 +704,6 @@ class _SubmissionRulesDialogState extends State<SubmissionRulesDialog> {
                   style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
             ),
           ],
-        ),
         ),
       ),
       actions: [

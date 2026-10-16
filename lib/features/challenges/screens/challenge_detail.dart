@@ -732,17 +732,21 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                       shape: const CircleBorder(),
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    key: const Key('challenge-safety-menu'),
-                    onPressed: _showSafetyMenu,
-                    icon: const Icon(Icons.flag_outlined,
-                        color: Colors.white, size: 20),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.12),
-                      shape: const CircleBorder(),
+                  // Report / block make no sense on your own challenge — the
+                  // menu would only offer "report yourself".
+                  if (!_isOwnChallenge) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: const Key('challenge-safety-menu'),
+                      onPressed: _showSafetyMenu,
+                      icon: const Icon(Icons.flag_outlined,
+                          color: Colors.white, size: 20),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.12),
+                        shape: const CircleBorder(),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

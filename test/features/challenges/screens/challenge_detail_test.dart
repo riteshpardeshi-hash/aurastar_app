@@ -279,6 +279,30 @@ void main() {
 
     expect(find.byKey(const Key('own-challenge-cta')), findsOneWidget);
     expect(find.text('Take this Challenge'), findsNothing);
+    expect(find.byKey(const Key('challenge-safety-menu')), findsNothing,
+        reason: 'no report/block menu on your own challenge');
+  });
+
+  testWidgets("someone else's challenge keeps the report/block menu",
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'Test Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-1',
+      ),
+    ));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byKey(const Key('challenge-safety-menu')), findsOneWidget);
   });
 
   // Regression coverage: the previous fix above only checked _isPaused
