@@ -150,12 +150,12 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// `type=all` never paginates (fixed 10-item preview per collection); a
-  /// specific type does, via `data['pagination']`.
+  /// specific type does, via the backend's `paginatedResponse` envelope
+  /// (top-level `page` / `totalPages`, items under `responses`).
   bool _moreAvailable(Map<String, dynamic> data, String type) {
     if (type == 'all') return false;
-    final pagination = data['pagination'] as Map<String, dynamic>?;
-    final page = (pagination?['page'] as num?)?.toInt() ?? 1;
-    final pages = (pagination?['pages'] as num?)?.toInt() ?? 1;
+    final page = (data['page'] as num?)?.toInt() ?? 1;
+    final pages = (data['totalPages'] as num?)?.toInt() ?? 1;
     return page < pages;
   }
 
@@ -179,7 +179,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Brand',
           title: m['displayName'] as String? ?? '',
-          subtitle: _SearchItem.handle(m['username']),
+          subtitle: _SearchItem.handle(m['username'] ?? m['profileName']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'brand',
         ));
@@ -190,7 +190,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Creator',
           title: m['displayName'] as String? ?? '',
-          subtitle: _SearchItem.handle(m['username']),
+          subtitle: _SearchItem.handle(m['username'] ?? m['profileName']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'creator',
         ));
@@ -207,7 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ));
       }
     } else {
-      for (final d in (data['docs'] as List? ?? [])) {
+      for (final d in (data['responses'] as List? ?? [])) {
         final m = d as Map<String, dynamic>;
         if (type == 'challenges') {
           items.add(_SearchItem(
@@ -223,7 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
             id: m['_id'] as String? ?? '',
             type: type == 'brands' ? 'Brand' : 'Creator',
             title: m['displayName'] as String? ?? '',
-            subtitle: _SearchItem.handle(m['username']),
+            subtitle: _SearchItem.handle(m['username'] ?? m['profileName']),
             imageUrl: m['avatar'] as String? ?? '',
             entityType: type == 'brands' ? 'brand' : 'creator',
           ));

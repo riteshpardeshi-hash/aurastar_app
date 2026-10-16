@@ -82,8 +82,14 @@ class CreatorAccountService {
     return list?.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
   }
 
-  Future<Map<String, dynamic>> fetchInsights() async {
-    final res = await _client.get('/creator/insights', auth: true);
+  /// `GET /creator/insights` → `{summary: {...}, growth: {...}}`. Without
+  /// [dateRange] every figure is all-time; with one (`today`, `7d`, `30d`,
+  /// `90d`, `year`) views / shares / participants / aura / reward are for that
+  /// window and `summary.newFollowers` is added (`summary.followers` stays the
+  /// running total).
+  Future<Map<String, dynamic>> fetchInsights({String? dateRange}) async {
+    final q = dateRange != null ? '?dateRange=$dateRange' : '';
+    final res = await _client.get('/creator/insights$q', auth: true);
     return (res['data'] as Map<String, dynamic>?) ?? {};
   }
 

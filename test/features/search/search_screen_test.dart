@@ -14,8 +14,9 @@ import 'package:aura_app/features/search/search_screen.dart';
 // Regression coverage: SearchScreen used to hard-cap at whatever the
 // backend's default page returns (10 items) and never sent `page`, even
 // though GET /search paginates single-type searches up to 100 items/page
-// (per the live OpenAPI spec — `type=all` never paginates, but a specific
-// type like `creators` does, via `data.pagination`). Scrolling to the
+// (`type=all` never paginates, but a specific type like `creators` does,
+// via the backend's `paginatedResponse` envelope: items under
+// `data.responses`, with top-level `page` / `totalPages`). Scrolling to the
 // bottom of a single-type result list now fetches and appends the next
 // page instead of silently stopping at 10.
 void main() {
@@ -53,8 +54,8 @@ void main() {
           jsonEncode({
             'status': 'success',
             'data': {
-              'docs': docs,
-              'pagination': {'page': page, 'pages': 2, 'total': 40, 'limit': 20},
+              'responses': docs,
+              'page': page, 'totalPages': 2, 'totalCount': 40, 'limit': 20,
             },
           }),
           200,
@@ -118,8 +119,8 @@ void main() {
             jsonEncode({
               'status': 'success',
               'data': {
-                'docs': [creator('stale-result')],
-                'pagination': {'page': 1, 'pages': 1, 'total': 1, 'limit': 20},
+                'responses': [creator('stale-result')],
+                'page': 1, 'totalPages': 1, 'totalCount': 1, 'limit': 20,
               },
             }),
             200,
@@ -129,8 +130,8 @@ void main() {
           jsonEncode({
             'status': 'success',
             'data': {
-              'docs': [creator('fresh-result')],
-              'pagination': {'page': 1, 'pages': 1, 'total': 1, 'limit': 20},
+              'responses': [creator('fresh-result')],
+              'page': 1, 'totalPages': 1, 'totalCount': 1, 'limit': 20,
             },
           }),
           200,
@@ -174,6 +175,49 @@ void main() {
     expect(find.text('Creator stale-result'), findsNothing,
         reason: "the older, slower query's response must not overwrite the "
             "newer query's results once it finally resolves");
+  });
+
+  testWidgets('the Brands filter lists brands from a type=brands search',
+      (tester) async {
+    final requestedTypes = <String?>[];
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/search')) {
+        requestedTypes.add(request.url.queryParameters['type']);
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'responses': [
+                {'_id': 'brand-1', 'displayName': 'Nova Brand', 'profileName': 'nova', 'role': 'brand'},
+              ],
+              'page': 1, 'totalPages': 1, 'totalCount': 1, 'limit': 20,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/search/recent')) {
+        return http.Response(
+            jsonEncode({'status': 'success', 'data': {'items': []}}), 200);
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(const MaterialApp(home: SearchScreen()));
+    await tester.pump();
+    await tester.tap(find.text('Brands'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'nova');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    expect(requestedTypes, contains('brands'));
+    expect(find.text('Nova Brand'), findsOneWidget,
+        reason: 'brands under data.responses must be listed');
+    expect(find.text('Brand · @nova'), findsOneWidget,
+        reason: 'the handle falls back to profileName');
   });
 
   testWidgets('tapping a Brand search result opens its brand profile',
