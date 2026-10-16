@@ -8,8 +8,6 @@ workflows:
       branch_patterns:
         - pattern: main
           include: true
-        - pattern: prototype
-          include: true
     environment:
       groups:
         - ios_credentials
@@ -76,6 +74,12 @@ workflows:
   ios-prototype:
     name: iOS TestFlight - Prototype
     max_build_duration: 60
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: prototype
+          include: true
     environment:
       groups:
         - ios_credentials
