@@ -16,6 +16,7 @@ import '../../auth/screens/phone_auth_screen.dart';
 import '../../auth/screens/city_interests_screen.dart';
 import '../../auth/screens/interests_screen.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../core/utils/share_origin.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -478,6 +479,7 @@ class SettingsScreen extends StatelessWidget {
   // the OS share sheet — same in-memory-bytes pattern as
   // MyAccountScreen._shareCard(), no temp file needed.
   Future<void> _exportMyData(BuildContext context) async {
+    final origin = shareOrigin(context);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -503,6 +505,7 @@ class SettingsScreen extends StatelessWidget {
             name: '${_exportFilenameSlug(profile)}_export_${_isoDate(DateTime.now())}.xlsx',
           ),
         ],
+        sharePositionOrigin: origin,
       );
     } catch (e) {
       if (context.mounted) {

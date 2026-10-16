@@ -10,6 +10,7 @@ import '../../../core/services/challenges_service.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'achievement_card.dart';
+import '../../../core/utils/share_origin.dart';
 
 class AuraSubmittedPopup extends StatefulWidget {
   final String submissionId;
@@ -188,6 +189,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   }
 
   Future<void> _shareCard() async {
+    final origin = shareOrigin(context);
     if (_isSharingCard) return;
     setState(() => _isSharingCard = true);
 
@@ -213,9 +215,10 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
           text: message,
+          sharePositionOrigin: origin,
         );
       } else {
-        await Share.share(message);
+        await Share.share(message, sharePositionOrigin: origin);
       }
     } catch (_) {
       // share cancelled or failed — ignore
@@ -225,6 +228,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
   }
 
   Future<void> _shareToInstagramStory() async {
+    final origin = shareOrigin(context);
     if (_isInstagramSharing) return;
     setState(() => _isInstagramSharing = true);
     try {
@@ -246,6 +250,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
             method: 'instagram_story');
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
+          sharePositionOrigin: origin,
         );
       }
     } catch (_) {

@@ -40,7 +40,9 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access to record audio in videos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app may need access to saved videos and media.</string>
+	<string>Aura Arena uses your photo library so you can pick a profile photo or choose a video for a challenge you create.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Aura Arena saves your score cards and achievement images to your photo library when you choose Save Image.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

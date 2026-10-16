@@ -30,6 +30,7 @@ import 'rewards_screen.dart';
 import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../../core/services/app_config_service.dart';
+import '../../../core/utils/share_origin.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -158,6 +159,7 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
   bool _sharing = false;
 
   Future<void> _shareCard() async {
+    final origin = shareOrigin(context);
     if (_sharing) return;
     setState(() => _sharing = true);
     try {
@@ -181,9 +183,10 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
           text: message,
+          sharePositionOrigin: origin,
         );
       } else {
-        await Share.share(message);
+        await Share.share(message, sharePositionOrigin: origin);
       }
     } catch (_) {
       // share cancelled or failed
@@ -1327,6 +1330,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               'Use my referral code: $referralCode\n\n'
               '👉 $link\n\n'
               'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
+              sharePositionOrigin: shareOrigin(context),
               );
             },
             child: Container(

@@ -15,6 +15,7 @@ import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../../core/services/auth_api_service.dart';
 import '../../ai_ads/screens/ai_campaigns_screen.dart';
 import '../../challenges/screens/challenge_detail.dart';
+import '../../../core/utils/share_origin.dart';
 
 class BrandProfileScreen extends StatefulWidget {
   final String brandId;
@@ -109,7 +110,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
 
     if (website.isNotEmpty) msg.write('\n\n👉 $website');
 
-    Share.share(msg.toString());
+    Share.share(msg.toString(), sharePositionOrigin: shareOrigin(context));
   }
 
   @override
