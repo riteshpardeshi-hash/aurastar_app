@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import 'analytics_service.dart';
 import 'screen_cache.dart';
+import 'creator_page_service.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._();
@@ -105,6 +106,7 @@ class ApiClient {
     // account to sign in never briefly sees the previous user's profile,
     // leaderboard position, etc.
     ScreenCache.clear();
+    CreatorPageService.invalidateCreatorCache();
     AnalyticsService().setUserId(null);
     return _storage.deleteAll();
   }
@@ -151,7 +153,7 @@ class ApiClient {
         .post(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(effectiveTimeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .post(_uri(path), headers: headers, body: jsonEncode(body))
@@ -172,7 +174,7 @@ class ApiClient {
         .patch(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && await _tryRefresh()) {
+    if (_needsRefresh(res) && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .patch(_uri(path), headers: headers, body: jsonEncode(body))
@@ -193,7 +195,7 @@ class ApiClient {
         .put(_uri(path), headers: headers, body: jsonEncode(body))
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && await _tryRefresh()) {
+    if (_needsRefresh(res) && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .put(_uri(path), headers: headers, body: jsonEncode(body))
@@ -209,7 +211,7 @@ class ApiClient {
     var res =
         await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res =
           await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
@@ -230,7 +232,7 @@ class ApiClient {
     var res =
         await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
     debugPrint('[API] ${res.statusCode} (${res.bodyBytes.length} bytes)');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res =
           await httpClient.get(_uri(path), headers: headers).timeout(_timeout);
@@ -247,6 +249,47 @@ class ApiClient {
     return res.bodyBytes;
   }
 
+  /// Like [get]/[post]/[patch] but also returns the HTTP status code, for
+  /// endpoints where the code itself matters (AI Ads: 402 = not enough
+  /// credits, 409 = the price changed / the campaign isn't live). Always
+  /// authenticated; retries once after a 401 refresh, same as the others.
+  Future<ApiResponse> send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration? timeout,
+  }) async {
+    Future<http.Response> once() async {
+      final headers = await _authedHeaders();
+      final uri = _uri(path);
+      final encoded = body == null ? null : jsonEncode(body);
+      final t = timeout ?? _timeout;
+      return switch (method) {
+        'GET' => httpClient.get(uri, headers: headers).timeout(t),
+        'POST' => httpClient.post(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'PATCH' => httpClient.patch(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'PUT' => httpClient.put(uri, headers: headers, body: encoded ?? '{}').timeout(t),
+        'DELETE' => httpClient.delete(uri, headers: headers).timeout(t),
+        _ => throw ArgumentError('Unsupported method $method'),
+      };
+    }
+
+    debugPrint('[API] $method ${ApiConfig.baseUrl}$path');
+    var res = await once();
+    debugPrint('[API] ${res.statusCode} ${res.body}');
+    if (_needsRefresh(res) && await _tryRefresh()) {
+      res = await once();
+      debugPrint('[API] Retry ${res.statusCode} ${res.body}');
+    }
+    Map<String, dynamic> decoded;
+    try {
+      decoded = res.body.isEmpty ? <String, dynamic>{} : jsonDecode(res.body) as Map<String, dynamic>;
+    } on FormatException {
+      decoded = {'status': 'error', 'message': 'Unexpected response (${res.statusCode})'};
+    }
+    return ApiResponse(res.statusCode, decoded);
+  }
+
   Future<Map<String, dynamic>> delete(String path, {bool auth = false}) async {
     var headers = auth ? await _authedHeaders() : _baseHeaders;
     debugPrint('[API] DELETE ${ApiConfig.baseUrl}$path');
@@ -254,7 +297,7 @@ class ApiClient {
         .delete(_uri(path), headers: headers)
         .timeout(_timeout);
     debugPrint('[API] ${res.statusCode} ${res.body}');
-    if (res.statusCode == 401 && auth && await _tryRefresh()) {
+    if (_needsRefresh(res) && auth && await _tryRefresh()) {
       headers = await _authedHeaders();
       res = await httpClient
           .delete(_uri(path), headers: headers)
@@ -334,6 +377,26 @@ class ApiClient {
   // the rest await its result and retry with the token it obtained.
   Future<bool>? _refreshInFlight;
 
+  /// 401 = the token expired. A 403 "Access denied. Requires one of: …" means the token's
+  /// *role* is out of date (e.g. the user was just promoted to creator — backend ADR 132): the
+  /// refresh endpoint re-reads the role, so one refresh + retry fixes it too.
+  static bool _needsRefresh(http.BaseResponse res) =>
+      res.statusCode == 401 ||
+      (res.statusCode == 403 && res is http.Response && res.body.contains('Requires one of'));
+
+  /// Store a fresh token pair the backend handed back after a role change
+  /// (`data.tokens` on POST /creator/page and /creator/apply — backend ADR 132).
+  Future<void> saveTokensFrom(Map<String, dynamic>? data) async {
+    final tokens = data?['tokens'];
+    if (tokens is! Map) return;
+    final access = tokens['accessToken'];
+    final refresh = tokens['refreshToken'];
+    if (access is String && refresh is String) {
+      await _storage.write(key: _kAccess, value: access);
+      await _storage.write(key: _kRefresh, value: refresh);
+    }
+  }
+
   Future<bool> _tryRefresh() {
     return _refreshInFlight ??=
         _doRefresh().whenComplete(() => _refreshInFlight = null);
@@ -380,4 +443,20 @@ class ApiClient {
     _sessionExpired.add(null);
     return false;
   }
+}
+
+/// A decoded JSON response together with its HTTP status ([ApiClient.send]).
+class ApiResponse {
+  final int statusCode;
+  final Map<String, dynamic> body;
+
+  const ApiResponse(this.statusCode, this.body);
+
+  bool get ok => statusCode >= 200 && statusCode < 300;
+
+  /// The backend's `data` payload.
+  dynamic get data => body['data'];
+
+  /// The backend's human-readable message (errors carry one).
+  String get message => (body['message'] as String?) ?? 'Request failed ($statusCode)';
 }

@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'creator_challenges_service.dart';
 
 class ChallengesService {
   final _client = ApiClient();
@@ -18,14 +19,16 @@ class ChallengesService {
       if (sourceType != null) 'sourceType': sourceType,
     };
     final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
-    final res = await _client.get('/challenges?$query');
+    // Sent signed-in (when there is a session) so the backend can leave out blocked accounts
+    // (ADR 117); signed out it's an anonymous read as before.
+    final res = await _client.get('/challenges?$query', auth: true);
     final data = res['data'] as Map<String, dynamic>;
     return (data['challenges'] as List).cast<Map<String, dynamic>>();
   }
 
   Future<Map<String, dynamic>?> fetchChallenge(String id) async {
     try {
-      final res = await _client.get('/challenges/$id');
+      final res = await _client.get('/challenges/$id', auth: true); // blocked owner → 404 (ADR 117)
       final data = res['data'] as Map<String, dynamic>;
       return data['challenge'] as Map<String, dynamic>;
     } catch (_) {
@@ -53,8 +56,10 @@ class ChallengesService {
     int limit = 20,
   }) async {
     try {
+      // The per-challenge leaderboard: signed in, so blocked players are left out (ADR 117).
       final res = await _client.get(
         '/challenges/$challengeId/submissions?limit=$limit',
+        auth: true,
       );
       final data = res['data'] as Map<String, dynamic>;
       return (data['submissions'] as List).cast<Map<String, dynamic>>();
@@ -145,6 +150,9 @@ class ChallengesService {
 
   Future<Map<String, dynamic>> presignChallenge() async {
     final res = await _client.post('/challenges/presign', {}, auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to get an upload URL');
+    }
     return res['data'] as Map<String, dynamic>;
   }
 
@@ -156,6 +164,9 @@ class ChallengesService {
     required String difficulty,
     required String videoId,
   }) async {
+    // POST /challenges runs the AI safety gate + rubric generation on the reference video
+    // before answering (backend challenges.service.js#create, ADR 039) — slower than the
+    // default 15 s, so the app reported "Submission failed" for a challenge that was created.
     final res = await _client.post('/challenges', {
       'title': title,
       'description': description,
@@ -164,7 +175,12 @@ class ChallengesService {
       'category': categoryId,
       'difficulty': difficulty,
       'videoId': videoId,
-    }, auth: true);
+    }, auth: true, timeout: CreatorChallengesService.createTimeout);
+    // The backend's message (e.g. 409 "This video has already been claimed.") — never a
+    // TypeError from reading data on an error envelope.
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to create the challenge');
+    }
     return res['data']['challenge'] as Map<String, dynamic>;
   }
 
@@ -373,6 +389,9 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'difficulty': c['difficulty'] as String? ?? '',
     'sourceType': c['sourceType'] as String? ?? '',
     'creatorId': _extractRefId(c['creatorId']),
+    // Who posted it and its reference video — for the report / block menu (ADR 117).
+    'creatorName': c['creatorId'] is Map ? ((c['creatorId'] as Map)['displayName'] as String? ?? '') : '',
+    'videoId': _extractRefId(c['videoId']),
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
     'isActive': c['isActive'] as bool? ?? true,

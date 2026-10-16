@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import '../../../core/services/api_client.dart';
 import '../../../core/services/auth_api_service.dart';
+import '../../../core/services/leaderboard_consent_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creator_page_service.dart';
 import '../../../core/services/rewards_service.dart';
@@ -28,6 +29,8 @@ import 'settings_screen.dart';
 import 'rewards_screen.dart';
 import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
+import '../../../core/services/app_config_service.dart';
+import '../../../core/utils/share_origin.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -156,6 +159,7 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
   bool _sharing = false;
 
   Future<void> _shareCard() async {
+    final origin = shareOrigin(context);
     if (_sharing) return;
     setState(() => _sharing = true);
     try {
@@ -179,9 +183,10 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
           text: message,
+          sharePositionOrigin: origin,
         );
       } else {
-        await Share.share(message);
+        await Share.share(message, sharePositionOrigin: origin);
       }
     } catch (_) {
       // share cancelled or failed
@@ -305,9 +310,22 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       _loading = false;
     }
     _loadAll();
+    _refreshCreatorStatus();
+    // The rewards list follows the coupons switch (ADR 119): coupons are left out while
+    // it's off, so re-fetch when it flips — otherwise the "N to claim" badge stays stale.
+    AppConfigService.instance.couponsEnabled.addListener(_reloadRewards);
+  }
+
+  void _refreshCreatorStatus() {
     CreatorPageService().isCreatorCached().then((v) {
-      if (mounted) setState(() => _isCreator = v);
+      if (mounted && v != _isCreator) setState(() => _isCreator = v);
     });
+  }
+
+  @override
+  void dispose() {
+    AppConfigService.instance.couponsEnabled.removeListener(_reloadRewards);
+    super.dispose();
   }
 
   void _cacheBundle() {
@@ -346,6 +364,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         RewardsService().fetchRewards(),
       ]);
       if (!mounted) return;
+      // Keeps Settings' leaderboard toggle in sync without another /profile call.
+      LeaderboardConsentService.instance
+          .updateFromProfile(results[0] as Map<String, dynamic>?);
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
@@ -643,16 +664,18 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // ── Become Creator banner (regular users only) ─────────────────────────────
   Widget _buildBecomeCreatorBanner(BuildContext context, int points) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         if (points < 500) {
           _showCreatorGateSheet(context, points);
           return;
         }
         AnalyticsService().logAuraCreatorJoinClick('profile_banner');
-        Navigator.push(
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
         );
+        // This tab stays mounted in the shell, so it won't re-init on return.
+        _refreshCreatorStatus();
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -1307,6 +1330,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               'Use my referral code: $referralCode\n\n'
               '👉 $link\n\n'
               'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
+              sharePositionOrigin: shareOrigin(context),
               );
             },
             child: Container(
@@ -1699,7 +1723,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ],
               _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
               // Streak card disabled for now — see _buildStreakCard.
-              _buildRewardsRow(context),
+              // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
+              ValueListenableBuilder<bool>(
+                valueListenable: AppConfigService.instance.couponsEnabled,
+                builder: (context, on, _) => on ? _buildRewardsRow(context) : const SizedBox.shrink(),
+              ),
               const SizedBox(height: 8),
               _buildReferralCard(context),
               _AchievementCardsSection(

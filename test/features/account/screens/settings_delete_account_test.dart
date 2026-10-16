@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:aura_app/core/services/leaderboard_consent_service.dart';
 import 'package:aura_app/features/account/screens/settings_screen.dart';
 
 // Regression coverage for the "Delete Account" tile added under Settings →
@@ -15,6 +16,12 @@ import 'package:aura_app/features/account/screens/settings_screen.dart';
 // new surface: the two-step confirm dialog's own logic — typed "DELETE" is
 // required, case-insensitively, before the destructive action is enabled.
 void main() {
+  // Settings' leaderboard toggle loads GET /profile when consent isn't known yet;
+  // seed it so the toggle doesn't leave a pending storage-read timer behind.
+  setUp(() => LeaderboardConsentService.instance
+      .updateFromProfile({'leaderboardConsent': {'status': 'granted'}}));
+  tearDown(LeaderboardConsentService.instance.reset);
+
   Future<void> openDialog(WidgetTester tester) async {
     // Settings is a long ListView — the default 800x600 test window is
     // narrower than a real phone and can misplace tap targets after

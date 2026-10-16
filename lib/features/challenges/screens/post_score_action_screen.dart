@@ -8,6 +8,7 @@ import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../shell/main_shell.dart';
+import '../../../core/utils/share_origin.dart';
 
 class PostScoreActionScreen extends StatefulWidget {
   final String submissionId;
@@ -72,6 +73,7 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
   // not-found). Re-add once that endpoint exists.
 
   Future<void> _shareToInstagramStory() async {
+    final origin = shareOrigin(context);
     if (_isInstagramSharing) return;
     setState(() => _isInstagramSharing = true);
     try {
@@ -90,11 +92,13 @@ class _PostScoreActionScreenState extends State<PostScoreActionScreen> {
       if (bytes != null) {
         await Share.shareXFiles(
           [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_story.png')],
+          sharePositionOrigin: origin,
         );
       } else {
         await Share.share(
           'I just scored on "${widget.challengeTitle}" on Aura Arena! 🌟\n'
           'https://aura-app-efae1.web.app/challenge/${widget.challengeId}',
+          sharePositionOrigin: origin,
         );
       }
     } catch (_) {

@@ -58,6 +58,7 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(home: PhoneAuthScreen()));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump();
     await tester.pump();
@@ -95,6 +96,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump();
     await tester.pump();
@@ -129,11 +131,49 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump();
     await tester.pump();
 
     expect(find.textContaining('Please wait 58 seconds'), findsOneWidget);
+  });
+
+  // Backend ADR 121: inside Message Central's own timer no new SMS goes out;
+  // the screen must say so rather than claim a fresh code was sent.
+  testWidgets('a reused code says so instead of "OTP sent successfully"',
+      (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/auth/otp/request')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'message':
+                  'We already sent a code to this number. Please enter that code.',
+              'validitySeconds': 200,
+              'resent': false,
+            },
+          }),
+          200,
+        );
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
+    ));
+    await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.text('Get OTP'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('We already sent a code'), findsOneWidget);
+    expect(find.text('OTP sent successfully'), findsNothing);
+    // Still moves on to code entry — the earlier code is valid.
+    expect(find.textContaining('Resend OTP in'), findsOneWidget);
   });
 
   testWidgets('resend is gated by a 60s countdown, then requests a new OTP',
@@ -157,6 +197,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump();
     await tester.pump();
@@ -236,6 +277,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill(code: '123456')),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump(); // requestOtp resolves
     await tester.pump(); // waitForCode resolves -> fills field, calls _verifyOtp
@@ -304,6 +346,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill(code: '482910')),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump(); // requestOtp resolves
     await tester.pump(); // waitForCode resolves -> fills field, calls _verifyOtp
@@ -371,6 +414,7 @@ void main() {
       home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
     ));
     await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
     await tester.tap(find.text('Get OTP'));
     await tester.pump(); // requestOtp resolves
     await tester.pump(); // OTP field appears
@@ -381,6 +425,92 @@ void main() {
 
     expect(find.byType(ProfileSetupScreen), findsOneWidget);
     expect(find.byType(Dashboard), findsNothing);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+  });
+
+  // App Store guideline 1.2: users must actively agree to the Terms (which
+  // state the no-tolerance policy) before registering or logging in. The old
+  // passive "by continuing you agree" line let Get OTP proceed with no
+  // agreement at all.
+  group('Terms agreement (guideline 1.2)', () {
+    testWidgets('Get OTP does nothing until the Terms box is ticked',
+        (tester) async {
+      var otpRequests = 0;
+      ApiClient.httpClient = MockClient((request) async {
+        if (request.url.path.endsWith('/auth/otp/request')) otpRequests++;
+        return http.Response(jsonEncode({'status': 'success', 'data': {}}), 200);
+      });
+
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(body: PhoneAuthScreen()),
+      ));
+      await tester.enterText(find.byType(TextField).first, '9876543210');
+
+      expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+
+      await tester.tap(find.text('Get OTP'));
+      await tester.pump();
+
+      expect(otpRequests, 0,
+          reason: 'no OTP may be requested before the user agrees');
+      expect(find.textContaining('agree to the Terms of Service'),
+          findsWidgets,
+          reason: 'the user is told why nothing happened');
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
+      await tester.tap(find.text('Get OTP'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(otpRequests, 1, reason: 'ticking the box unlocks Get OTP');
+    });
+
+    testWidgets('the checkbox text states the no-tolerance policy and links '
+        'the Terms and Privacy Policy', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: PhoneAuthScreen()));
+
+      final consent = find.byWidgetPredicate((w) =>
+          w is RichText &&
+          w.text.toPlainText().contains('no tolerance for objectionable '
+              'content or abusive users'));
+      expect(consent, findsOneWidget);
+      final text = tester.widget<RichText>(consent).text.toPlainText();
+      expect(text, contains('Terms of Service'));
+      expect(text, contains('Privacy Policy'));
+    });
+  });
+
+  // Regression: after requesting an OTP, editing the phone number left the
+  // screen on the verify step ("Get Started", resend cooldown), so a code could
+  // never be requested for the new number.
+  testWidgets('changing the phone number after sending an OTP resets to the '
+      'Get OTP step', (tester) async {
+    ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.endsWith('/auth/otp/request')) {
+        return http.Response(
+            jsonEncode({'status': 'success', 'data': {}}), 200);
+      }
+      return http.Response(jsonEncode({'status': 'fail'}), 404);
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: PhoneAuthScreen(smsAutofill: _FakeSmsAutofill()),
+    ));
+    await tester.enterText(find.byType(TextField).first, '9876543210');
+    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.text('Get OTP'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Get Started'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, '9876543211');
+    await tester.pump();
+
+    expect(find.text('Get Started'), findsNothing);
+    expect(find.text('Get OTP'), findsOneWidget);
+    expect(find.textContaining('Resend OTP'), findsNothing);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
   });

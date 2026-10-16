@@ -10,6 +10,8 @@ import 'creator_challenge_participants_screen.dart';
 import 'creator_challenge_preview_screen.dart';
 import 'creator_gate_history_screen.dart';
 import 'creator_gate_rules_screen.dart';
+import '../../video/widgets/video_player_widget.dart';
+import '../../../core/utils/share_origin.dart';
 
 class CreatorChallengeStatusScreen extends StatefulWidget {
   final String challengeId;
@@ -34,6 +36,8 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   List<String> _feedback = [];
   Map<String, dynamic>? _gateProgress;
   Map<String, dynamic> _stats = {};
+  String _videoUrl = '';
+  String? _thumbnailUrl;
 
   @override
   void initState() {
@@ -57,8 +61,13 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       gateProgress = await _gatesService.fetchGateProgress(widget.challengeId);
       stats = await _service.fetchStats(widget.challengeId);
     }
+    // The draft carries the raw stored key; only /preview returns playable
+    // presigned video/thumbnail URLs.
+    final preview = challenge != null ? await _service.fetchPreview(widget.challengeId) : null;
     if (!mounted) return;
     setState(() {
+      _videoUrl = preview?['videoUrl'] as String? ?? '';
+      _thumbnailUrl = preview?['thumbnailUrl'] as String?;
       _challenge = challenge;
       _feedback = feedback;
       _gateProgress = gateProgress;
@@ -68,6 +77,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   }
 
   Future<void> _shareChallenge() async {
+    final origin = shareOrigin(context);
     setState(() => _sharing = true);
     try {
       final link = await _gatesService.fetchShareLink(widget.challengeId);
@@ -78,7 +88,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       }
       final title = (_challenge?['title'] as String?) ?? 'this challenge';
       ChallengeAnalyticsService().recordShare(widget.challengeId);
-      await Share.share('Join "$title" on Aura Arena! $url');
+      await Share.share('Join "$title" on Aura Arena! $url', sharePositionOrigin: origin);
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -106,7 +116,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     if (!mounted) return;
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (_) => _RulesDialog(rules: rules),
+      builder: (_) => SubmissionRulesDialog(rules: rules),
     );
     if (accepted != true) return;
 
@@ -267,6 +277,21 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
             _gateProgressCard(),
             const SizedBox(height: 12),
             _statsCard(),
+          ],
+          if (_videoUrl.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: AspectRatio(
+                    aspectRatio: 9 / 16,
+                    child: VideoPlayerWidget(_videoUrl, thumbnailUrl: _thumbnailUrl),
+                  ),
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 20),
           Text(title.isEmpty ? 'Untitled Challenge' : title,
@@ -575,15 +600,15 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   }
 }
 
-class _RulesDialog extends StatefulWidget {
+class SubmissionRulesDialog extends StatefulWidget {
   final List<Map<String, dynamic>> rules;
-  const _RulesDialog({required this.rules});
+  const SubmissionRulesDialog({super.key, required this.rules});
 
   @override
-  State<_RulesDialog> createState() => _RulesDialogState();
+  State<SubmissionRulesDialog> createState() => _SubmissionRulesDialogState();
 }
 
-class _RulesDialogState extends State<_RulesDialog> {
+class _SubmissionRulesDialogState extends State<SubmissionRulesDialog> {
   static const _accent = Color(0xFF7B2CBF);
   bool _accepted = false;
 
@@ -593,9 +618,12 @@ class _RulesDialogState extends State<_RulesDialog> {
       backgroundColor: const Color(0xFF12102A),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       title: const Text('Submission Rules', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      // Scrollable: with 7+ rules the column outgrew the dialog, overflowing and
+      // pushing the acknowledge checkbox and Cancel/Submit off screen.
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -635,6 +663,7 @@ class _RulesDialogState extends State<_RulesDialog> {
                   style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
             ),
           ],
+        ),
         ),
       ),
       actions: [

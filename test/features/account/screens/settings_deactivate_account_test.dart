@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:aura_app/core/services/leaderboard_consent_service.dart';
 import 'package:aura_app/features/account/screens/settings_screen.dart';
 
 // Regression coverage for the "Deactivate Account" tile added under
@@ -14,6 +15,12 @@ import 'package:aura_app/features/account/screens/settings_screen.dart';
 // since this test bundle has no Firebase app initialized. This covers the
 // confirm dialog itself.
 void main() {
+  // Settings' leaderboard toggle loads GET /profile when consent isn't known yet;
+  // seed it so the toggle doesn't leave a pending storage-read timer behind.
+  setUp(() => LeaderboardConsentService.instance
+      .updateFromProfile({'leaderboardConsent': {'status': 'granted'}}));
+  tearDown(LeaderboardConsentService.instance.reset);
+
   Future<void> openDialog(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;

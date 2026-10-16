@@ -8,6 +8,13 @@ import 'api_client.dart';
 class CreatorChallengesService {
   final _client = ApiClient();
 
+  /// Creating a draft runs the AI content-safety check on the reference video before the
+  /// backend answers (`creatorChallenge.service.js#createDraft` → Gemini). In production that
+  /// takes 25–90 s, far past ApiClient's default 15 s CRUD timeout — so the app said
+  /// "Couldn't reach Aura's servers" while the challenge was in fact created, and creators
+  /// retried into duplicate drafts. Same pattern as `ChallengesService._scoringTimeout`.
+  static const createTimeout = Duration(minutes: 3);
+
   /// Throws with the backend's message (e.g. a 403 "Access denied. Requires
   /// one of: creator") instead of swallowing it, so callers can show the
   /// real reason instead of a silently-empty category list.
@@ -32,25 +39,31 @@ class CreatorChallengesService {
     }
   }
 
+  /// Throws on a failed request so the list screen can show the real reason
+  /// with a retry. Returning [] made a 403/network/shape failure render as
+  /// "No challenges yet", indistinguishable from a creator with none.
+  /// Per the spec this endpoint omits legacy challenges whose
+  /// `submissionStatus` is null (created before the draft pipeline).
   Future<List<Map<String, dynamic>>> fetchMyChallenges({
     String? submissionStatus,
     int page = 1,
     int limit = 20,
   }) async {
-    try {
-      final q = [
-        'page=$page',
-        'limit=$limit',
-        if (submissionStatus != null) 'submissionStatus=$submissionStatus',
-      ].join('&');
-      final res =
-          await _client.get('/creator/challenges/submissions?$q', auth: true);
-      if (res['status'] != 'success') return [];
-      final data = res['data'] as Map<String, dynamic>?;
-      return (data?['responses'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    } catch (_) {
-      return [];
+    final q = [
+      'page=$page',
+      'limit=$limit',
+      // The spec names this query param `status`, not `submissionStatus`.
+      if (submissionStatus != null) 'status=$submissionStatus',
+    ].join('&');
+    final res = await _client.get('/creator/challenges/submissions?$q', auth: true);
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] as String? ?? 'Failed to load challenges');
     }
+    final data = res['data'];
+    final list = data is Map ? (data['responses'] ?? data['data']) : data;
+    return list is List
+        ? list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : [];
   }
 
   /// `videoId` must be passed back to [createDraft] to claim this placeholder.
@@ -87,6 +100,7 @@ class CreatorChallengesService {
           'challengeInstructions': challengeInstructions,
       },
       auth: true,
+      timeout: createTimeout,
     );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create challenge draft';

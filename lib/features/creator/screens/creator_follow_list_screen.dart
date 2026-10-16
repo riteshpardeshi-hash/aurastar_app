@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_account_service.dart';
 import '../../../core/services/creators_service.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 
@@ -14,7 +15,11 @@ enum FollowListMode { followers, following }
 class CreatorFollowListScreen extends StatefulWidget {
   final FollowListMode mode;
 
-  const CreatorFollowListScreen({super.key, required this.mode});
+  /// The count the profile header showed. If the list comes back empty while
+  /// this is > 0, the screen says so instead of claiming there are none.
+  final int expectedCount;
+
+  const CreatorFollowListScreen({super.key, required this.mode, this.expectedCount = 0});
 
   @override
   State<CreatorFollowListScreen> createState() => _CreatorFollowListScreenState();
@@ -25,6 +30,7 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
   static const _accent = Color(0xFF7B2CBF);
 
   bool _loading = true;
+  String? _error;
   List<Map<String, dynamic>> _rows = [];
 
   bool get _isFollowers => widget.mode == FollowListMode.followers;
@@ -36,14 +42,32 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final service = CreatorAccountService();
-    final entries = _isFollowers
-        ? await service.fetchFollowers(limit: 50)
-        : await service.fetchFollowing(limit: 50);
+    final List<Map<String, dynamic>> entries;
+    try {
+      entries = _isFollowers
+          ? await service.fetchFollowers(limit: 50)
+          : await service.fetchFollowing(limit: 50);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = humanizeError(e);
+        _loading = false;
+      });
+      return;
+    }
 
     final enriched = await Future.wait(entries.map((e) async {
-      final id = (_isFollowers ? e['followerId'] : e['followingId']) as String? ?? '';
+      final id = ((_isFollowers ? e['followerId'] : e['followingId']) ??
+              e['userId'] ??
+              e['id'] ??
+              e['_id'])
+          ?.toString() ??
+          '';
       final type = e['followingType'] as String?;
       Map<String, dynamic>? creator;
       // Followers have no `followingType` (that's only set on the following
@@ -80,6 +104,41 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textMuted)),
+                      const SizedBox(height: 12),
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ],
+                  ),
+                )
+          : _rows.isEmpty && widget.expectedCount > 0
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "Couldn't load the list, though your profile shows ${widget.expectedCount}.",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
+                        const SizedBox(height: 8),
+                        Text('Server response — ${CreatorAccountService.lastFollowListShape}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
+                        const SizedBox(height: 12),
+                        TextButton(onPressed: _load, child: const Text('Retry')),
+                      ],
+                    ),
+                  ),
+                )
           : _rows.isEmpty
               ? Center(
                   child: Text(_isFollowers ? 'No followers yet' : 'Not following anyone yet',

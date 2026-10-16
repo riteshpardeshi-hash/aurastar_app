@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:aura_app/features/challenges/widgets/aura_submitted_popup.dart';
 
@@ -10,6 +11,10 @@ import 'package:aura_app/features/challenges/widgets/aura_submitted_popup.dart';
 // reachable path — see archived_videos_screen.dart's fix). The badge now
 // says the one thing that's actually true: no Auras were earned.
 void main() {
+  // AppBottomNav loads the profile on mount; mock secure storage so that read
+  // resolves at once instead of leaving ApiClient's 5s storage-timeout timer pending.
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
   testWidgets(
       'the non-best badge on the card view never claims archival/deletion',
       (tester) async {

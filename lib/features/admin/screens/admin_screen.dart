@@ -8,6 +8,7 @@ import 'creator_review_screen.dart';
 import 'challenge_submissions_screen.dart';
 import 'rubric_builder_screen.dart';
 import 'admin_offers_screen.dart';
+import '../../../core/services/app_config_service.dart';
 
 class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
@@ -52,7 +53,8 @@ class AdminScreen extends StatelessWidget {
           );
         }
         return DefaultTabController(
-          length: 6,
+          // No Offers (vouchers) tab while coupons are switched off (ADR 119).
+          length: AppConfigService.instance.couponsEnabled.value ? 6 : 5,
           child: Scaffold(
             backgroundColor: _bg,
             appBar: AppBar(
@@ -72,24 +74,24 @@ class AdminScreen extends StatelessWidget {
                     const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(text: 'Pending'),
-                  Tab(text: 'Requests'),
-                  Tab(text: 'Live'),
-                  Tab(text: 'Offers'),
-                  Tab(text: 'All Subs'),
-                  Tab(text: 'Reports'),
+                tabs: [
+                  const Tab(text: 'Pending'),
+                  const Tab(text: 'Requests'),
+                  const Tab(text: 'Live'),
+                  if (AppConfigService.instance.couponsEnabled.value) const Tab(text: 'Offers'),
+                  const Tab(text: 'All Subs'),
+                  const Tab(text: 'Reports'),
                 ],
               ),
             ),
-            body: const TabBarView(
+            body: TabBarView(
               children: [
-                _PendingSubmissionsTab(),
-                _CreatorRequestTab(),
-                _LiveChallengesTab(),
-                AdminOffersScreen(),
-                ChallengeSubmissionsTab(),
-                _ReportsTab(),
+                const _PendingSubmissionsTab(),
+                const _CreatorRequestTab(),
+                const _LiveChallengesTab(),
+                if (AppConfigService.instance.couponsEnabled.value) const AdminOffersScreen(),
+                const ChallengeSubmissionsTab(),
+                const _ReportsTab(),
               ],
             ),
           ),

@@ -54,6 +54,14 @@ because it's three pages long isn't documented, it's buried.
 | 027 | [Extend the front-camera mirror flag past the review screen to every own-video playback surface](027-mirror-own-video-playback-outside-review-too.md) | Accepted (amends 026) |
 | 028 | [Firebase Analytics on the new Firebase project](028-firebase-analytics-on-new-firebase-project.md) | Accepted |
 | 029 | [Firebase Crashlytics](029-firebase-crashlytics.md) | Accepted |
+| 030 | [AI Ads UI wired to the backend's campaign model (not a per-brand mock)](030-ai-ads-ui-wired-to-backend-campaigns.md) | Accepted (amended by 031) |
+| 031 | [AI Ads: evaluation is free, no credits kept back](031-ai-ads-free-evaluation.md) | Accepted (amends 030) |
+| 032 | [Leaderboard consent, recorded Terms acceptance, support email](032-leaderboard-consent-terms-acceptance-support-email.md) | Accepted |
+| 033 | [AI ad join requests are an application: pitch, links, demo video](033-ai-ad-join-application-form.md) | Accepted |
+| 034 | [Pick up a role change immediately](034-refresh-token-on-role-change.md) | Accepted |
+| 035 | [Retry-safe challenge creation](035-retry-safe-challenge-creation.md) | Accepted |
+| 036 | [Shipped builds talk only to production](036-production-only-api-url.md) | Accepted |
+| 037 | [Every share sheet is anchored for iPad; photo-library purpose strings](037-ipad-share-sheet-origin.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).

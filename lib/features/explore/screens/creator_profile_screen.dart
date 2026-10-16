@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../core/models/aura_tier.dart';
 import '../../../core/services/analytics_service.dart';
@@ -8,6 +10,8 @@ import '../../../core/services/screen_cache.dart';
 import '../../../core/services/video_prewarm_cache.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/follow_button.dart';
+import '../../../shared/widgets/account_unavailable.dart';
+import '../../../shared/widgets/safety_sheets.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../challenges/screens/challenge_detail.dart';
 import '../../video/widgets/video_player_widget.dart';
@@ -48,9 +52,13 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
   // count / follow state converge on that background refresh.
   String get _cacheKey => 'creator.${widget.creatorId}';
 
+  // Own profile: no report / block menu.
+  bool _isMe = true;
+
   // Own-profile views are excluded (the sheet's viewer != profile rule).
   Future<void> _logProfileView() async {
     final me = await ApiClient().userId;
+    if (mounted) setState(() => _isMe = me == widget.creatorId);
     if (me == widget.creatorId) return;
     AnalyticsService().logProfileView(widget.creatorId, widget.source);
   }
@@ -128,8 +136,9 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator(color: _accent))
             : _creator == null
-                ? const Center(
-                    child: Text('Creator not found', style: TextStyle(color: AppColors.textMuted)))
+                ? AccountUnavailable(
+                    backButton: _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
+                  )
                 : _buildBody(context, _creator!),
       ),
     );
@@ -153,6 +162,23 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             child: Row(
               children: [
                 _circleIconButton(Icons.arrow_back_ios_new_rounded, () => Navigator.pop(context)),
+                const Spacer(),
+                if (!_isMe)
+                  KeyedSubtree(
+                    key: const Key('profile-safety-menu'),
+                    child: _circleIconButton(
+                      Icons.more_horiz_rounded,
+                      () => showProfileSafetyMenu(
+                        context,
+                        userId: widget.creatorId,
+                        name: displayName,
+                        onBlocked: () {
+                          ScreenCache.invalidate(_cacheKey);
+                          if (mounted) Navigator.pop(context);
+                        },
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -271,6 +297,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
                 builder: (_) => _VideoViewerScreen(
                   videoUrl: v['videoUrl'] as String,
                   aiScore: v['aiScore'] as int?,
+                  // Report the video / block its creator (ADR 117) — not on your own videos.
+                  videoId: _isMe ? null : v['id'] as String?,
+                  ownerId: widget.creatorId,
+                  ownerName: (_creator?['displayName'] as String?) ?? 'this creator',
+                  onBlocked: () {
+                    ScreenCache.invalidate(_cacheKey);
+                    if (mounted) Navigator.pop(context); // the profile is gone for them now
+                  },
                 ),
               ),
             ),
@@ -437,10 +471,14 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
             child: FollowButton(
               targetUserId: widget.creatorId,
               initialIsFollowing: isFollowing,
-              // Follower count + isFollowing in the cached page are now stale —
-              // drop it so the next visit re-fetches instead of showing the
-              // pre-toggle numbers.
-              onChanged: (_) => ScreenCache.invalidate(_cacheKey),
+              // Server confirmed the toggle: move the on-screen count with it
+              // (it used to stay put until the page was reopened), and drop the
+              // cached page so the next visit re-fetches the real numbers.
+              onChanged: (nowFollowing) {
+                setState(() => _followerCount =
+                    math.max(0, _followerCount + (nowFollowing ? 1 : -1)));
+                ScreenCache.invalidate(_cacheKey);
+              },
             ),
           ),
         ],
@@ -511,8 +549,20 @@ class _CreatorProfileScreenState extends State<CreatorProfileScreen> {
 class _VideoViewerScreen extends StatelessWidget {
   final String videoUrl;
   final int? aiScore;
+  /// Set for someone else's video: shows a flag button to report it or block [ownerId].
+  final String? videoId;
+  final String? ownerId;
+  final String? ownerName;
+  final VoidCallback? onBlocked;
 
-  const _VideoViewerScreen({required this.videoUrl, this.aiScore});
+  const _VideoViewerScreen({
+    required this.videoUrl,
+    this.aiScore,
+    this.videoId,
+    this.ownerId,
+    this.ownerName,
+    this.onBlocked,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -523,6 +573,22 @@ class _VideoViewerScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          if (videoId != null && videoId!.isNotEmpty)
+            IconButton(
+              key: const Key('video-safety-menu'),
+              tooltip: 'Report or block',
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () => showVideoSafetyMenu(
+                context,
+                videoId: videoId!,
+                ownerId: ownerId,
+                ownerName: ownerName,
+                onBlocked: () {
+                  Navigator.pop(context); // close the viewer…
+                  onBlocked?.call(); // …and let the profile close itself
+                },
+              ),
+            ),
           if (aiScore != null)
             Padding(
               padding: const EdgeInsets.only(right: 16),

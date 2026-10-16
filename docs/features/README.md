@@ -24,3 +24,4 @@ change, the way the backend repo does.
 | Doc | What it covers |
 | --- | --- |
 | [engagement-reporting.md](engagement-reporting.md) | How the client reports challenge impressions, views (watch progress) and shares, and the definitions it holds up its end of. |
+| [ai-ads.md](ai-ads.md) | Creator side of brand AI ad campaigns: joining, quoted AI actions, scoring, final submission, rewards. |

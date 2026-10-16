@@ -6,7 +6,7 @@ import 'package:aura_app/features/challenges/widgets/coupons_sheet.dart';
 // The sheet is the moment-of-delight after a submission wins one or more
 // coupons (level-up + leaderboard offers). Each card branches on `sourcing`:
 // POOL shows a big copyable code and an optional "Open offer"; CATALOG shows
-// a primary "Shop now" and an optional code.
+// a primary "Redeem offer" and an optional code.
 void main() {
   Future<void> pumpWithSheet(
     WidgetTester tester,
@@ -48,10 +48,10 @@ void main() {
     expect(find.textContaining('Finished rank 6'), findsOneWidget);
     expect(find.text('K7Q2M9X4RT'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Open offer'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Shop now'), findsNothing);
+    expect(find.widgetWithText(ElevatedButton, 'Redeem offer'), findsNothing);
   });
 
-  testWidgets('CATALOG coupon: primary Shop now, code shown, merchant caption',
+  testWidgets('CATALOG coupon: primary Redeem offer, code shown, merchant caption',
       (tester) async {
     await pumpWithSheet(tester, [
       {
@@ -67,13 +67,13 @@ void main() {
       },
     ]);
 
-    expect(find.widgetWithText(ElevatedButton, 'Shop now'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Redeem offer'), findsOneWidget);
     expect(find.text('AJIO60'), findsOneWidget);
     expect(find.text('at AJIO'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Open offer'), findsNothing);
   });
 
-  testWidgets('CATALOG code-less deal: Shop now with no code chip',
+  testWidgets('CATALOG code-less deal: Redeem offer with no code chip',
       (tester) async {
     await pumpWithSheet(tester, [
       {
@@ -87,7 +87,7 @@ void main() {
       },
     ]);
 
-    expect(find.widgetWithText(ElevatedButton, 'Shop now'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Redeem offer'), findsOneWidget);
     expect(find.byIcon(Icons.copy_rounded), findsNothing);
   });
 
@@ -102,7 +102,7 @@ void main() {
       },
     ]);
 
-    expect(find.widgetWithText(ElevatedButton, 'Shop now'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Redeem offer'), findsOneWidget);
   });
 
   testWidgets('pluralises the header for more than one coupon', (tester) async {

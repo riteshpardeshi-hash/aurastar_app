@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../challenges/screens/challenge_detail.dart';
 import '../../core/services/api_client.dart';
@@ -8,6 +10,8 @@ import '../../core/services/screen_cache.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/challenge_leaderboard_row.dart';
+import '../../core/services/safety_service.dart';
+import '../../shared/widgets/safety_sheets.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 
 class LeaderboardScreen extends StatefulWidget {
@@ -96,14 +100,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
   }
 }
 
-// ── API-backed Board (Global) ────────────────────────────────────────────────
+// API-backed Board (Global)
 
 class _ApiBoard extends StatefulWidget {
   final Future<List<Map<String, dynamic>>> Function(int page, int limit)
   fetchPage;
-  // ScreenCache key for this board's first page, so re-opening the
-  // Leaderboard tab shows the last-known standings immediately instead of a
-  // spinner while it re-fetches.
+
   final String cacheKey;
   final String scoreSuffix;
   final String emptyTitle;
@@ -155,10 +157,15 @@ class _ApiBoardState extends State<_ApiBoard>
       _loadMore();
     }
     _scrollCtrl.addListener(_onScroll);
+    // Blocking / unblocking someone elsewhere reloads the board at once.
+    _safetySub = SafetyService.changes.listen((_) => _refresh());
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _scrollCtrl.dispose();
     super.dispose();
   }
@@ -256,12 +263,13 @@ class _ApiBoardState extends State<_ApiBoard>
         showCurrentUserFooter: !userInList && _myId != null,
         scrollController: _scrollCtrl,
         loadingMore: _loading,
+        onBlocked: _refresh,
       ),
     );
   }
 }
 
-// ── Challenge Board ────────────────────────────────────────────────────────────
+// Challenge Board
 
 class _ChallengeBoard extends StatefulWidget {
   const _ChallengeBoard();
@@ -284,10 +292,6 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   List<Map<String, dynamic>> _entries = [];
   bool _loadingBoard = false;
   String? _myId;
-  // GET /challenges/{id}/submissions populates the submitter's displayName
-  // only when they set one — see normaliseSubmissionEntry — so rows without
-  // one still fall back to "Player N". For the viewer's own row we skip that
-  // guesswork: GET /profile already has their real name/handle.
   String? _myUsername;
 
   @override
@@ -311,6 +315,18 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
       }
     });
     _loadChallenges();
+    // Blocking / unblocking someone elsewhere reloads the selected board at once.
+    _safetySub = SafetyService.changes.listen((_) {
+      if (_challengeId != null) _loadBoard();
+    });
+  }
+
+  StreamSubscription<void>? _safetySub;
+
+  @override
+  void dispose() {
+    _safetySub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadChallenges() async {
@@ -352,7 +368,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // ── Challenge chip picker ──────────────────────────────────────────────
+        // Challenge chip picker
         if (_loadingChallenges)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
@@ -400,7 +416,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
           ),
         const Divider(color: Colors.white10, height: 1),
 
-        // ── Scores for selected challenge ──────────────────────────────────────
+        // Scores for selected challenge
         if (_challengeId == null)
           Expanded(
             child: leaderboardEmptyState(
@@ -464,7 +480,12 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
                           isCurrentUser: isMe,
                           onTap: isMe
                               ? null
-                              : () => showPrivateProfileNotice(context),
+                              : () => showPlayerSafetyMenu(
+                                    context,
+                                    userId: e['id'] as String,
+                                    name: username,
+                                    onBlocked: _loadBoard,
+                                  ),
                         );
                       },
                     ),
@@ -519,7 +540,7 @@ class _ChallengeBoardState extends State<_ChallengeBoard> {
   }
 }
 
-// ── Entry List (Global + Friends, API-backed) ───────────────────────────────────
+// Entry List (Global + Friends, API-backed)
 
 class _EntryList extends StatelessWidget {
   final List<Map<String, dynamic>> entries;
@@ -528,6 +549,8 @@ class _EntryList extends StatelessWidget {
   final bool showCurrentUserFooter;
   final ScrollController? scrollController;
   final bool loadingMore;
+  /// Reloads the board after the viewer blocks someone on it.
+  final VoidCallback? onBlocked;
 
   const _EntryList({
     required this.entries,
@@ -536,6 +559,7 @@ class _EntryList extends StatelessWidget {
     this.showCurrentUserFooter = false,
     this.scrollController,
     this.loadingMore = false,
+    this.onBlocked,
   });
 
   @override
@@ -562,7 +586,12 @@ class _EntryList extends StatelessWidget {
             onTap:
                 e['id'] == currentId
                     ? null
-                    : () => showPrivateProfileNotice(context),
+                    : () => showPlayerSafetyMenu(
+                          context,
+                          userId: e['id'] as String,
+                          name: (e['username'] as String).isNotEmpty ? e['username'] as String : e['name'] as String,
+                          onBlocked: onBlocked,
+                        ),
           );
         }
 
@@ -651,7 +680,7 @@ class _EntryList extends StatelessWidget {
   }
 }
 
-// ── Player Row ─────────────────────────────────────────────────────────────────
+// Player Row
 
 class _PlayerRow extends StatelessWidget {
   final int rank;

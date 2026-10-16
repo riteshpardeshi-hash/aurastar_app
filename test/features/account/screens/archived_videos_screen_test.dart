@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:aura_app/features/account/screens/archived_videos_screen.dart';
 
@@ -13,6 +14,10 @@ import 'package:aura_app/features/account/screens/archived_videos_screen.dart';
 // the fix drops the broken query entirely and always resolves straight to
 // the empty state, which is the only state that's ever actually true.
 void main() {
+  // AppBottomNav loads the profile on mount; mock secure storage so that read
+  // resolves at once instead of leaving ApiClient's 5s storage-timeout timer pending.
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
   testWidgets(
       'resolves immediately to the empty state, never spins indefinitely',
       (tester) async {

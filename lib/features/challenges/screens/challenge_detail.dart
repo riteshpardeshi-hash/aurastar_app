@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/analytics_service.dart';
 import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
@@ -18,6 +17,8 @@ import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../../leaderboard/screens/challenge_leaderboard_screen.dart';
 import '../widgets/achievement_card.dart' show kChallengeBaseUrl;
 import 'camera_screen.dart';
+import '../../../core/services/safety_service.dart';
+import '../../../shared/widgets/safety_sheets.dart';
 
 class ChallengeDetail extends StatefulWidget {
   final String title;
@@ -82,6 +83,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // Owner info for the challenge_view event, filled by _fetchChallengeData.
   String? _ownerType;
   String? _ownerId;
+  // For the report / block menu (ADR 117).
+  String _ownerName = '';
+  String _videoId = '';
+  String? _myId;
 
   // Anchors the iOS/iPadOS share-sheet popover to the actual button instead
   // of an unset origin — see _share().
@@ -136,6 +141,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       final c = normaliseChallenge(data);
       _ownerType = c['sourceType'] as String?;
       _ownerId = c['creatorId'] as String?;
+      _ownerName = c['creatorName'] as String? ?? '';
+      _videoId = c['videoId'] as String? ?? '';
+      _myId = await ApiClient().userId;
+      if (!mounted) return;
       setState(() {
         // POST /challenges/{id}/submissions requires `status: approved`
         // (openapi.yaml) — anything else (pending/rejected/flagged) fails
@@ -238,6 +247,49 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         SnackBar(content: Text('Could not open the share sheet: $e')),
       );
     }
+  }
+
+  /// Report the challenge, report its video, or block whoever posted it (ADR 117).
+  /// Platform challenges have no blockable owner; your own challenge has nothing to block.
+  void _showSafetyMenu() {
+    final owner = _ownerId ?? '';
+    final canBlock = owner.isNotEmpty && owner != _myId && (_ownerType == 'Creator' || _ownerType == 'Brand');
+    final name = _ownerName.isNotEmpty ? _ownerName : (_ownerType == 'Brand' ? 'this brand' : 'this creator');
+    showSafetyMenu(context, [
+      SafetyMenuItem(
+        key: const Key('safety-report-challenge'),
+        icon: Icons.flag_outlined,
+        label: 'Report challenge',
+        onTap: _showReportSheet,
+      ),
+      if (_videoId.isNotEmpty && owner != _myId)
+        SafetyMenuItem(
+          key: const Key('safety-report-video'),
+          icon: Icons.videocam_off_outlined,
+          label: 'Report video',
+          onTap: () => showReportSheet(
+            context,
+            title: 'Report this video',
+            submit: (reason, details) => SafetyService().reportVideo(_videoId, reason, details: details),
+          ),
+        ),
+      if (canBlock)
+        SafetyMenuItem(
+          key: const Key('safety-block-owner'),
+          icon: Icons.block_rounded,
+          label: 'Block $name',
+          danger: true,
+          onTap: () => blockWithConfirm(
+            context,
+            userId: owner,
+            name: name,
+            isBrand: _ownerType == 'Brand',
+            onBlocked: () {
+              if (mounted) Navigator.pop(context);
+            },
+          ),
+        ),
+    ]);
   }
 
   void _showReportSheet() {
@@ -679,7 +731,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                   ),
                   const SizedBox(width: 4),
                   IconButton(
-                    onPressed: _showReportSheet,
+                    key: const Key('challenge-safety-menu'),
+                    onPressed: _showSafetyMenu,
                     icon: const Icon(Icons.flag_outlined,
                         color: Colors.white, size: 20),
                     style: IconButton.styleFrom(
@@ -1532,202 +1585,6 @@ class _ReportSheetState extends State<_ReportSheet> {
           const SizedBox(height: 18),
 
           // Submit
-          GestureDetector(
-            onTap: _selected == null || _submitting ? null : _submit,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: double.infinity,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: _selected == null
-                    ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)]),
-                color: _selected == null
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : null,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Center(
-                child: _submitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.2),
-                      )
-                    : Text(
-                        'Submit Report',
-                        style: TextStyle(
-                          color: _selected == null
-                              ? AppColors.textFaint
-                              : Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Submission report sheet ───────────────────────────────────────────────────
-
-class _SubmissionReportSheet extends StatefulWidget {
-  final String submissionId;
-  final String username;
-  const _SubmissionReportSheet(
-      {required this.submissionId, required this.username});
-
-  @override
-  State<_SubmissionReportSheet> createState() => _SubmissionReportSheetState();
-}
-
-class _SubmissionReportSheetState extends State<_SubmissionReportSheet> {
-  static const _accent = Color(0xFF7B2CBF);
-
-  static const _reasons = [
-    'Inappropriate content',
-    'Fake or staged submission',
-    'Spam or duplicate',
-    'Dangerous or unsafe activity',
-    'Other',
-  ];
-
-  String? _selected;
-  bool _submitting = false;
-
-  Future<void> _submit() async {
-    if (_selected == null || _submitting) return;
-    setState(() => _submitting = true);
-    try {
-      final uid = await ApiClient().userId;
-      await FirebaseFirestore.instance.collection('reports').add({
-        'submissionId': widget.submissionId,
-        'reportedUsername': widget.username,
-        'reportedBy': uid ?? 'anonymous',
-        'reason': _selected,
-        'type': 'submission',
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      if (!mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Report submitted. Thank you.'),
-          backgroundColor: Colors.green.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to submit. Please try again.')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0E0C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-          24, 16, 24, MediaQuery.of(context).padding.bottom + 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.flag_rounded,
-                    color: Colors.redAccent, size: 18),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Report submission',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800)),
-                  Text('@${widget.username}',
-                      style: const TextStyle(
-                          color: AppColors.textFaint, fontSize: 12)),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          ..._reasons.map((reason) {
-            final selected = _selected == reason;
-            return GestureDetector(
-              onTap: () => setState(() => _selected = reason),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 13),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? _accent.withValues(alpha: 0.15)
-                      : Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: selected
-                        ? _accent.withValues(alpha: 0.65)
-                        : Colors.white.withValues(alpha: 0.10),
-                    width: selected ? 1.5 : 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(reason,
-                          style: TextStyle(
-                            color: selected ? Colors.white : AppColors.textMuted,
-                            fontSize: 14,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          )),
-                    ),
-                    if (selected)
-                      const Icon(Icons.check_circle_rounded,
-                          color: _accent, size: 18),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 18),
           GestureDetector(
             onTap: _selected == null || _submitting ? null : _submit,
             child: AnimatedContainer(

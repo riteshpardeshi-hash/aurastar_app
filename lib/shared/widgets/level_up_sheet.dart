@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/models/aura_tier.dart';
 import '../theme/app_colors.dart';
+import '../../core/services/app_config_service.dart';
 
 class LevelUpSheet extends StatelessWidget {
   final int level;
@@ -88,18 +89,21 @@ class LevelUpSheet extends StatelessWidget {
             "You've reached ${tier.name}",
             style: TextStyle(color: tier.color, fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_open_rounded, color: tier.color, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                'Unlocked: ${tier.unlock}',
-                style: TextStyle(color: tier.color, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+          // A tier's unlock is a coupon perk — not shown while coupons are off (ADR 119).
+          if (AppConfigService.instance.couponsEnabled.value) ...[
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_open_rounded, color: tier.color, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  'Unlocked: ${tier.unlock}',
+                  style: TextStyle(color: tier.color, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,

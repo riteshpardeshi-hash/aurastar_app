@@ -8,10 +8,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'core/config/api_config.dart';
 import 'core/globals.dart';
 import 'core/services/analytics_service.dart';
 import 'core/services/api_client.dart';
+import 'core/services/app_config_service.dart';
 import 'core/services/auth_api_service.dart';
 import 'core/services/boot_gate.dart';
 import 'core/services/crash_reporter.dart';
@@ -39,9 +39,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Load any saved backend-URL override (Settings → Debug → API server) so the
-  // very first request already hits the right server. Bounded internally.
-  await ApiConfig.load();
   try {
     // Bounded: on some devices/networks this call has been observed to
     // never resolve rather than throw, which — since nothing after it runs
@@ -51,6 +48,7 @@ void main() async {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
         .timeout(const Duration(seconds: 10));
     await CrashReporter.init();
+    await AnalyticsService().applyNoAdsConsent();
   } catch (e) {
     debugPrint('Firebase init failed: $e');
   }
@@ -82,6 +80,7 @@ class _MyAppState extends State<MyApp> {
   // Future.wait of several authed calls) each firing onSessionExpired and
   // triggering a duplicate navigation reset.
   bool _handlingSessionExpiry = false;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void initState() {
@@ -93,6 +92,12 @@ class _MyAppState extends State<MyApp> {
     }, onError: (_) => AnalyticsService().logAppOpen('organic'));
     _sessionExpiredSub =
         ApiClient.onSessionExpired.listen((_) => _handleSessionExpired());
+    // Admin feature switches (coupons on/off, backend ADR 119): on launch, and again
+    // whenever the app comes back to the foreground.
+    AppConfigService.instance.init();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => AppConfigService.instance.refresh(),
+    );
   }
 
   // Two things handled here:
@@ -232,6 +237,7 @@ class _MyAppState extends State<MyApp> {
     _sessionExpiredSub?.cancel();
     _notificationTapSub?.cancel();
     _foregroundMsgSub?.cancel();
+    _lifecycle?.dispose();
     super.dispose();
   }
 
@@ -384,31 +390,15 @@ class _BootScreenState extends State<_BootScreen> {
     _setStep('loading local preferences');
     final prefs = await SharedPreferences.getInstance();
 
-    // Validate the stored session BEFORE showing the app. getProfile() makes
-    // an authed call that itself attempts a refresh on 401; if the session is
-    // genuinely dead the refresh fails and clearSession() wipes the tokens.
-    // Re-checking isLoggedIn() right after catches that and sends the user
-    // straight to Sign In — instead of MainShell, whose tabs would then all
-    // 401 and sit stuck on skeletons (looks like "the navbar doesn't work").
-    // A network failure leaves the tokens intact and returns null here, so an
-    // offline returning user still gets through (handled below as
-    // apiUnavailable). This probe runs even on the local `setup_complete`
-    // fast path — one boot round-trip is cheaper than a dead-session app.
     _setStep('validating session');
     final profile = await authService.getProfile();
     if (!await authService.isLoggedIn()) return const PhoneAuthScreen();
 
-    // Fast path: local flag set when this user finished onboarding.
+    // Fast path - local flag set when this user finished onboarding.
     final localComplete =
         uid != null && (prefs.getBool('setup_complete_$uid') ?? false);
     if (localComplete) return const MainShell();
 
-    // Consider setup complete if:
-    //   • API explicitly says so, OR
-    //   • Profile already has a username/name (completed before local flag
-    //     was introduced), OR
-    //   • API call failed entirely (don't block a logged-in returning user
-    //     due to a network hiccup).
     final apiSaysComplete = profile?['isProfileComplete'] as bool? ?? false;
     final hasUsername = (profile?['profileName'] as String? ??
             profile?['username'] as String? ??
@@ -448,7 +438,6 @@ class _BootScreenState extends State<_BootScreen> {
       }
       return (status: _VersionStatus.ok, storeUrl: storeUrl);
     } catch (_) {
-      // Non-fatal: version check failure must never block app launch.
       return (status: _VersionStatus.ok, storeUrl: '');
     }
   }

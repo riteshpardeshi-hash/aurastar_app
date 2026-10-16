@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
@@ -14,6 +16,7 @@ import '../../../shared/theme/app_text_styles.dart';
 import 'challenge_detail.dart';
 import 'category_challenges_screen.dart';
 import 'all_categories_screen.dart';
+import '../../../core/services/safety_service.dart';
 
 class AllGeneralChallengesScreen extends StatefulWidget {
   /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
@@ -80,10 +83,15 @@ class _AllGeneralChallengesScreenState
     _loadChallenges();
     _loadCategories();
     _scrollController.addListener(_onScroll);
+    // Blocking / unblocking someone elsewhere reloads this (kept-alive) screen at once.
+    _safetySub = SafetyService.changes.listen((_) => _loadChallenges());
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();

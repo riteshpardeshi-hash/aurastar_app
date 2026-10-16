@@ -9,6 +9,7 @@ import '../../../core/services/search_service.dart';
 import '../../shared/theme/app_text_styles.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
+import '../../core/services/safety_service.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -61,10 +62,17 @@ class _SearchScreenState extends State<SearchScreen> {
     _loadRecent();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+    // Blocking someone from a result (e.g. their profile) re-runs the search at once.
+    _safetySub = SafetyService.changes.listen((_) {
+      if (_query.trim().isNotEmpty) _search(_query);
+    });
   }
+
+  StreamSubscription<void>? _safetySub;
 
   @override
   void dispose() {
+    _safetySub?.cancel();
     _debounce?.cancel();
     _controller.dispose();
     _focus.dispose();
@@ -171,7 +179,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Brand',
           title: m['displayName'] as String? ?? '',
-          subtitle: '@${m['username'] ?? ''}',
+          subtitle: _SearchItem.handle(m['username']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'brand',
         ));
@@ -182,7 +190,7 @@ class _SearchScreenState extends State<SearchScreen> {
           id: m['_id'] as String? ?? '',
           type: 'Creator',
           title: m['displayName'] as String? ?? '',
-          subtitle: '@${m['username'] ?? ''}',
+          subtitle: _SearchItem.handle(m['username']),
           imageUrl: m['avatar'] as String? ?? '',
           entityType: 'creator',
         ));
@@ -215,7 +223,7 @@ class _SearchScreenState extends State<SearchScreen> {
             id: m['_id'] as String? ?? '',
             type: type == 'brands' ? 'Brand' : 'Creator',
             title: m['displayName'] as String? ?? '',
-            subtitle: '@${m['username'] ?? ''}',
+            subtitle: _SearchItem.handle(m['username']),
             imageUrl: m['avatar'] as String? ?? '',
             entityType: type == 'brands' ? 'brand' : 'creator',
           ));
@@ -502,6 +510,13 @@ class _SearchItem {
     required this.entityType,
   });
 
+  /// "@handle", or '' when the account has no username (brands often don't), so the row
+  /// shows just "Brand" instead of a dangling "Brand · @".
+  static String handle(Object? username) {
+    final u = username is String ? username.trim() : '';
+    return u.isEmpty ? '' : '@$u';
+  }
+
   static _SearchItem fromApiItem(Map<String, dynamic> item) {
     final type = item['type'] as String? ?? '';
     final entity = item['entity'] as Map<String, dynamic>? ?? {};
@@ -521,7 +536,7 @@ class _SearchItem {
           id: entity['_id'] as String? ?? '',
           type: type == 'brand' ? 'Brand' : 'Creator',
           title: entity['displayName'] as String? ?? '',
-          subtitle: '@${entity['username'] ?? ''}',
+          subtitle: _SearchItem.handle(entity['username']),
           imageUrl: entity['avatar'] as String? ?? '',
           entityType: type,
         );

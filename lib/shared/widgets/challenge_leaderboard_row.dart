@@ -195,28 +195,3 @@ Widget leaderboardEmptyState(String title, String subtitle, {Widget? action}) =>
         ],
       ),
     );
-
-void showPrivateProfileNotice(BuildContext context) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.lock_outline_rounded, color: Colors.white70, size: 16),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Player profiles are private — keep playing to climb the board!',
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFF1E1E2E),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-}

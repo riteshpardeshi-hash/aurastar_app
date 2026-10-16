@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/services/api_client.dart';
+import '../../../core/services/challenge_create_flow.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/utils/video_aspect_ratio.dart';
 import '../../../shared/theme/app_colors.dart';
 import 'creator_challenge_submitted_screen.dart';
@@ -60,6 +62,26 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
     super.dispose();
   }
 
+  // Kept across Submit taps so a retry after a lost answer reuses the uploaded video instead
+  // of creating a duplicate challenge (see ChallengeCreateFlow).
+  late final ChallengeCreateFlow _createFlow = ChallengeCreateFlow(
+    presign: () async {
+      final presign = await ChallengesService().presignChallenge();
+      return ChallengeVideoUpload(uploadUrl: presign['uploadUrl'] as String, videoId: presign['videoId'] as String);
+    },
+    upload: (url, video, onProgress) => ApiClient().uploadToS3(url, video, onProgress: onProgress),
+    create: (videoId) => ChallengesService().createChallenge(
+      title: widget.challengeTitle,
+      description: widget.description,
+      instructions: widget.instructionSteps.isNotEmpty
+          ? widget.instructionSteps.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')
+          : widget.instructions,
+      categoryId: widget.categoryId,
+      difficulty: widget.difficulty,
+      videoId: videoId,
+    ),
+  );
+
   Future<void> _submit() async {
     setState(() {
       _isUploading = true;
@@ -67,56 +89,32 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
     });
 
     try {
-      final service = ChallengesService();
-
-      // Step 1: get presigned S3 URL + claim an unclaimed Video placeholder
-      final presign = await service.presignChallenge();
-      final uploadUrl = presign['uploadUrl'] as String;
-      final videoId = presign['videoId'] as String;
-
-      // Step 2: upload to S3
-      await ApiClient().uploadToS3(
-        uploadUrl,
+      await _createFlow.run(
         File(widget.videoPath),
-        onProgress: (p) {
+        onStep: (step) {
+          // The create step runs the AI check on the video (can take a minute).
+          if (step == 'create the challenge' && mounted) setState(() => _progress = 0.95);
+        },
+        onUploadProgress: (p) {
           if (mounted) setState(() => _progress = p * 0.9);
         },
-      );
-
-      // Step 3: create challenge
-      if (mounted) setState(() => _progress = 0.95);
-      final instructions = widget.instructionSteps.isNotEmpty
-          ? widget.instructionSteps
-              .asMap()
-              .entries
-              .map((e) => '${e.key + 1}. ${e.value}')
-              .join('\n')
-          : widget.instructions;
-
-      await service.createChallenge(
-        title: widget.challengeTitle,
-        description: widget.description,
-        instructions: instructions,
-        categoryId: widget.categoryId,
-        difficulty: widget.difficulty,
-        videoId: videoId,
       );
 
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-            builder: (_) => const CreatorChallengeSubmittedScreen()),
+        MaterialPageRoute(builder: (_) => const CreatorChallengeSubmittedScreen()),
         (route) => false,
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploading = false;
         _progress = 0;
       });
+      debugPrint('[CreateChallenge] failed to ${_createFlow.step}: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Submission failed. Please try again.')),
+        SnackBar(content: Text("Couldn't ${_createFlow.step}. ${humanizeError(e)}")),
       );
     }
   }
@@ -151,7 +149,10 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
                       LinearProgressIndicator(value: _progress),
                       const SizedBox(height: 8),
                       Text(
-                        '${(_progress * 100).toInt()}%',
+                        _progress >= 0.95
+                            ? 'Checking your video… this can take a minute'
+                            : 'Uploading video… ${(_progress * 100).toInt()}%',
+                        key: const Key('create-challenge-progress'),
                         style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],

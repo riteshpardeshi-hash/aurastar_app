@@ -34,7 +34,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
   // brand user data keyed by creatorId
   final Map<String, Map<String, dynamic>> _brandCache = {};
 
-  // ── Brand data batch fetch ────────────────────────────────────────────────
+  // Brand data batch fetch
 
   Future<void> _loadBrandData(List<QueryDocumentSnapshot> docs) async {
     final newIds =
@@ -426,7 +426,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     );
   }
 
-  // ── Featured brands strip ─────────────────────────────────────────────────
+  // Featured brands strip
 
   Widget _buildFeaturedBrands() {
     if (_brandCache.isEmpty) return const SizedBox.shrink();
@@ -526,7 +526,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     );
   }
 
-  // ── All challenges grid ───────────────────────────────────────────────────
+  // All challenges grid
 
   Widget _buildAllChallenges(
     BuildContext context,
@@ -719,7 +719,7 @@ class _BrandChallengesScreenState extends State<BrandChallengesScreen> {
     );
   }
 
-  // ── Shared helpers ────────────────────────────────────────────────────────
+  // Shared helpers
 
   Widget _badge(String label, Color color) {
     return Container(
