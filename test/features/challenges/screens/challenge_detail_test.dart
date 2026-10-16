@@ -75,6 +75,33 @@ void main() {
         );
       }
       if (request.method == 'GET' &&
+          request.url.path.endsWith('/challenges/challenge-own')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenge': {
+                '_id': 'challenge-own',
+                'title': 'My Own Challenge',
+                'instructions': '',
+                'videoUrl': freshVideoUrl,
+                'thumbnailUrl': '',
+                'starsCount': 0,
+                'submissionsCount': 0,
+                'category': 'dance',
+                'difficulty': 'Easy',
+                'sourceType': 'Creator',
+                'creatorId': 'user-1', // the signed-in user
+                'isActive': true,
+                'status': 'approved',
+                'submissionStatus': 'LIVE',
+              },
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
           request.url.path.endsWith('/challenges/challenge-participated')) {
         return http.Response(
           jsonEncode({
@@ -225,6 +252,32 @@ void main() {
     }
 
     expect(find.text('Submissions Paused'), findsOneWidget);
+    expect(find.text('Take this Challenge'), findsNothing);
+  });
+
+  // A creator can't take part in their own challenge — the backend 403s the
+  // submission — so the owner must not be offered the take-challenge CTA.
+  testWidgets('the owner sees "Your challenge" instead of the take-challenge CTA',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(
+      home: ChallengeDetail(
+        title: 'My Own Challenge',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: 'challenge-own',
+      ),
+    ));
+
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byKey(const Key('own-challenge-cta')), findsOneWidget);
     expect(find.text('Take this Challenge'), findsNothing);
   });
 

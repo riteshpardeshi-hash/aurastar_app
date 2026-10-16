@@ -88,6 +88,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   String _videoId = '';
   String? _myId;
 
+  bool get _isOwnChallenge =>
+      (_ownerId ?? '').isNotEmpty && _ownerId == _myId;
+
   // Anchors the iOS/iPadOS share-sheet popover to the actual button instead
   // of an unset origin — see _share().
   final _shareButtonKey = GlobalKey();
@@ -908,6 +911,32 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     fontSize: 14,
                     fontWeight: FontWeight.w700)),
           ),
+        ),
+      );
+    }
+
+    // A creator / brand can't take part in their own challenge (the backend
+    // 403s the submission), so the owner gets a label instead of the CTA.
+    if (_isOwnChallenge) {
+      return Container(
+        key: const Key('own-challenge-cta'),
+        height: 58,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_rounded, color: Colors.white70, size: 20),
+            SizedBox(width: 8),
+            Text('Your challenge — you can\'t take part in it',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700)),
+          ],
         ),
       );
     }

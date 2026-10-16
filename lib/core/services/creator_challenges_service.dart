@@ -3,8 +3,10 @@ import 'api_client.dart';
 /// The `/creator/challenges/*` + `/creator/challenge/*` "Creator Challenges"
 /// draft → review → publish pipeline. A creator's challenge moves through
 /// `submissionStatus`: DRAFT → PENDING_REVIEW → (APPROVED | REJECTED |
-/// CHANGES_REQUESTED) → [publish] → LIVE. CHANGES_REQUESTED loops back to
-/// DRAFT-like editing, then `resubmit` returns it to PENDING_REVIEW.
+/// CHANGES_REQUESTED) → [publish] → LIVE. Only an APPROVED challenge can be
+/// published, and players only see / join it once it is LIVE. CHANGES_REQUESTED
+/// and REJECTED loop back to DRAFT-like editing, then `resubmit` returns it to
+/// PENDING_REVIEW.
 class CreatorChallengesService {
   final _client = ApiClient();
 
@@ -118,7 +120,8 @@ class CreatorChallengesService {
     }
   }
 
-  /// Only allowed while the draft is DRAFT or CHANGES_REQUESTED — 400s otherwise.
+  /// Only allowed while the draft is DRAFT, CHANGES_REQUESTED or REJECTED —
+  /// 400s otherwise.
   Future<Map<String, dynamic>> updateDraft(
     String id, {
     String? title,
@@ -202,7 +205,7 @@ class CreatorChallengesService {
     }
   }
 
-  /// CHANGES_REQUESTED → PENDING_REVIEW. Update the draft via [updateDraft]
+  /// CHANGES_REQUESTED / REJECTED → PENDING_REVIEW. Update the draft via [updateDraft]
   /// to address feedback before calling this.
   Future<Map<String, dynamic>> resubmit(String id) async {
     final res = await _client.post('/creator/challenges/$id/resubmit', {}, auth: true);
