@@ -8,6 +8,7 @@ import '../../../features/challenges/widgets/achievement_card.dart'
     show kChallengeBaseUrl;
 import '../../../shared/theme/app_colors.dart';
 import '../admin/creator_admin_screen.dart';
+import '../../../core/utils/share_origin.dart';
 
 class CreatorEntriesScreen extends StatefulWidget {
   final String challengeId;
@@ -241,6 +242,7 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                       '${widget.challengeTitle}\n\n'
                       'Can you beat it? 💪\n$link',
                       subject: widget.challengeTitle,
+                      sharePositionOrigin: shareOrigin(context),
                     );
                   }
                 },

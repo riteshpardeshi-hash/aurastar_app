@@ -49,6 +49,11 @@ Legend: [x] done · [ ] pending · (BE) blocked on backend · (ASC) App Store Co
 - [ ] Verify "Unrestricted Web Access": set to No if the app has no in-app browser
 - [ ] Reply to Apple that Parental Controls / Age Assurance were set to None
 
+## iPad crash risks found in the 2026-10-16 readiness review
+- [x] Anchor every share sheet for iPad (`sharePositionOrigin`), 13 calls (ADR 037)
+- [x] Add `NSPhotoLibraryAddUsageDescription`; make `NSPhotoLibraryUsageDescription` specific (ADR 037)
+- [ ] TestFlight on a physical iPad: every share button opens the sheet; Save Image asks for photo access
+
 ## Before resubmitting
 - [ ] `flutter test test/shared/widgets/app_bottom_nav_test.dart test/features/shell/main_shell_test.dart` passes
 - [ ] Live tap check of all four tabs from a drill-down screen (nav is touched by uncommitted changes)

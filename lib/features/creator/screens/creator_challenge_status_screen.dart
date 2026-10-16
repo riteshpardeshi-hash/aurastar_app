@@ -11,6 +11,7 @@ import 'creator_challenge_preview_screen.dart';
 import 'creator_gate_history_screen.dart';
 import 'creator_gate_rules_screen.dart';
 import '../../video/widgets/video_player_widget.dart';
+import '../../../core/utils/share_origin.dart';
 
 class CreatorChallengeStatusScreen extends StatefulWidget {
   final String challengeId;
@@ -76,6 +77,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   }
 
   Future<void> _shareChallenge() async {
+    final origin = shareOrigin(context);
     setState(() => _sharing = true);
     try {
       final link = await _gatesService.fetchShareLink(widget.challengeId);
@@ -86,7 +88,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       }
       final title = (_challenge?['title'] as String?) ?? 'this challenge';
       ChallengeAnalyticsService().recordShare(widget.challengeId);
-      await Share.share('Join "$title" on Aura Arena! $url');
+      await Share.share('Join "$title" on Aura Arena! $url', sharePositionOrigin: origin);
     } finally {
       if (mounted) setState(() => _sharing = false);
     }

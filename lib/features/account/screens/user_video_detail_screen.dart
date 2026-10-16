@@ -5,6 +5,7 @@ import '../../../core/services/videos_service.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../video/widgets/video_player_widget.dart';
+import '../../../core/utils/share_origin.dart';
 
 class UserVideoDetailScreen extends StatefulWidget {
   final int videoNumber;
@@ -46,6 +47,7 @@ class _UserVideoDetailScreenState extends State<UserVideoDetailScreen> {
     AnalyticsService().logShare(contentType: 'video');
     Share.share(
       'Check out my video submission on Aura! 🌟\n${widget.videoUrl}',
+      sharePositionOrigin: shareOrigin(context),
     );
   }
 
