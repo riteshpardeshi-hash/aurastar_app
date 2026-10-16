@@ -30,10 +30,11 @@ void main() {
       if (r.url.path.endsWith('/search')) {
         searches++;
         return ok({
-          'docs': [
-            if (!blocked) {'_id': 'u9', 'displayName': 'Riya', 'username': 'riya', 'avatar': ''},
+          // The backend's paginatedResponse envelope for a single-type search.
+          'responses': [
+            if (!blocked) {'_id': 'u9', 'displayName': 'Riya', 'profileName': 'riya', 'avatar': ''},
           ],
-          'pagination': {'page': 1, 'pages': 1, 'total': blocked ? 0 : 1, 'limit': 20},
+          'page': 1, 'totalPages': 1, 'totalCount': blocked ? 0 : 1, 'limit': 20,
         });
       }
       if (r.method == 'POST' && r.url.path.endsWith('/users/u9/block')) {

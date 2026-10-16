@@ -102,10 +102,10 @@ class _OverviewTabState extends State<_OverviewTab> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator(color: _accent));
     }
-    final overview = _insights['overview'] as Map<String, dynamic>?;
-    final rewards = _insights['rewards'] as Map<String, dynamic>?;
-    final gates = _insights['gates'] as Map<String, dynamic>?;
-    final topChallenges = (_insights['topChallenges'] as List? ?? []).cast<Map<String, dynamic>>();
+    // `GET /creator/insights` (all-time): counts under `summary`, gate
+    // progress under `growth`.
+    final summary = _insights['summary'] as Map<String, dynamic>?;
+    final growth = _insights['growth'] as Map<String, dynamic>?;
 
     return RefreshIndicator(
       color: _accent,
@@ -127,14 +127,14 @@ class _OverviewTabState extends State<_OverviewTab> {
               mainAxisSpacing: 10,
               childAspectRatio: 1.7,
               children: [
-                _stat('Total Challenges', _int(overview, 'totalChallenges'), Icons.flash_on, Colors.amber),
-                _stat('Live Challenges', _int(overview, 'liveChallenges'), Icons.bolt_rounded, _accent),
-                _stat('Approved', _int(overview, 'approvedChallenges'), Icons.check_circle_outline, Colors.green),
-                _stat('Followers', _int(overview, 'followers'), Icons.people_rounded, Colors.blue),
-                _stat('Following', _int(overview, 'following'), Icons.person_add_alt_1_rounded, Colors.teal),
-                _stat('Participants', _int(overview, 'totalParticipants'), Icons.groups_rounded, Colors.purple),
-                _stat('Total Stars', _int(overview, 'totalStars'), Icons.star_rounded, const Color(0xFFFFD700)),
-                _stat('Avg / Challenge', _int(overview, 'avgParticipantsPerChallenge'), Icons.analytics_rounded, Colors.orange),
+                _stat('Total Challenges', _int(summary, 'totalChallenges'), Icons.flash_on, Colors.amber),
+                _stat('Live Challenges', _int(summary, 'activeChallenges'), Icons.bolt_rounded, _accent),
+                _stat('Completed', _int(summary, 'completedChallenges'), Icons.check_circle_outline, Colors.green),
+                _stat('Followers', _int(summary, 'followers'), Icons.people_rounded, Colors.blue),
+                _stat('Views', _int(summary, 'totalViews'), Icons.visibility_rounded, Colors.teal),
+                _stat('Participants', _int(summary, 'participants'), Icons.groups_rounded, Colors.purple),
+                _stat('Likes', _int(summary, 'totalLikes'), Icons.favorite_rounded, Colors.pinkAccent),
+                _stat('Shares', _int(summary, 'shares'), Icons.share_rounded, Colors.orange),
               ],
             ),
 
@@ -144,35 +144,23 @@ class _OverviewTabState extends State<_OverviewTab> {
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: _stat('Total Reward Earned', _int(rewards, 'totalGateRewardEarned'), Icons.emoji_events_rounded, Colors.amber)),
+                Expanded(child: _stat('Total Reward Earned', _int(growth, 'totalGateRewardEarned'), Icons.emoji_events_rounded, Colors.amber)),
                 const SizedBox(width: 10),
-                Expanded(child: _stat('Aura from Gates', _int(rewards, 'auraFromGates'), Icons.auto_awesome, const Color(0xFFFFD700))),
+                Expanded(child: _stat('Completed Gates', _int(growth, 'totalCompletedGates'), Icons.verified_rounded, Colors.green)),
               ],
             ),
-            const SizedBox(height: 10),
-            _stat('Completed Gates', _int(rewards, 'totalCompletedGates'), Icons.verified_rounded, Colors.green),
 
             const SizedBox(height: 24),
             const Text('Gate Engagement',
                 style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
-            _stat('Participants Across Gates', _int(gates, 'totalParticipantsAcrossAllChallenges'), Icons.diversity_3_rounded, Colors.blue),
-            const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: _stat('Challenges w/ Gates', _int(gates, 'challengesWithGateProgress'), Icons.stairs_rounded, Colors.indigo)),
+                Expanded(child: _stat('Challenges w/ Gates', _int(growth, 'challengesWithGateProgress'), Icons.stairs_rounded, Colors.indigo)),
                 const SizedBox(width: 10),
-                Expanded(child: _stat('Fully Completed', _int(gates, 'completedAllGates'), Icons.done_all_rounded, Colors.green)),
+                Expanded(child: _stat('Fully Completed', _int(growth, 'completedAllGates'), Icons.done_all_rounded, Colors.green)),
               ],
             ),
-
-            if (topChallenges.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Text('Top Challenges',
-                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 10),
-              ...topChallenges.map(_topChallengeTile),
-            ],
           ],
         ),
       ),
@@ -202,49 +190,6 @@ class _OverviewTabState extends State<_OverviewTab> {
                     style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _topChallengeTile(Map<String, dynamic> c) {
-    final title = c['title'] as String? ?? 'Challenge';
-    final status = c['status'] as String? ?? '';
-    final participants = (c['participants'] as num?)?.toInt() ?? 0;
-    final stars = (c['stars'] as num?)?.toInt() ?? 0;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                if (status.isNotEmpty)
-                  Text(status, style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
-              ],
-            ),
-          ),
-          Row(
-            children: [
-              const Icon(Icons.groups_rounded, color: Colors.white38, size: 14),
-              const SizedBox(width: 3),
-              Text('$participants', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              const SizedBox(width: 10),
-              const Icon(Icons.star_rounded, color: Color(0xFFFFD700), size: 14),
-              const SizedBox(width: 3),
-              Text('$stars', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-            ],
           ),
         ],
       ),
@@ -356,7 +301,7 @@ class _PerformanceTabState extends State<_PerformanceTab> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final overview = await _service.fetchPerformanceOverview(dateRange: _dateRange);
+    final overview = await _service.fetchInsights(dateRange: _dateRange);
     final rawPoints = await _service.fetchInsightsChart(metric: _metric, dateRange: _dateRange);
     if (!mounted) return;
     setState(() {
@@ -372,11 +317,13 @@ class _PerformanceTabState extends State<_PerformanceTab> {
 
   @override
   Widget build(BuildContext context) {
-    final views = pickInt(_overview, ['totalViews', 'views']);
-    final participants = pickInt(_overview, ['totalParticipants', 'participants']);
-    final aura = pickInt(_overview, ['totalAura', 'auraEarned', 'totalAuraEarned']);
-    final followerGrowth = pickInt(_overview, ['followerGrowth', 'newFollowers']);
-    final challengeCount = pickInt(_overview, ['challengeCount', 'totalChallenges']);
+    // `GET /creator/insights?dateRange=` — figures for the selected window.
+    final summary = (_overview['summary'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final views = pickInt(summary, ['totalViews']);
+    final participants = pickInt(summary, ['participants']);
+    final reward = pickInt(summary, ['rewardEarned']);
+    final newFollowers = pickInt(summary, ['newFollowers']);
+    final liveChallenges = pickInt(summary, ['activeChallenges']);
 
     return RefreshIndicator(
       color: _accent,
@@ -406,14 +353,14 @@ class _PerformanceTabState extends State<_PerformanceTab> {
               children: [
                 _stat('Views', views, Icons.visibility_rounded, Colors.blue),
                 _stat('Participants', participants, Icons.groups_rounded, Colors.purple),
-                _stat('Aura Earned', aura, Icons.auto_awesome, const Color(0xFFFFD700)),
-                _stat('New Followers', followerGrowth, Icons.person_add_alt_1_rounded, Colors.teal),
+                _stat('Reward Earned', reward, Icons.emoji_events_rounded, Colors.amber),
+                _stat('New Followers', newFollowers, Icons.person_add_alt_1_rounded, Colors.teal),
               ],
             ),
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
-              child: _stat('Active Challenges', challengeCount, Icons.flash_on, Colors.amber),
+              child: _stat('Live Challenges', liveChallenges, Icons.flash_on, Colors.amber),
             ),
             const SizedBox(height: 24),
             Text(_metricLabelOf(_metric),
