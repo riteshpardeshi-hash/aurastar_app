@@ -362,7 +362,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       'APPROVED' => (Color(0xFF22C55E), 'Approved', auraScore != null
           ? 'Approved for $auraScore Aura Points. Publish to make it live for players.'
           : 'Approved. Publish to make it live for players.'),
-      'REJECTED' => (Color(0xFFEF4444), 'Rejected', 'This submission didn\'t meet the requirements. See feedback below.'),
+      'REJECTED' => (Color(0xFFEF4444), 'Rejected', 'This submission didn\'t meet the requirements. Address the feedback below, then resubmit.'),
       'CHANGES_REQUESTED' => (Color(0xFFF59E0B), 'Changes Requested', 'Address the feedback below, then resubmit.'),
       'ARCHIVED' => (Color(0xFF6B7280), 'Archived', 'This challenge has been archived.'),
       'LIVE' => (Color(0xFF7B2CBF), 'Live', 'Your challenge is live and visible to all players.'),
@@ -555,7 +555,10 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
               confirmBody: 'This returns the challenge to Draft so you can keep editing it. You\'ll need to resubmit when ready.'),
               outline: true),
         ];
+      // After a rejection the creator fixes the challenge and sends it back
+      // for review, exactly like after changes were requested.
       case 'CHANGES_REQUESTED':
+      case 'REJECTED':
         return [
           button('Resubmit for Review', _resubmit),
           button('Preview', _openPreview, outline: true),
