@@ -107,6 +107,30 @@ void main() {
     expectCard('Fully Completed', '1');
   });
 
+  // Regression: cards were sized by a width-based aspect ratio, so on a phone
+  // they were very tall with the value/label pinned to the top while the icon
+  // sat in the middle. The text block must be vertically centred on the icon
+  // and the card compact.
+  testWidgets('stat cards are compact with the text centred on the icon',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const MaterialApp(home: CreatorInsightsScreen()));
+    await settle(tester);
+
+    final label = find.text('Total Challenges');
+    final card = find.ancestor(of: label, matching: find.byType(Container)).first;
+    final icon = find.descendant(of: card, matching: find.byType(CircleAvatar));
+    final text = find.ancestor(of: label, matching: find.byType(Column)).first;
+
+    final cardBox = tester.getRect(card);
+    expect(cardBox.height, lessThan(90),
+        reason: 'card should hug its content, not stretch with the width');
+    expect((tester.getRect(text).center.dy - tester.getRect(icon).center.dy).abs(),
+        lessThan(2), reason: 'value + label must be vertically centred on the icon');
+  });
+
   testWidgets('Performance renders the selected date range\'s figures',
       (tester) async {
     // Tall enough that the lazily-built ListView lays out every card.
