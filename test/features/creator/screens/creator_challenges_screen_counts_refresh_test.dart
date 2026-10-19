@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/core/services/category_store.dart';
 import 'package:aura_app/features/creator/screens/creator_challenge_draft_screen.dart';
 import 'package:aura_app/features/creator/screens/creator_challenges_screen.dart';
 
@@ -16,6 +18,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    CategoryStore.instance.resetForTest();
+    // Categories are saved on the device now (CategoryStore).
+    SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({
       'api_access_token': 'creator-token',
       'api_refresh_token': 'refresh',
@@ -37,7 +42,7 @@ void main() {
             for (var i = 0; i < drafts; i++) {'_id': 'c$i', 'title': 'Draft $i', 'submissionStatus': 'DRAFT'},
           ],
         };
-      } else if (path.endsWith('/creator/challenge/categories')) {
+      } else if (path.endsWith('/categories')) {
         data = {'categories': <dynamic>[]};
       } else {
         data = {};

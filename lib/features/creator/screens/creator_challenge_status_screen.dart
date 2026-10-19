@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/models/creator_rubric.dart';
+import '../../../core/utils/error_message.dart';
 import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../core/services/creator_gates_service.dart';
@@ -8,6 +10,7 @@ import 'creator_challenge_analytics_screen.dart';
 import 'creator_challenge_draft_screen.dart';
 import 'creator_challenge_participants_screen.dart';
 import 'creator_challenge_preview_screen.dart';
+import 'creator_challenge_scoring_screen.dart';
 import 'creator_gate_history_screen.dart';
 import 'creator_gate_rules_screen.dart';
 import '../../video/widgets/video_player_widget.dart';
@@ -39,6 +42,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
   Map<String, dynamic> _stats = {};
   String _videoUrl = '';
   String? _thumbnailUrl;
+  CreatorRubric? _rubric;
 
   @override
   void initState() {
@@ -86,8 +90,17 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     // The draft carries the raw stored key; only /preview returns playable
     // presigned video/thumbnail URLs.
     final preview = challenge != null ? await _service.fetchPreview(widget.challengeId) : null;
+    CreatorRubric? rubric;
+    if (challenge != null) {
+      try {
+        rubric = await _service.fetchRubric(widget.challengeId);
+      } catch (_) {
+        rubric = null; // the card just shows "unavailable"; submit still works
+      }
+    }
     if (!mounted) return;
     setState(() {
+      _rubric = rubric;
       _videoUrl = preview?['videoUrl'] as String? ?? '';
       _thumbnailUrl = preview?['thumbnailUrl'] as String?;
       _challenge = challenge;
@@ -133,7 +146,53 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     if (updated == true) _load();
   }
 
+  Future<void> _openScoring() async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreatorChallengeScoringScreen(challengeId: widget.challengeId),
+      ),
+    );
+    if (mounted) _load(silent: true);
+  }
+
+  /// Scoring criteria are required to submit (backend ADR 137). Without them,
+  /// offer to set them up first; otherwise the backend generates them with AI.
+  /// Returns false when the creator chose to set them up instead.
+  Future<bool> _confirmScoringBeforeSubmit() async {
+    if (_rubric == null || _rubric!.hasRubric) return true;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF12102A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Scoring criteria needed',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+            'Players are scored with your challenge\'s scoring criteria. Set them up and review them now, or let AI create them as part of submitting.',
+            style: TextStyle(color: AppColors.textMuted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'ai'),
+            child: const Text('Let AI create them', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'setup'),
+            child: const Text('Set up now', style: TextStyle(color: _accent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (choice == 'setup') {
+      await _openScoring();
+      return false;
+    }
+    return choice == 'ai';
+  }
+
   Future<void> _submitForReview() async {
+    if (!await _confirmScoringBeforeSubmit()) return;
+    if (!mounted) return;
     final rules = await _service.fetchSubmissionRules();
     if (!mounted) return;
     final accepted = await showDialog<bool>(
@@ -150,13 +209,15 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _snack(e.toString());
+      _snack(humanizeError(e));
     } finally {
       if (mounted) setState(() => _acting = false);
     }
   }
 
   Future<void> _resubmit() async {
+    if (!await _confirmScoringBeforeSubmit()) return;
+    if (!mounted) return;
     setState(() => _acting = true);
     try {
       await _service.resubmit(widget.challengeId);
@@ -165,7 +226,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _snack(e.toString());
+      _snack(humanizeError(e));
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -204,7 +265,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _snack(e.toString());
+      _snack(humanizeError(e));
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -242,7 +303,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
       await _load();
     } catch (e) {
       if (!mounted) return;
-      _snack(e.toString());
+      _snack(humanizeError(e));
     } finally {
       if (mounted) setState(() => _acting = false);
     }
@@ -366,9 +427,64 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
                 )),
           ],
 
+          const SizedBox(height: 24),
+          _scoringCard(status),
+
           const SizedBox(height: 32),
           ..._buildActions(status),
         ],
+      ),
+    );
+  }
+
+  Widget _scoringCard(String status) {
+    final rubric = _rubric;
+    final has = rubric?.hasRubric == true;
+    final editable = rubric?.editable == true;
+    final summary = rubric == null
+        ? 'Couldn\'t load the scoring criteria.'
+        : has
+            ? '${rubric.categories.length} categories · ${rubric.source == 'manual' ? 'edited by you' : 'generated by AI'}'
+            : editable
+                ? 'Not set up yet — required before you submit.'
+                : 'Not set up yet.';
+    return InkWell(
+      key: const Key('scoring-card'),
+      onTap: rubric == null || _acting ? null : _openScoring,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: has || rubric == null
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFF59E0B).withValues(alpha: 0.45),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(has ? Icons.fact_check_outlined : Icons.rule_folder_outlined,
+                color: has ? const Color(0xFFD4A8FF) : const Color(0xFFF59E0B), size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Scoring Criteria',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(summary, style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+                ],
+              ),
+            ),
+            if (rubric != null)
+              Text(editable ? (has ? 'Edit' : 'Set up') : 'View',
+                  style: const TextStyle(color: Color(0xFFD4A8FF), fontWeight: FontWeight.w700, fontSize: 13)),
+          ],
+        ),
       ),
     );
   }

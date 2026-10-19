@@ -1,4 +1,6 @@
+import '../models/creator_rubric.dart';
 import 'api_client.dart';
+import 'category_store.dart';
 
 /// The `/creator/challenges/*` + `/creator/challenge/*` "Creator Challenges"
 /// draft → review → publish pipeline. A creator's challenge moves through
@@ -17,18 +19,15 @@ class CreatorChallengesService {
   /// retried into duplicate drafts. Same pattern as `ChallengesService._scoringTimeout`.
   static const createTimeout = Duration(minutes: 3);
 
-  /// Throws with the backend's message (e.g. a 403 "Access denied. Requires
-  /// one of: creator") instead of swallowing it, so callers can show the
-  /// real reason instead of a silently-empty category list.
-  Future<List<Map<String, dynamic>>> fetchCategories() async {
-    final res = await _client.get('/creator/challenge/categories', auth: true);
-    if (res['status'] != 'success') {
-      throw Exception(res['message'] as String? ?? 'Failed to load categories');
-    }
-    final data = res['data'];
-    final list = data is Map<String, dynamic> ? data['categories'] : data;
-    return list is List ? list.cast<Map<String, dynamic>>() : [];
-  }
+  /// Generating scoring criteria is the same kind of AI call on the reference
+  /// video (backend ADR 137). Submit, resubmit and publish can also run it when
+  /// the challenge has no criteria yet, so they get the same room.
+  static const aiTimeout = createTimeout;
+
+  /// Active categories (`{_id, name}`) from [CategoryStore]: saved on the
+  /// device, so the create screen opens instantly and works offline. Throws
+  /// [CategoryLoadException] only when nothing is saved and the network fails.
+  Future<List<Map<String, dynamic>>> fetchCategories() => CategoryStore.instance.load();
 
   Future<List<Map<String, dynamic>>> fetchSubmissionRules() async {
     try {
@@ -164,6 +163,7 @@ class CreatorChallengesService {
       '/creator/challenges/$id/submit',
       {'rulesAccepted': true},
       auth: true,
+      timeout: aiTimeout,
     );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to submit for review';
@@ -208,7 +208,8 @@ class CreatorChallengesService {
   /// CHANGES_REQUESTED / REJECTED → PENDING_REVIEW. Update the draft via [updateDraft]
   /// to address feedback before calling this.
   Future<Map<String, dynamic>> resubmit(String id) async {
-    final res = await _client.post('/creator/challenges/$id/resubmit', {}, auth: true);
+    final res = await _client.post('/creator/challenges/$id/resubmit', {},
+        auth: true, timeout: aiTimeout);
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to resubmit';
     }
@@ -221,11 +222,49 @@ class CreatorChallengesService {
       '/creator/challenges/$id/publish',
       {if (notifyFollowers != null) 'notifyFollowers': notifyFollowers},
       auth: true,
+      timeout: aiTimeout,
     );
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to publish challenge';
     }
     return res['data'] as Map<String, dynamic>;
+  }
+
+  // ─── Scoring criteria (backend ADR 137) ──────────────────────────────────
+
+  /// The challenge's scoring criteria; `hasRubric` is false until generated.
+  Future<CreatorRubric> fetchRubric(String id) async {
+    final res = await _client.get('/creator/challenges/$id/rubric', auth: true);
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Couldn\'t load the scoring criteria';
+    }
+    return CreatorRubric.fromJson(res['data'] as Map<String, dynamic>);
+  }
+
+  /// AI-generates (or regenerates, replacing any edits) the scoring criteria
+  /// from the reference video, the creator's hints and optional [notes].
+  Future<CreatorRubric> generateRubric(String id, {String? notes}) async {
+    final res = await _client.post(
+      '/creator/challenges/$id/rubric/generate',
+      {if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim()},
+      auth: true,
+      timeout: aiTimeout,
+    );
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Couldn\'t generate the scoring criteria';
+    }
+    return CreatorRubric.fromJson(res['data'] as Map<String, dynamic>);
+  }
+
+  /// Saves the creator's edited category list.
+  Future<CreatorRubric> updateRubric(String id, List<RubricCategory> categories) async {
+    final res = await _client.put('/creator/challenges/$id/rubric', {
+      'categories': categories.map((c) => c.toJson()).toList(),
+    });
+    if (res['status'] != 'success') {
+      throw res['message'] as String? ?? 'Couldn\'t save the scoring criteria';
+    }
+    return CreatorRubric.fromJson(res['data'] as Map<String, dynamic>);
   }
 
   /// Only available once a challenge is APPROVED or LIVE.

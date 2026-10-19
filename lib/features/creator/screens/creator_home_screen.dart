@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'create_challenge.dart';
+import '../open_create_challenge.dart';
 import '../../explore/screens/creator_profile_screen.dart';
 import '../admin/creator_admin_screen.dart';
 import '../admin/brand_participants_screen.dart';
@@ -280,8 +280,7 @@ class CreatorHomeScreen extends StatelessWidget {
               label: 'Create Challenge',
               icon: Icons.add_circle_outline,
               gradient: const [Color(0xFF7B2CBF), Color(0xFF9B4DFF)],
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const CreateChallenge())),
+              onTap: () => openCreateChallenge(context),
             ),
           ),
           const SizedBox(width: 10),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
-import 'create_challenge.dart';
+import '../open_create_challenge.dart';
 import 'creator_challenges_screen.dart';
 import 'creator_insights_screen.dart';
 import 'creator_settings_screen.dart';
@@ -31,13 +31,8 @@ class CreatorActivityScreen extends StatelessWidget {
                   _ActivityRow(
                     icon: Icons.add_rounded,
                     label: 'Create challenge',
-                    onTap:
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const CreateChallenge(),
-                          ),
-                        ),
+                    // Same screen as My Challenges → New.
+                    onTap: () => openCreateChallenge(context),
                   ),
                   _ActivityRow(
                     icon: Icons.track_changes_rounded,
