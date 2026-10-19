@@ -381,6 +381,7 @@ class _BootScreenState extends State<_BootScreen> {
   Future<Widget> _computeDestination() async {
     final authService = AuthApiService();
     _setStep('checking login status');
+    await ApiClient().clearStaleSessionOnFreshInstall();
     final loggedIn = await authService.isLoggedIn();
     if (!loggedIn) return const PhoneAuthScreen();
 

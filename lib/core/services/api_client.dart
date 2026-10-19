@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import 'analytics_service.dart';
 import 'screen_cache.dart';
@@ -109,6 +110,24 @@ class ApiClient {
     CreatorPageService.invalidateCreatorCache();
     AnalyticsService().setUserId(null);
     return _storage.deleteAll();
+  }
+
+  static const _kInstallMarker = 'install_marker_v1';
+
+  // iOS Keychain items survive an app uninstall (SharedPreferences does not),
+  // so a reinstalled build used to find the previous install's tokens and
+  // skip login. SharedPreferences is wiped with the app, so a missing marker
+  // means this is a fresh install: drop any leftover secure-storage session
+  // before the boot screen checks for one. Must run before isLoggedIn().
+  Future<void> clearStaleSessionOnFreshInstall() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_kInstallMarker) ?? false) return;
+      await _storage.deleteAll().timeout(storageTimeout);
+      await prefs.setBool(_kInstallMarker, true);
+    } catch (_) {
+      // Best effort; never block boot on storage trouble.
+    }
   }
 
   Future<bool> isLoggedIn() async {

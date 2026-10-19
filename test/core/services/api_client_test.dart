@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
 
@@ -212,6 +213,38 @@ void main() {
         reason: 'a response slower than the 15s default would still be '
             'legitimate under a longer per-call timeout, and must not be '
             'misreported as a network failure');
+  });
+
+  // Regression coverage: iOS Keychain items survive an uninstall, so a fresh
+  // install used to find the previous install's tokens and skip the login
+  // screen. SharedPreferences is wiped with the app, so a missing install
+  // marker means "fresh install" and leftover secure-storage tokens must go.
+  group('fresh install', () {
+    test('drops leftover secure-storage tokens when no install marker exists',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+
+      final client = ApiClient();
+      expect(await client.isLoggedIn(), isTrue,
+          reason: 'setUp seeds tokens as if left over from a previous install');
+
+      await client.clearStaleSessionOnFreshInstall();
+
+      expect(await client.isLoggedIn(), isFalse);
+    });
+
+    test('keeps the session on later launches once the marker is set',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final client = ApiClient();
+      await client.clearStaleSessionOnFreshInstall();
+
+      await const FlutterSecureStorage()
+          .write(key: 'api_access_token', value: 'fresh-login-token');
+      await client.clearStaleSessionOnFreshInstall();
+
+      expect(await client.accessToken, 'fresh-login-token');
+    });
   });
 
   // Regression coverage: on some devices (e.g. a corrupted Android Keystore
