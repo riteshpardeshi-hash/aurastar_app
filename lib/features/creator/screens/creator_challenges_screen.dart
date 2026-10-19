@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/creator_challenges_service.dart';
 import '../../../shared/theme/app_colors.dart';
-import 'creator_challenge_draft_screen.dart';
+import '../open_create_challenge.dart';
 import 'creator_challenge_status_screen.dart';
 
 /// The filters endpoint returns each status as an object
@@ -100,11 +100,8 @@ class _CreatorChallengesScreenState extends State<CreatorChallengesScreen> {
   }
 
   Future<void> _createNew() async {
-    final created = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const CreatorChallengeDraftScreen()),
-    );
-    if (created == true) _refresh();
+    // Same screen as Creator Activity → Create challenge.
+    if (await openCreateChallenge(context)) _refresh();
   }
 
   Future<void> _openChallenge(String id) async {

@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'category_store.dart';
 import 'creator_challenges_service.dart';
 
 class ChallengesService {
@@ -34,21 +35,6 @@ class ChallengesService {
     } catch (_) {
       return null;
     }
-  }
-
-  Future<List<String>> fetchCategories() async {
-    try {
-      final res = await _client.get('/categories');
-      final data = res['data'] as Map<String, dynamic>;
-      final list = (data['categories'] as List).cast<Map<String, dynamic>>();
-      final names =
-          list
-              .map((c) => (c['name'] ?? c['_id'] ?? '') as String)
-              .where((n) => n.isNotEmpty)
-              .toList();
-      if (names.isNotEmpty) return names;
-    } catch (_) {}
-    return const ['Dance', 'Fitness', 'Fashion', 'Sports', 'Comedy', 'Skill'];
   }
 
   Future<List<Map<String, dynamic>>> fetchSubmissions(
@@ -184,30 +170,25 @@ class ChallengesService {
     return res['data']['challenge'] as Map<String, dynamic>;
   }
 
+  /// All active categories (`{_id, name}`), from [CategoryStore] — saved on
+  /// the device, refreshed in the background. Empty only when nothing is saved
+  /// yet and the network is down.
   Future<List<Map<String, dynamic>>> fetchCategoriesWithIds() async {
     try {
-      final res = await _client.get('/categories');
-      final data = res['data'] as Map<String, dynamic>;
-      return (data['categories'] as List).cast<Map<String, dynamic>>();
+      return await CategoryStore.instance.load();
     } catch (_) {
       return [];
     }
   }
 
   // id → name, so a challenge's `category` (an ObjectId) can be resolved to
-  // the display name categoryIconAsset is keyed by. Categories rarely change
-  // within a session, and every thumbnail grid across the app needs this
-  // same lookup, so the fetch is shared/cached here rather than repeated
-  // per-screen.
-  static Future<Map<String, String>>? _categoryNameMapFuture;
-  Future<Map<String, String>> fetchCategoryNameMap() {
-    return _categoryNameMapFuture ??= fetchCategoriesWithIds().then(
-      (cats) => {
-        for (final c in cats)
-          if ((c['_id'] as String?)?.isNotEmpty == true)
-            c['_id'] as String: c['name'] as String? ?? '',
-      },
-    );
+  // the display name categoryIconAsset is keyed by.
+  Future<Map<String, String>> fetchCategoryNameMap() async {
+    try {
+      return await CategoryStore.instance.nameById();
+    } catch (_) {
+      return {};
+    }
   }
 
   Future<Map<String, dynamic>?> fetchMySubmission(String challengeId) async {

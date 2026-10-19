@@ -32,6 +32,22 @@ void main() {
           isTrue);
     });
 
+    // Regression (2026-10-19): the backend restarted mid-request and the create
+    // screen showed "ClientConnection closed before full header was received,
+    // uri=http://localhost:3000/..." instead of a readable message.
+    test('is true when the connection drops mid-request', () {
+      expect(
+          isNetworkError(http.ClientException(
+              'Connection closed before full header was received',
+              Uri.parse('http://localhost:3000/api/v1/creator/challenge/categories'))),
+          isTrue);
+      expect(isNetworkError(const SocketException('Connection reset by peer')), isTrue);
+      expect(isNetworkError(const SocketException('Broken pipe')), isTrue);
+      expect(
+          humanizeError(http.ClientException('Connection closed before full header was received')),
+          "Couldn't reach Aura's servers. Please check your connection and try again.");
+    });
+
     test('is false for a real backend error message', () {
       expect(isNetworkError(Exception('Internal server error')), isFalse);
     });

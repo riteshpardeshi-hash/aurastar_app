@@ -17,6 +17,11 @@ bool isNetworkError(Object error) {
       lower.contains('network is unreachable') ||
       lower.contains('connection refused') ||
       lower.contains('connection failed') ||
+      // The server or the network dropped the connection mid-request
+      // (e.g. "Connection closed before full header was received").
+      lower.contains('connection closed') ||
+      lower.contains('connection reset') ||
+      lower.contains('broken pipe') ||
       lower.contains('timeoutexception');
 }
 
