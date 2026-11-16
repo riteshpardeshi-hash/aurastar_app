@@ -96,10 +96,12 @@ workflows:
     integrations:
       app_store_connect: codemagic_api_key
     scripts:
-      - name: Patch bundle ID and app name
+      # This workflow ships the live App Store listing (its App Store Connect
+      # record is bound to the .prototype bundle ID), so the display name must
+      # stay "Aura Arena" as set in Info.plist: do not rename it here.
+      - name: Patch bundle ID
         script: |
           sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp;/PRODUCT_BUNDLE_IDENTIFIER = com.onadsgroup.auraapp.prototype;/g' ios/Runner.xcodeproj/project.pbxproj
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Aura Arena Prototype'" ios/Runner/Info.plist
 
       - name: Get Flutter packages
         script: flutter pub get
