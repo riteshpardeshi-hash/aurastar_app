@@ -116,15 +116,36 @@ void main() {
       expect(await CreatorPageService().isCreatorCached(), isTrue);
     });
 
-    test('an existing creator page counts even if the role lags', () async {
+    test('a live (ACTIVE) creator page counts even if the role lags', () async {
       ApiClient.httpClient = MockClient((request) async {
         if (request.url.path.endsWith('/profile')) {
           return ok({'user': {'role': 'user'}});
         }
-        return ok({'profile': {'username': 'neha'}});
+        return ok({'profile': {'username': 'neha', 'status': 'ACTIVE'}});
       });
 
       expect(await CreatorPageService().isCreatorCached(), isTrue);
     });
+
+    // Any player can apply (backend ADR 140): a submitted application is a DRAFT page whose
+    // owner is still a player — they must see the request status, not the creator tools.
+    for (final appStatus in ['pending', 'changes_requested', 'rejected']) {
+      test('a $appStatus application does not make the user a creator', () async {
+        ApiClient.httpClient = MockClient((request) async {
+          if (request.url.path.endsWith('/profile')) {
+            return ok({'user': {'role': 'player'}});
+          }
+          return ok({
+            'profile': {
+              'username': 'applicant',
+              'status': 'DRAFT',
+              'applicationStatus': appStatus,
+            },
+          });
+        });
+
+        expect(await CreatorPageService().isCreatorCached(), isFalse);
+      });
+    }
   });
 }

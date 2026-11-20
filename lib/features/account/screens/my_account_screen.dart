@@ -284,6 +284,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   Map<String, dynamic>? _streak;
   List<Map<String, dynamic>> _rewards = [];
   bool _isCreator = false;
+  // GET /creator/setup-status `currentStep` — ELIGIBLE, PENDING_REVIEW, CHANGES_REQUESTED,
+  // REJECTED… (null until loaded). Any player can apply; an admin reviews it (backend ADR 140).
+  String? _creatorStep;
 
   // Stale-while-revalidate: the Profile tab is pushed fresh on every tap and
   // its 7-call fan-out took the whole screen over with a spinner each time.
@@ -319,6 +322,14 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   void _refreshCreatorStatus() {
     CreatorPageService().isCreatorCached().then((v) {
       if (mounted && v != _isCreator) setState(() => _isCreator = v);
+      if (v) return;
+      // Not a creator yet: where is their application? (Drives the banner's subtitle.)
+      CreatorPageService().fetchSetupStatus().then((s) {
+        final step = s['currentStep'] as String?;
+        if (mounted && step != null && step != _creatorStep) {
+          setState(() => _creatorStep = step);
+        }
+      }).catchError((_) {});
     });
   }
 
@@ -662,13 +673,37 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   }
 
   // ── Become Creator banner (regular users only) ─────────────────────────────
-  Widget _buildBecomeCreatorBanner(BuildContext context, int points) {
+  Widget _buildBecomeCreatorBanner(BuildContext context) {
+    // No Aura threshold any more — anyone can apply; the subtitle follows the application.
+    final (String title, String subtitle, Color subtitleColor, IconData trailing) =
+        switch (_creatorStep) {
+      'PENDING_REVIEW' => (
+          'Creator request pending',
+          'Our team is reviewing it — we\'ll let you know',
+          const Color(0xFFFACC15),
+          Icons.hourglass_top_rounded,
+        ),
+      'CHANGES_REQUESTED' => (
+          'Creator request needs updates',
+          'Tap to see what to change and resubmit',
+          const Color(0xFFFB923C),
+          Icons.arrow_forward_ios_rounded,
+        ),
+      'REJECTED' => (
+          'Creator request not approved',
+          'Tap to see why and apply again',
+          const Color(0xFFF87171),
+          Icons.arrow_forward_ios_rounded,
+        ),
+      _ => (
+          'Become a Creator',
+          'Apply to launch challenges & grow your brand',
+          const Color(0xFFD4A8FF),
+          Icons.arrow_forward_ios_rounded,
+        ),
+    };
     return GestureDetector(
       onTap: () async {
-        if (points < 500) {
-          _showCreatorGateSheet(context, points);
-          return;
-        }
         AnalyticsService().logAuraCreatorJoinClick('profile_banner');
         await Navigator.push(
           context,
@@ -709,9 +744,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Become a Creator',
-                    style: TextStyle(
+                  Text(
+                    title,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -720,159 +755,16 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    points >= 500
-                        ? 'You qualify! Launch challenges & grow your brand'
-                        : '${500 - points} Aura to unlock — keep playing!',
-                    style: TextStyle(
-                      color:
-                          points >= 500
-                              ? const Color(0xFFD4A8FF)
-                              : AppColors.textFaint,
-                      fontSize: 12,
-                    ),
+                    subtitle,
+                    style: TextStyle(color: subtitleColor, fontSize: 12),
                   ),
                 ],
               ),
             ),
-            Icon(
-              points >= 500
-                  ? Icons.arrow_forward_ios_rounded
-                  : Icons.lock_outline_rounded,
-              color: points >= 500 ? Colors.white54 : Colors.white24,
-              size: 15,
-            ),
+            Icon(trailing, color: Colors.white54, size: 15),
           ],
         ),
       ),
-    );
-  }
-
-  // ── Creator gate modal ─────────────────────────────────────────────────────
-  void _showCreatorGateSheet(BuildContext context, int currentPoints) {
-    const required = 500;
-    final progress = (currentPoints / required).clamp(0.0, 1.0);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF100A20),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (ctx) => Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 5,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _accent.withValues(alpha: 0.40),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.lock_outline_rounded,
-                    color: _accent,
-                    size: 30,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  '500 Aura Required',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Earn 500 Aura points by completing challenges\nto unlock Creator status.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 14,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // Progress bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '$currentPoints Aura',
-                      style: const TextStyle(
-                        color: Color(0xFFD4A8FF),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      '${required - currentPoints.clamp(0, required)} to go',
-                      style: const TextStyle(
-                        color: AppColors.textFaint,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: progress),
-                  duration: const Duration(milliseconds: 900),
-                  curve: Curves.easeOutCubic,
-                  builder:
-                      (_, v, __) => ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: v,
-                          minHeight: 10,
-                          backgroundColor: Colors.white.withValues(alpha: 0.08),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            Color(0xFF7B2CBF),
-                          ),
-                        ),
-                      ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    child: const Text('Keep Playing'),
-                  ),
-                ),
-              ],
-            ),
-          ),
     );
   }
 
@@ -1706,7 +1598,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       ),
       body: RefreshIndicator(
         color: _accent,
-        onRefresh: _loadAll,
+        // Pull to refresh also re-checks the creator application (an admin may have decided).
+        onRefresh: () {
+          _refreshCreatorStatus();
+          return _loadAll();
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -1719,7 +1615,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 _buildCreatorToolsCard(context),
                 const SizedBox(height: 16),
               ] else ...[
-                _buildBecomeCreatorBanner(context, totalRewards),
+                _buildBecomeCreatorBanner(context),
               ],
               _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
               // Streak card disabled for now — see _buildStreakCard.
