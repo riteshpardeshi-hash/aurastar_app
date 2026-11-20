@@ -675,23 +675,28 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // ── Become Creator banner (regular users only) ─────────────────────────────
   Widget _buildBecomeCreatorBanner(BuildContext context) {
     // No Aura threshold any more — anyone can apply; the subtitle follows the application.
-    final (String subtitle, Color subtitleColor, IconData trailing) = switch (_creatorStep) {
+    final (String title, String subtitle, Color subtitleColor, IconData trailing) =
+        switch (_creatorStep) {
       'PENDING_REVIEW' => (
-          'Application under review — we\'ll let you know',
+          'Creator request pending',
+          'Our team is reviewing it — we\'ll let you know',
           const Color(0xFFFACC15),
           Icons.hourglass_top_rounded,
         ),
       'CHANGES_REQUESTED' => (
-          'Action needed — we asked for a few changes',
+          'Creator request needs updates',
+          'Tap to see what to change and resubmit',
           const Color(0xFFFB923C),
           Icons.arrow_forward_ios_rounded,
         ),
       'REJECTED' => (
-          'Not approved this time — tap to see why',
+          'Creator request not approved',
+          'Tap to see why and apply again',
           const Color(0xFFF87171),
           Icons.arrow_forward_ios_rounded,
         ),
       _ => (
+          'Become a Creator',
           'Apply to launch challenges & grow your brand',
           const Color(0xFFD4A8FF),
           Icons.arrow_forward_ios_rounded,
@@ -739,9 +744,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Become a Creator',
-                    style: TextStyle(
+                  Text(
+                    title,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -1593,7 +1598,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       ),
       body: RefreshIndicator(
         color: _accent,
-        onRefresh: _loadAll,
+        // Pull to refresh also re-checks the creator application (an admin may have decided).
+        onRefresh: () {
+          _refreshCreatorStatus();
+          return _loadAll();
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),

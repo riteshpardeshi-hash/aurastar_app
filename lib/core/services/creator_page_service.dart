@@ -102,6 +102,11 @@ class CreatorPageService {
   // `/creator/page` record ever being created, so checking page existence
   // alone misses that account.
   //
+  // A creator page only counts once it is ACTIVE: since any player can apply
+  // (backend ADR 140), a submitted application is also a (DRAFT) page, and its
+  // owner is still a player until an admin approves — they must see their
+  // application's status, not the creator tools.
+  //
   // Only a positive answer is cached. This used to cache whatever the first
   // call returned — including `false` from a failed/slow profile fetch or from
   // before the user became a creator — for the whole session, so a creator kept
@@ -118,7 +123,7 @@ class CreatorPageService {
     final role = profile?['role'] as String?;
     var isCreator = role == 'creator' || role == 'brand' || role == 'admin';
     if (!isCreator && profile != null) {
-      isCreator = await fetchOwnPage() != null;
+      isCreator = (await fetchOwnPage())?['status'] == 'ACTIVE';
     }
     _isCreatorCache = isCreator;
     return isCreator;
