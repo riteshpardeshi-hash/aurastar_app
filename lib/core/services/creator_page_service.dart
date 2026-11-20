@@ -63,9 +63,9 @@ class CreatorPageService {
 
   /// Requires an unexpired reservation for [username] from [reserveUsername].
   /// Submits (or resubmits) the creator application: the page stays a draft and the
-  /// user a player until an admin approves it (backend ADR 140). On approval the user's
-  /// next creator-only call gets a 403 and [ApiClient] refreshes the token to pick up the
-  /// new role.
+  /// user a player until an admin approves it (backend ADR 140). After approval their
+  /// existing token keeps working on creator routes: the backend checks the stored role
+  /// when the token's role is out of date (backend ADR 132).
   Future<Map<String, dynamic>> createPage({
     required String displayName,
     required String username,
