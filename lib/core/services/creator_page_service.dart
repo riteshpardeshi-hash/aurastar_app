@@ -8,7 +8,9 @@ import 'auth_api_service.dart';
 class CreatorPageService {
   final _client = ApiClient();
 
-  /// `currentStep`: NOT_ELIGIBLE | ELIGIBLE | SETUP | ACTIVE.
+  /// `currentStep`: NOT_ELIGIBLE (inactive account) | ELIGIBLE | PENDING_REVIEW |
+  /// CHANGES_REQUESTED (+ `changesRequestedNote`) | REJECTED (+ optional `rejectedReason`) |
+  /// ACTIVE. Any player may apply — no Aura threshold (backend ADR 140).
   Future<Map<String, dynamic>> fetchSetupStatus() async {
     final res = await _client.get('/creator/setup-status', auth: true);
     return (res['data'] as Map<String, dynamic>?) ?? {};
@@ -19,8 +21,7 @@ class CreatorPageService {
     return (res['data'] as Map<String, dynamic>?) ?? {};
   }
 
-  /// `progressPercentage` toward the 500-Aura threshold, plus
-  /// `suggestedChallenges` (`ChallengeSummary[]`) to help close the gap.
+  /// Legacy: there is no Aura threshold any more, so `progressPercentage` is always 100.
   Future<Map<String, dynamic>> fetchProgress() async {
     final res = await _client.get('/creator/progress', auth: true);
     return (res['data'] as Map<String, dynamic>?) ?? {};
@@ -61,8 +62,10 @@ class CreatorPageService {
   }
 
   /// Requires an unexpired reservation for [username] from [reserveUsername].
-  /// Creates an ACTIVE page immediately — there is no admin-approval step in
-  /// this backend, unlike the old Firestore `creator_applications` flow.
+  /// Submits (or resubmits) the creator application: the page stays a draft and the
+  /// user a player until an admin approves it (backend ADR 140). On approval the user's
+  /// next creator-only call gets a 403 and [ApiClient] refreshes the token to pick up the
+  /// new role.
   Future<Map<String, dynamic>> createPage({
     required String displayName,
     required String username,
@@ -84,8 +87,8 @@ class CreatorPageService {
     if (res['status'] != 'success') {
       throw res['message'] as String? ?? 'Failed to create creator page';
     }
-    // The backend promoted this user to creator and sent tokens carrying the new role
-    // (backend ADR 132) — switch to them now so creator screens work immediately.
+    // Older backends promoted on the spot and sent tokens with the new role (ADR 132);
+    // harmless when absent.
     await _client.saveTokensFrom(res['data'] as Map<String, dynamic>?);
     invalidateCreatorCache();
     return res['data'] as Map<String, dynamic>;
