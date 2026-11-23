@@ -178,6 +178,8 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
   Widget _card(AiCampaignSummary c) {
     final prize = AiCampaignBits.showPrizes ? c.prize?.short : null;
     final status = c.myStatus;
+    // A full campaign the creator isn't part of can't be joined — don't offer it.
+    final full = status == null && c.seatsLeft != null && c.seatsLeft! <= 0;
     return GestureDetector(
       onTap: () => _open(c),
       child: Container(
@@ -219,7 +221,10 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                         child: Text(
                           [
                             if (prize != null && prize.isNotEmpty) prize,
-                            AiCampaignBits.seatsLabel(c.seatsLeft, c.creatorCap),
+                            if (status == 'ACTIVE' || status == 'SUBMITTED')
+                              "You're in"
+                            else
+                              AiCampaignBits.seatsLabel(c.seatsLeft, c.creatorCap),
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -231,6 +236,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                           'ACTIVE' => 'Create ›',
                           'REQUESTED' => 'Pending',
                           'INVITED' => 'See invite ›',
+                          null when full => 'Full',
                           null => 'Join ›',
                           _ => 'View ›',
                         },
@@ -238,6 +244,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                           color: switch (status) {
                             'ACTIVE' => AiCampaignBits.joinedColor,
                             'REQUESTED' => AiCampaignBits.timeColor,
+                            null when full => AppColors.textFaint,
                             _ => AiCampaignBits.lilac,
                           },
                           fontSize: 12.5,
