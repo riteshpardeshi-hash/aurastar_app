@@ -274,7 +274,11 @@ class _SpotlightCard extends StatelessWidget {
                                   if (status == 'ACTIVE' || status == 'SUBMITTED')
                                     c.creditsPerCreator == null ? 'You\'re in' : '${c.creditsPerCreator} AI credits'
                                   else
-                                    AiCampaignBits.seatsLabel(c.seatsLeft, c.creatorCap),
+                                    AiCampaignBits.seatsLabel(
+                                      c.seatsLeft,
+                                      c.creatorCap,
+                                      inviteOnly: c.participationMode == 'INVITE_ONLY',
+                                    ),
                                   if (prize != null && prize.isNotEmpty) '$prize prize',
                                 ].join(' · '),
                                 maxLines: 1,

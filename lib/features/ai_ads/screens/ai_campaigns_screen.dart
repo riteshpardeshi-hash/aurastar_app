@@ -64,7 +64,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
   List<AiCampaignSummary> get _shown {
     final far = DateTime(9999);
     final list = _sort == _Sort.joined
-        ? _campaigns.where((c) => c.myStatus != null).toList()
+        ? _campaigns.where((c) => AiCampaignBits.isJoined(c.myStatus)).toList()
         : [..._campaigns];
     switch (_sort) {
       case _Sort.endingSoon:
@@ -79,7 +79,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
   }
 
   Widget _filters() {
-    final joined = _campaigns.where((c) => c.myStatus != null).length;
+    final joined = _campaigns.where((c) => AiCampaignBits.isJoined(c.myStatus)).length;
     final options = [
       (_Sort.endingSoon, 'Ending soon'),
       (_Sort.newest, 'New'),
@@ -224,7 +224,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                             if (status == 'ACTIVE' || status == 'SUBMITTED')
                               "You're in"
                             else
-                              AiCampaignBits.seatsLabel(c.seatsLeft, c.creatorCap),
+                              AiCampaignBits.seatsLabel(c.seatsLeft, c.creatorCap, inviteOnly: c.participationMode == 'INVITE_ONLY'),
                           ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

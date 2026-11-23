@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/services/notifications_service.dart';
+import '../ai_ads/screens/ai_campaign_screen.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 
@@ -70,6 +71,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       await _service.markRead(n['id'] as String);
     } catch (_) {}
+  }
+
+  /// Notifications about a creator's own AI ad campaign (an invite, a request answered,
+  /// credits, a win) open that campaign, where the creator acts on them. The brand-side ones
+  /// (a join request, a submission) are for the brand portal, not the app.
+  static const _creatorCampaignTypes = {
+    'AI_AD_INVITE',
+    'AI_AD_REQUEST_APPROVED',
+    'AI_AD_REQUEST_REJECTED',
+    'AI_AD_REMOVED',
+    'AI_AD_CREDITS_GRANTED',
+    'AI_AD_CREDIT_REQUEST_REJECTED',
+    'AI_AD_WINNER',
+    'AI_AD_REWARD_GRANTED',
+    'AI_AD_REWARD_FULFILLED',
+  };
+
+  static String? campaignIdFor(Map<String, dynamic> n) {
+    if (!_creatorCampaignTypes.contains(n['type'])) return null;
+    final id = (n['payload'] as Map?)?['campaignId'];
+    return id is String && id.isNotEmpty ? id : null;
+  }
+
+  Future<void> _open(Map<String, dynamic> n) async {
+    _markRead(n);
+    final campaignId = campaignIdFor(n);
+    if (campaignId == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AiCampaignScreen(campaignId: campaignId)),
+    );
   }
 
   Future<void> _delete(Map<String, dynamic> n) async {
@@ -160,7 +192,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           onDismissed: (_) => _delete(n),
                           child: _NotificationTile(
                             data: n,
-                            onTap: () => _markRead(n),
+                            onTap: () => _open(n),
                           ),
                         );
                       },
@@ -184,6 +216,9 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isRead = data['isRead'] as bool? ?? false;
     final message = data['message'] as String? ?? '';
+    final title = data['title'] as String? ?? '';
+    // The headline above the detail, unless there's only one of them.
+    final heading = title.isNotEmpty && title != message ? title : null;
     final type = data['type'] as String? ?? 'general';
     final time = _timeAgo(data['createdAt']);
 
@@ -215,12 +250,24 @@ class _NotificationTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (heading != null) ...[
+                    Text(
+                      heading,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: isRead ? FontWeight.w600 : FontWeight.w700,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
                   Text(
                     message,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: heading == null ? Colors.white : Colors.white70,
                       fontSize: 13,
-                      fontWeight: isRead ? FontWeight.normal : FontWeight.w600,
+                      fontWeight: isRead || heading != null ? FontWeight.normal : FontWeight.w600,
                       height: 1.4,
                     ),
                   ),
