@@ -6,6 +6,14 @@ import 'package:aura_app/core/services/app_config_service.dart';
 import 'package:aura_app/features/ai_ads/widgets/ai_campaign_bits.dart';
 import 'package:aura_app/features/ai_ads/widgets/ai_campaign_spotlight.dart';
 
+import 'ai_ads_fake_backend.dart';
+
+/// Which page dot is the wide (active) one.
+int _activeDot(WidgetTester tester) {
+  final dots = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).toList();
+  return dots.indexWhere((d) => (d.constraints?.maxWidth ?? 0) == 18);
+}
+
 // The creator home's campaign spotlight (client-approved option A, backend ADR 141).
 AiCampaignSummary _c(
   String id, {
@@ -44,7 +52,10 @@ Future<void> _pump(WidgetTester tester, List<AiCampaignSummary> campaigns) async
 }
 
 void main() {
-  tearDown(() => AppConfigService.instance.couponsEnabled.value = false);
+  tearDown(() {
+    AppConfigService.instance.couponsEnabled.value = false;
+    FakeAiAdsBackend.reset();
+  });
 
   testWidgets('with no open campaigns the usual Featured carousel shows instead', (tester) async {
     await _pump(tester, const []);
@@ -101,6 +112,51 @@ void main() {
     AppConfigService.instance.couponsEnabled.value = true;
     await _pump(tester, campaigns);
     expect(find.textContaining('₹5,000 prize'), findsOneWidget);
+  });
+
+  testWidgets('back from a campaign, the reloaded list stays on the card the creator was on', (tester) async {
+    // The campaign screen itself isn't under test: the fake backend answers 404 for it.
+    FakeAiAdsBackend();
+    var list = [_c('a'), _c('b', due: const Duration(days: 3)), _c('c', due: const Duration(days: 4))];
+    var loads = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AiCampaignSpotlight(
+            loader: () async {
+              loads++;
+              return list;
+            },
+            fallback: const Text('FEATURED'),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(PageView), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Campaign b'), findsOneWidget);
+
+    Future<void> openAndComeBack() async {
+      await tester.tap(find.text('Join →').hitTestable());
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
+
+    await openAndComeBack();
+    expect(loads, 2);
+    expect(find.text('Campaign b'), findsOneWidget);
+    expect(_activeDot(tester), 1);
+
+    // The list got shorter meanwhile: step back to the last card that still exists.
+    await tester.drag(find.byType(PageView), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Campaign c'), findsOneWidget);
+    list = [_c('a'), _c('b', due: const Duration(days: 3))];
+    await openAndComeBack();
+    expect(find.text('Campaign b'), findsOneWidget);
+    expect(_activeDot(tester), 1);
   });
 
   group('labels', () {

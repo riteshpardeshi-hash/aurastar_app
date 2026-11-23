@@ -56,11 +56,19 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
       campaigns = const [];
     }
     if (!mounted) return;
+    final ordered = _order(campaigns);
+    // Coming back from a campaign reloads the list: stay on the card the creator was on (the
+    // PageView keeps its page), only stepping back when the list got shorter — so the dots
+    // and the card shown never disagree.
+    final keep = ordered.isEmpty ? 0 : _index.clamp(0, ordered.length - 1);
     setState(() {
-      _campaigns = _order(campaigns);
+      _campaigns = ordered;
       _loaded = true;
-      _index = 0;
+      _index = keep;
     });
+    if (_pageController.hasClients && (_pageController.page?.round() ?? 0) != keep) {
+      _pageController.jumpToPage(keep);
+    }
   }
 
   /// Campaigns the creator is in come first (their next step), then open ones by deadline.
