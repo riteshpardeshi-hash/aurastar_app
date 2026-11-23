@@ -34,9 +34,16 @@ class AiCampaignBits {
     return !left.isNegative && left.inHours < 24;
   }
 
-  /// "7 of 10 seats left", "Full", or "Open to all" without a cap.
-  static String seatsLabel(int? seatsLeft, int? cap) {
-    if (seatsLeft == null || cap == null) return 'Open to all';
+  /// Statuses where the creator is actually in the campaign. An invite not yet accepted or a
+  /// request not yet approved is not "joined".
+  static const joinedStatuses = {'ACTIVE', 'SUBMITTED', 'WINNER', 'NOT_SELECTED'};
+
+  static bool isJoined(String? status) => joinedStatuses.contains(status);
+
+  /// "7 of 10 seats left", "Full", or without a cap "Open to all" (or "No creator limit"
+  /// for an invite-only campaign, which is not open to all).
+  static String seatsLabel(int? seatsLeft, int? cap, {bool inviteOnly = false}) {
+    if (seatsLeft == null || cap == null) return inviteOnly ? 'No creator limit' : 'Open to all';
     if (seatsLeft <= 0) return 'Full';
     return '$seatsLeft of $cap seats left';
   }
