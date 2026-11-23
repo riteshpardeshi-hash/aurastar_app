@@ -66,6 +66,7 @@ because it's three pages long isn't documented, it's buried.
 | 039 | [Creators build the scoring criteria on the create page](039-creator-scoring-criteria-on-create-page.md) | Accepted |
 | 040 | [Phone sign-in in two steps: number, then code](040-two-step-phone-sign-in.md) | Accepted |
 | 041 | [One saved copy of the categories (CategoryStore)](041-category-store.md) | Accepted |
+| 042 | [AI ad campaigns at the top of a creator's home](042-ai-campaign-spotlight-on-home.md) | Accepted |
 
 For how a feature works *today* (as opposed to why a decision was made), see
 [`docs/features/`](../features/).
