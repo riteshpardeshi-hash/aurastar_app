@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../widgets/ai_dialogs.dart';
 import '../widgets/ai_script_view.dart';
 import '../widgets/ai_ui.dart';
@@ -343,6 +344,16 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                                     child: Text('${g.imageUrls.length}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
                                   ),
                                 ),
+                            ],
+                          )
+                        : g.videoUrl != null && !g.isRunning
+                        // A finished video shows a frame of itself, not an empty box (tester
+                        // report); the shared thumbnail widget extracts and caches it.
+                        ? Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              VideoThumbnailWidget(key: Key('ai-work-thumb-${g.id}'), videoUrl: g.videoUrl!),
+                              const Center(child: Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 28)),
                             ],
                           )
                         : Center(
