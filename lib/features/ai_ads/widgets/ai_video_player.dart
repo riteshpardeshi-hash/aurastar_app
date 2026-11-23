@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'ai_ui.dart';
 
-/// A generated / finished ad with real controls. The video only loads when tapped (lists
-/// stay light), plays **once** and stops on a Replay button — never loops. Play / pause,
-/// a seek bar with the time, and mute; the controls fade while it plays and come back on tap.
+/// A generated / finished ad with real controls. It loads as soon as it's shown so its first
+/// frame is visible before anyone taps play (tester report: the box stayed blank until played),
+/// but it never starts on its own. It plays **once** and stops on a Replay button — never
+/// loops. Play / pause, a seek bar with the time, and mute; the controls fade while it plays
+/// and come back on tap. Only the video's own screen uses it, one player at a time.
 class AiVideoPlayer extends StatefulWidget {
   final String url;
   final double aspectRatio;
@@ -23,16 +25,22 @@ class _AiVideoPlayerState extends State<AiVideoPlayer> {
   bool _controlsVisible = true;
   Timer? _hideTimer;
 
-  Future<void> _start() async {
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  /// Loads the video and shows its first frame, paused, with the play button up.
+  Future<void> _load() async {
     final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    setState(() => _controller = c);
+    _controller = c;
     try {
       await c.initialize();
       await c.setLooping(false);
+      if (!mounted) return;
       c.addListener(_onTick);
-      await c.play();
-      _scheduleHide();
-      if (mounted) setState(() {});
+      setState(() {});
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
@@ -107,13 +115,7 @@ class _AiVideoPlayerState extends State<AiVideoPlayer> {
         clipBehavior: Clip.antiAlias,
         child: _failed
             ? const Center(child: Text("Couldn't play this video", style: TextStyle(color: Colors.white54)))
-            : c == null
-            ? InkWell(
-                key: const Key('ai-video-play'),
-                onTap: _start,
-                child: const Center(child: Icon(Icons.play_circle_fill_rounded, color: Colors.white70, size: 56)),
-              )
-            : !c.value.isInitialized
+            : c == null || !c.value.isInitialized
             ? const Center(child: CircularProgressIndicator(color: AiUi.accent))
             : GestureDetector(
                 onTap: _showControls,
