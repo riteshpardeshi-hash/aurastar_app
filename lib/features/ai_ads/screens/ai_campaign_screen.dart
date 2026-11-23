@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../widgets/ai_campaign_bits.dart';
 import '../widgets/ai_dialogs.dart';
 import '../widgets/ai_join_request_sheet.dart';
 import '../widgets/ai_job_status_badge.dart';
@@ -103,7 +104,13 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
-                  if (c.myParticipation != null) AiStatusBadge.participation(c.myParticipation!.status),
+                  _hero(c),
+                  const SizedBox(height: 12),
+                  _stats(c),
+                  if (c.myParticipation != null) ...[
+                    const SizedBox(height: 12),
+                    AiStatusBadge.participation(c.myParticipation!.status),
+                  ],
                   const AiSectionTitle('Brand brief'),
                   _briefCard(c),
                   const AiSectionTitle('Brand assets'),
@@ -113,6 +120,89 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  // The cover with the brand and title on it (approved design, backend ADR 141).
+  Widget _hero(AiCampaign c) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 200,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AiCoverBackground(url: c.coverImage),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    AiStandingChip(status: c.myParticipation?.status),
+                    AiTimeChip(deadline: c.deadline),
+                  ]),
+                  const Spacer(),
+                  Row(children: [
+                    AiBrandAvatar(brand: c.brand, size: 34),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(c.brand.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(c.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 21,
+                          height: 1.15,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'ClashDisplay')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stats(AiCampaign c) {
+    Widget tile(String value, String label) => Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: AiUi.cardDecoration(),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+            ]),
+          ),
+        );
+    final prize = AiCampaignBits.showPrizes ? c.prize : null;
+    final seats = c.seatsLeft == null || c.creatorCap == null ? 'Open' : '${c.seatsLeft} / ${c.creatorCap}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          if (prize != null) ...[tile(prize.short, 'Prize'), const SizedBox(width: 8)],
+          tile(seats, 'Seats left'),
+          const SizedBox(width: 8),
+          tile(c.creditsPerCreator == null ? '—' : '${c.creditsPerCreator}', 'AI credits'),
+        ]),
+        if (prize != null && prize.amountLabel != null && prize.description.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(prize.description, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        ],
+      ],
     );
   }
 

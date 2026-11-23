@@ -30,6 +30,7 @@ import '../../core/utils/error_message.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 import '../../core/services/safety_service.dart';
+import '../ai_ads/widgets/ai_campaign_spotlight.dart';
 
 int profileAutoRetryDelaySeconds(int attemptNumber) {
   return (8 * (1 << (attemptNumber - 1))).clamp(0, 60);
@@ -213,6 +214,7 @@ class _DashboardState extends State<Dashboard> {
             isAdmin: false,
             isBrand: false,
             isCreator: false,
+            showAiCampaigns: false,
             userId: '',
             displayName: 'Guest',
             username: '',
@@ -382,6 +384,9 @@ class _DashboardState extends State<Dashboard> {
           isAdmin: isAdmin,
           isBrand: isBrand,
           isCreator: isCreator,
+          // Only real creators can join AI ad campaigns (the API is creator-only), so only they
+          // get the campaign spotlight (backend ADR 141).
+          showAiCampaigns: role == 'creator',
           userId: userId,
           displayName: displayName,
           username: username,
@@ -401,6 +406,7 @@ class _DashboardState extends State<Dashboard> {
     required bool isAdmin,
     required bool isBrand,
     required bool isCreator,
+    required bool showAiCampaigns,
     required String userId,
     required String displayName,
     required String username,
@@ -442,8 +448,16 @@ class _DashboardState extends State<Dashboard> {
                   // advances, each card slides in from the left; renders nothing
                   // when no challenge is featured. Keyed on _refreshTick so
                   // pull-to-refresh rebuilds + re-fetches it.
+                  //
+                  // For creators, open AI ad campaigns take this spot (the client-approved
+                  // "campaign spotlight", backend ADR 141); with none open, Featured shows.
                   SliverToBoxAdapter(
-                    child: _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
+                    child: showAiCampaigns
+                        ? AiCampaignSpotlight(
+                            key: ValueKey('ai-spotlight-$_refreshTick'),
+                            fallback: _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
+                          )
+                        : _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
                   ),
                   SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildBrandVideosSection(context))),
                   SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),

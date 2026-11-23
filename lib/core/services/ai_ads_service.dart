@@ -184,6 +184,84 @@ class AiAdFormat {
   }
 }
 
+/// How a format reads to a creator: "15–30s vertical".
+extension AiAdFormatLabel on AiAdFormat {
+  String get shape => switch (aspectRatio) {
+    '9:16' => 'vertical',
+    '16:9' => 'landscape',
+    '1:1' => 'square',
+    '4:5' => 'portrait',
+    _ => aspectRatio,
+  };
+
+  String get label => minDurationSeconds == maxDurationSeconds
+      ? '${maxDurationSeconds}s $shape'
+      : '$minDurationSeconds–${maxDurationSeconds}s $shape';
+}
+
+/// The brand behind a campaign, as creators see it (backend ADR 141).
+class AiBrandRef {
+  final String id;
+  final String name;
+  final String? logo;
+
+  const AiBrandRef({this.id = '', this.name = '', this.logo});
+
+  factory AiBrandRef.fromJson(dynamic j) {
+    if (j is! Map) return const AiBrandRef();
+    final logo = j['logo'];
+    return AiBrandRef(
+      id: _id(j['_id']),
+      name: '${j['name'] ?? ''}',
+      logo: logo is String && logo.isNotEmpty ? logo : null,
+    );
+  }
+}
+
+/// What the brand promises the winner(s) — shown before joining (backend ADR 141). The actual
+/// rewards are still granted per winner after judging.
+class AiPrize {
+  final int? amount;
+  final String currency;
+  final String description;
+
+  const AiPrize({this.amount, this.currency = 'INR', this.description = ''});
+
+  static AiPrize? fromJson(dynamic j) {
+    if (j is! Map) return null;
+    final p = AiPrize(
+      amount: _intOrNull(j['amount']),
+      currency: '${j['currency'] ?? 'INR'}',
+      description: '${j['description'] ?? ''}',
+    );
+    return p.amount == null && p.description.isEmpty ? null : p;
+  }
+
+  /// "₹5,000" (or "USD 50"), or null when the prize has no amount.
+  String? get amountLabel {
+    final a = amount;
+    if (a == null) return null;
+    final digits = a.toString();
+    // Indian grouping for rupees (1,00,000), thousands elsewhere.
+    final grouped = currency == 'INR' ? _indianGrouping(digits) : _thousands(digits);
+    return currency == 'INR' ? '₹$grouped' : '$currency $grouped';
+  }
+
+  /// Short form for a card: the amount, else the description.
+  String get short => amountLabel ?? description;
+
+  static String _thousands(String d) =>
+      d.replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+
+  static String _indianGrouping(String d) {
+    if (d.length <= 3) return d;
+    final last3 = d.substring(d.length - 3);
+    final rest = d.substring(0, d.length - 3)
+        .replaceAllMapped(RegExp(r'(\d)(?=(\d{2})+$)'), (m) => '${m[1]},');
+    return '$rest,$last3';
+  }
+}
+
 /// A creator's place in a campaign.
 class AiParticipation {
   final String id;
@@ -230,6 +308,15 @@ class AiCampaignSummary {
   final String? myStatus;
   final String participationMode;
 
+  // For the home spotlight and the campaign list (backend ADR 141).
+  final AiBrandRef brand;
+  final String? coverImage;
+  final AiPrize? prize;
+  final AiAdFormat format;
+  final int? creatorCap;
+  final int? creditsPerCreator;
+  final DateTime? liveAt;
+
   const AiCampaignSummary({
     required this.id,
     required this.title,
@@ -239,6 +326,13 @@ class AiCampaignSummary {
     this.seatsLeft,
     this.myStatus,
     this.participationMode = 'OPEN',
+    this.brand = const AiBrandRef(),
+    this.coverImage,
+    this.prize,
+    this.format = const AiAdFormat(),
+    this.creatorCap,
+    this.creditsPerCreator,
+    this.liveAt,
   });
 
   factory AiCampaignSummary.fromJson(Map<String, dynamic> j) {
@@ -252,6 +346,13 @@ class AiCampaignSummary {
       seatsLeft: _intOrNull(j['seatsLeft']),
       myStatus: j['myStatus'] as String?,
       participationMode: '${j['participationMode'] ?? 'OPEN'}',
+      brand: AiBrandRef.fromJson(j['brand']),
+      coverImage: j['coverImage'] is String ? j['coverImage'] as String : null,
+      prize: AiPrize.fromJson(j['prize']),
+      format: AiAdFormat.fromJson(j['format'] is Map ? Map<String, dynamic>.from(j['format']) : null),
+      creatorCap: _intOrNull(j['creatorCap']),
+      creditsPerCreator: _intOrNull(j['creditsPerCreator']),
+      liveAt: _date(j['liveAt']),
     );
   }
 }
@@ -268,6 +369,10 @@ class AiCampaign {
   final int? creditsPerCreator;
   final List<AiBrandAsset> assets;
   final AiParticipation? myParticipation;
+  final AiBrandRef brand;
+  final String? coverImage;
+  final AiPrize? prize;
+  final int? creatorCap;
 
   /// Prefill for the join-request form: the links from the creator's last request, else
   /// their profile links (backend ADR 131). Keys: instagram, youtube, x, facebook, linkedin, website.
@@ -286,6 +391,10 @@ class AiCampaign {
     this.creditsPerCreator,
     this.myParticipation,
     this.suggestedLinks = const {},
+    this.brand = const AiBrandRef(),
+    this.coverImage,
+    this.prize,
+    this.creatorCap,
   });
 
   factory AiCampaign.fromJson(Map<String, dynamic> j) => AiCampaign(
@@ -303,6 +412,10 @@ class AiCampaign {
         ? AiParticipation.fromJson(Map<String, dynamic>.from(j['myParticipation']))
         : null,
     suggestedLinks: _stringMap(j['suggestedLinks']),
+    brand: AiBrandRef.fromJson(j['brand']),
+    coverImage: j['coverImage'] is String ? j['coverImage'] as String : null,
+    prize: AiPrize.fromJson(j['prize']),
+    creatorCap: _intOrNull(j['creatorCap']),
   );
 
   bool get isLive => status == 'LIVE';
