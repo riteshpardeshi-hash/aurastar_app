@@ -130,9 +130,14 @@ class NotificationsService {
 // per-item schema in Swagger, so field names are best-guess via
 // pickField/pickString (same defensive pattern as creator_challenges_service).
 Map<String, dynamic> normaliseNotification(Map<String, dynamic> n) {
+  final payload = pickField(n, ['payload', 'data']);
   return {
     'id': pickString(n, ['_id', 'id']),
+    // The headline ("You're invited to an AI ad campaign") and the detail ("dance"). The
+    // backend sends both; showing only the body left notifications like a bare campaign name.
+    'title': pickString(n, ['title']),
     'message': pickString(n, ['message', 'body', 'text', 'title']),
+    'payload': payload is Map ? Map<String, dynamic>.from(payload) : const <String, dynamic>{},
     'type': pickString(n, ['type', 'category'], fallback: 'general'),
     'isRead': (pickField(n, ['isRead', 'read']) as bool?) ?? false,
     'createdAt': pickField(n, ['createdAt', 'created_at']),
