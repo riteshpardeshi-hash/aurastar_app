@@ -17,7 +17,9 @@
 class ApiConfig {
   ApiConfig._();
 
-  static const production = 'http://144.91.79.237:3786/api/v1';
+  // The domain, over HTTPS — never a server's IP. The backend moved hosts (24 Nov 2026):
+  // the old IP stopped answering and every build with it built in lost its server.
+  static const production = 'https://backend.auraarenaplay.com/api/v1';
 
   static const _compileTimeOverride =
       String.fromEnvironment('API_BASE_URL', defaultValue: '');

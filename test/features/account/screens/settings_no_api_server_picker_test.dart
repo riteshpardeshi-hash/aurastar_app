@@ -28,6 +28,6 @@ void main() {
     SharedPreferences.setMockInitialValues({'api_base_url_override': 'http://192.168.0.5:3000/api/v1'});
     await SharedPreferences.getInstance();
     expect(ApiConfig.baseUrl, ApiConfig.production);
-    expect(ApiConfig.production, 'http://144.91.79.237:3786/api/v1');
+    expect(ApiConfig.production, 'https://backend.auraarenaplay.com/api/v1');
   });
 }
