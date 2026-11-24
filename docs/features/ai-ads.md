@@ -23,6 +23,12 @@ the credit ledger, generation, scoring) — backend ADRs 111–115 and
 Entry point: the **AI Ad Campaigns** button on a brand's profile, shown only to
 users whose profile `role` is `creator`.
 
+**The campaign list** has a search bar above the *Ending soon / New / Joined* chips.
+Typing filters the loaded list in the app (no request): a campaign shows when every
+word typed is in its title, brand name or product, ignoring case. It combines with
+the chosen chip, and an empty result says *No campaigns match "…"*. The list loads
+up to 50 live campaigns; past that, search should move to the backend.
+
 ## Flow
 
 1. **Join** — open campaigns: *Ask to join*; invite-only: *Accept invite*.

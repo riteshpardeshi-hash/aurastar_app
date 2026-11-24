@@ -28,11 +28,27 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
   _Sort _sort = _Sort.endingSoon;
   bool _loading = true;
   String? _error;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// A campaign matches when every word typed appears in its title, brand or product.
+  bool _matches(AiCampaignSummary c) {
+    final words = _search.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return true;
+    final text = '${c.title} ${c.brand.name} ${c.product}'.toLowerCase();
+    return words.every(text.contains);
   }
 
   Future<void> _load() async {
@@ -63,9 +79,10 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
 
   List<AiCampaignSummary> get _shown {
     final far = DateTime(9999);
-    final list = _sort == _Sort.joined
-        ? _campaigns.where((c) => AiCampaignBits.isJoined(c.myStatus)).toList()
-        : [..._campaigns];
+    final list = _campaigns
+        .where((c) => _sort != _Sort.joined || AiCampaignBits.isJoined(c.myStatus))
+        .where(_matches)
+        .toList();
     switch (_sort) {
       case _Sort.endingSoon:
       case _Sort.joined:
@@ -76,6 +93,41 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
         list.sort((a, b) => (b.prize?.amount ?? -1).compareTo(a.prize?.amount ?? -1));
     }
     return list;
+  }
+
+  Widget _searchBar() {
+    return TextField(
+      key: const Key('ai-campaigns-search'),
+      controller: _searchCtrl,
+      onChanged: (v) => setState(() => _search = v.trim()),
+      textInputAction: TextInputAction.search,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      cursorColor: AiUi.accent,
+      decoration: InputDecoration(
+        hintText: 'Search campaigns, brands or products',
+        hintStyle: const TextStyle(color: AppColors.textFaint, fontSize: 13.5),
+        prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 20),
+        suffixIcon: _search.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _search = '');
+                },
+              ),
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFF14141F),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AiUi.accent, width: 1),
+        ),
+      ),
+    );
   }
 
   Widget _filters() {
@@ -159,13 +211,19 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                       ),
                     )
                   else ...[
+                    _searchBar(),
+                    const SizedBox(height: 10),
                     _filters(),
                     const SizedBox(height: 12),
                     if (_shown.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 40),
-                        child: Text("You haven't joined a campaign yet.",
-                            textAlign: TextAlign.center, style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 40),
+                        child: Text(
+                            _search.isNotEmpty
+                                ? 'No campaigns match "$_search".'
+                                : "You haven't joined a campaign yet.",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.textFaint, fontSize: 13)),
                       ),
                     for (final c in _shown) ...[_card(c), const SizedBox(height: 10)],
                   ],
