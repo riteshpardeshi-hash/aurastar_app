@@ -23,6 +23,11 @@ the credit ledger, generation, scoring) — backend ADRs 111–115 and
 Entry point: the **AI Ad Campaigns** button on a brand's profile, shown only to
 users whose profile `role` is `creator`.
 
+**The home banner** (`AiCampaignSpotlight`) shows to every signed-in user (client,
+2026-11-24; backend lets players read the list). For anyone who isn't a creator, tapping a
+card, its button or *See all* asks them to become a creator (`showBecomeCreatorDialog`) and,
+if they agree, opens `CreateCreatorProfileScreen`.
+
 **The campaign list** has a search bar, a sort and an *All / Joined* filter. All
 three work together on the list loaded in the app (no extra request):
 - **Search** matches the **campaign name and brand name only** (the client's call),

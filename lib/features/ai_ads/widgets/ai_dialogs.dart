@@ -28,6 +28,32 @@ Future<bool> showAiTermsDialog(BuildContext context, {required String campaignTi
   return accepted == true;
 }
 
+/// A player tapped a campaign: AI ad campaigns are for creators. Returns true when they
+/// want to become one.
+Future<bool> showBecomeCreatorDialog(BuildContext context) async {
+  final accepted = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AiUi.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Become a creator to join', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      content: const Text(
+        'AI ad campaigns are for creators. Apply to become one, and once approved you can join and make AI ads.',
+        style: TextStyle(color: AppColors.textMuted, height: 1.4),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+        TextButton(
+          key: const Key('ai-become-creator'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Become a creator', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  return accepted == true;
+}
+
 /// Ask the brand for more credits. Returns true when the request was sent.
 Future<bool> showRequestCreditsSheet(BuildContext context, {required String campaignId, int suggested = 50}) async {
   final sent = await showModalBottomSheet<bool>(
