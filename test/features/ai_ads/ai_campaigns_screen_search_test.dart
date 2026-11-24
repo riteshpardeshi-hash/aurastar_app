@@ -6,8 +6,8 @@ import 'package:aura_app/features/ai_ads/screens/ai_campaigns_screen.dart';
 import 'ai_ads_fake_backend.dart';
 
 // Client request: a search bar on the AI ad campaigns list. Typing filters the list by
-// campaign title, brand name or product; it works together with the Joined tab, says so
-// when nothing matches, and the clear button brings the full list back.
+// campaign name or brand name only (not product or brief); it works together with the
+// Joined filter, says so when nothing matches, and the clear button brings the list back.
 void main() {
   tearDown(FakeAiAdsBackend.reset);
 
@@ -36,7 +36,7 @@ void main() {
           'title': 'Night run',
           'deadline': soon,
           'brand': {'_id': 'b3', 'name': 'Stride'},
-          'brief': {'product': 'Running shoes'},
+          'brief': {'product': 'Running shoes', 'objective': 'Launch the marathon line'},
         },
       ],
     });
@@ -48,24 +48,30 @@ void main() {
     await settle(tester);
   }
 
-  testWidgets('filters by title, brand or product, case-insensitively', (tester) async {
+  testWidgets('filters by campaign or brand name, case-insensitively, and nothing else', (tester) async {
     await pumpList(tester);
     expect(find.text('Summer splash'), findsOneWidget);
     expect(find.text('Crunch time'), findsOneWidget);
     expect(find.text('Night run'), findsOneWidget);
 
-    await search(tester, 'night'); // title
+    await search(tester, 'night'); // campaign name
     expect(find.text('Night run'), findsOneWidget);
     expect(find.text('Summer splash'), findsNothing);
     expect(find.text('Crunch time'), findsNothing);
 
-    await search(tester, 'FIZZY'); // brand
+    await search(tester, 'FIZZY'); // brand name
     expect(find.text('Summer splash'), findsOneWidget);
     expect(find.text('Night run'), findsNothing);
 
-    await search(tester, 'chips'); // product
-    expect(find.text('Crunch time'), findsOneWidget);
+    await search(tester, '  run   stride '); // campaign + brand words, any order, extra spaces
+    expect(find.text('Night run'), findsOneWidget);
     expect(find.text('Summer splash'), findsNothing);
+
+    await search(tester, 'chips'); // product: not searched
+    expect(find.text('Crunch time'), findsNothing);
+
+    await search(tester, 'marathon'); // objective: not searched
+    expect(find.text('Night run'), findsNothing);
   });
 
   testWidgets('says so when nothing matches, and clearing brings the list back', (tester) async {

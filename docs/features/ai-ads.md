@@ -23,11 +23,17 @@ the credit ledger, generation, scoring) — backend ADRs 111–115 and
 Entry point: the **AI Ad Campaigns** button on a brand's profile, shown only to
 users whose profile `role` is `creator`.
 
-**The campaign list** has a search bar above the *Ending soon / New / Joined* chips.
-Typing filters the loaded list in the app (no request): a campaign shows when every
-word typed is in its title, brand name or product, ignoring case. It combines with
-the chosen chip, and an empty result says *No campaigns match "…"*. The list loads
-up to 50 live campaigns; past that, search should move to the backend.
+**The campaign list** has a search bar, a sort and an *All / Joined* filter. All
+three work together on the list loaded in the app (no extra request):
+- **Search** matches the **campaign name and brand name only** (the client's call),
+  ignoring case and word order: a campaign shows when every word typed is in one of
+  those two. An empty
+  result says *No campaigns match "…"*; the ✕ clears it.
+- **Sort** (the first chip, opens a sheet): Ending soon (default), Ending last,
+  Newest, Oldest (by when it went live), Name A–Z / Z–A, Most AI credits, and
+  Highest prize while prizes are on. Ties fall back to the name.
+- The list loads up to 50 live campaigns; past that, search and sort should move to
+  the backend.
 
 ## Flow
 

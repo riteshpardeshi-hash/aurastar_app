@@ -128,6 +128,21 @@ Uses `firebase_core`, `firebase_auth`, `cloud_firestore`, `firebase_storage`. Cl
 
 These apply to every change, not just ones Claude Code makes:
 
+- **Every list or search screen gets search + sort (a rule).** Any screen that
+  lists things (campaigns, challenges, brands, creators, videos, users…) ships with:
+  1. A **search bar** that is case-insensitive; several words match in any order;
+     it has a clear (✕) button and an empty state that names the search
+     (*No … match "x"*). It searches the fields agreed for that page (ask when
+     unsure); by default the item's name and its owner's name (e.g. campaign name +
+     brand name on the AI campaigns list).
+  2. **Sorting** with the usual options: newest, oldest, name A–Z / Z–A, plus what
+     fits the data (ending soon / last, most credits, highest prize, most popular…),
+     with the current sort visible and a stable tie-break.
+  3. Filters (e.g. All / Joined) that combine with search and sort, not replace them.
+  Search and sort on the server when the list is paginated or can exceed one page;
+  in the app only when the whole list is already loaded. Cover search, sort and
+  their combination with widget tests. Reference: `AiCampaignsScreen`.
+
 - **Root cause over symptom patch.** A retry/try-catch that silences a
   failure is not a fix until you can state *why* the failure happens. If you
   can't explain it in one sentence, keep digging before shipping.
