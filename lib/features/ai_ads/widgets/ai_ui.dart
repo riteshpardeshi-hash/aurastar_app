@@ -213,3 +213,43 @@ class AiWarningText extends StatelessWidget {
     ),
   );
 }
+
+/// A selectable pill for the AI ads screens: purple when selected, a faint outline
+/// otherwise. Drawn with a plain Container on purpose: Material's ChoiceChip took the
+/// app's light theme on device and showed unselected pills as white blanks.
+class AiPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const AiPill({super.key, required this.label, required this.selected, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? AiUi.accent : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: selected ? AiUi.accent : Colors.white.withValues(alpha: 0.14)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : AppColors.textMuted,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
