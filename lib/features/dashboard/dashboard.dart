@@ -386,7 +386,10 @@ class _DashboardState extends State<Dashboard> {
           isCreator: isCreator,
           // Only real creators can join AI ad campaigns (the API is creator-only), so only they
           // get the campaign spotlight (backend ADR 141).
-          showAiCampaigns: role == 'creator',
+          // Every signed-in user sees the AI campaigns banner; non-creators are invited to
+          // become one when they tap it (client, 24 Nov).
+          showAiCampaigns: true,
+          isAiCreator: role == 'creator',
           userId: userId,
           displayName: displayName,
           username: username,
@@ -407,6 +410,7 @@ class _DashboardState extends State<Dashboard> {
     required bool isBrand,
     required bool isCreator,
     required bool showAiCampaigns,
+    bool isAiCreator = false,
     required String userId,
     required String displayName,
     required String username,
@@ -455,6 +459,7 @@ class _DashboardState extends State<Dashboard> {
                     child: showAiCampaigns
                         ? AiCampaignSpotlight(
                             key: ValueKey('ai-spotlight-$_refreshTick'),
+                            isCreator: isAiCreator,
                             fallback: _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
                           )
                         : _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),

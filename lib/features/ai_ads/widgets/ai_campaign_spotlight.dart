@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/services/ai_ads_service.dart';
+import '../../../core/services/analytics_service.dart';
+import '../../creator/screens/create_creator_profile_screen.dart';
 import '../screens/ai_campaign_screen.dart';
 import '../screens/ai_campaigns_screen.dart';
 import '../screens/create_ai_videos_screen.dart';
 import 'ai_campaign_bits.dart';
+import 'ai_dialogs.dart';
 
 /// The top of a creator's home screen: open AI ad campaigns as big swipeable cards (the
 /// client-approved "campaign spotlight", backend ADR 141).
@@ -14,6 +17,10 @@ import 'ai_campaign_bits.dart';
 /// card shows the brand, cover, time left, seats, prize and the creator's next step: Join,
 /// Pending, Create video.
 ///
+/// Every signed-in user sees it (client, 24 Nov). For someone who isn't a creator
+/// ([isCreator] false), any tap asks them to become one and, if they agree, opens the creator
+/// application.
+///
 /// When there are no campaigns (or they can't be loaded), [fallback] is shown instead — the
 /// home's usual Featured carousel — so the top of the home is never empty.
 class AiCampaignSpotlight extends StatefulWidget {
@@ -22,7 +29,10 @@ class AiCampaignSpotlight extends StatefulWidget {
   /// For tests: replaces the network call.
   final Future<List<AiCampaignSummary>> Function()? loader;
 
-  const AiCampaignSpotlight({super.key, required this.fallback, this.loader});
+  /// False for a player: taps lead to the become-a-creator prompt instead of the campaign.
+  final bool isCreator;
+
+  const AiCampaignSpotlight({super.key, required this.fallback, this.loader, this.isCreator = true});
 
   @override
   State<AiCampaignSpotlight> createState() => _AiCampaignSpotlightState();
@@ -83,6 +93,14 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
     return [...mine, ...open];
   }
 
+  /// Runs [action] for a creator; anyone else is asked to become a creator first.
+  Future<void> _asCreator(Future<void> Function() action) async {
+    if (widget.isCreator) return action();
+    if (!await showBecomeCreatorDialog(context) || !mounted) return;
+    AnalyticsService().logAuraCreatorJoinClick('ai_campaign_banner');
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()));
+  }
+
   Future<void> _openCampaign(AiCampaignSummary c) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => AiCampaignScreen(campaignId: c.id)));
     if (mounted) _load();
@@ -128,7 +146,7 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
                 ),
               ),
               GestureDetector(
-                onTap: _seeAll,
+                onTap: () => _asCreator(_seeAll),
                 child: const Text(
                   'See all ›',
                   style: TextStyle(color: AiCampaignBits.lilac, fontSize: 13, fontWeight: FontWeight.w600),
@@ -148,8 +166,8 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
               child: _SpotlightCard(
                 campaign: _campaigns[i],
-                onTap: () => _openCampaign(_campaigns[i]),
-                onPrimary: () => _primary(_campaigns[i]),
+                onTap: () => _asCreator(() => _openCampaign(_campaigns[i])),
+                onPrimary: () => _asCreator(() => _primary(_campaigns[i])),
               ),
             ),
           ),
