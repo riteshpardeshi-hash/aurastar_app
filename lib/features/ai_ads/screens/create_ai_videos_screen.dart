@@ -12,7 +12,8 @@ import 'my_ai_videos_screen.dart';
 
 /// The creator's workspace in one campaign, as guided steps: the brief (folded),
 /// 1 Script (write it with AI, refine it, or use your own), 2 Style (text to video
-/// or images first, quality, on-screen text), 3 Your images & videos — with the
+/// or images first, quality, on-screen text), then Your images and Your videos as two
+/// separate collections — with the
 /// Generate button pinned to the bottom.
 ///
 /// Every paid action shows its exact price (a backend quote) on the button;
@@ -445,24 +446,9 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
     );
   }
 
-  /// A dark chip in the app's purple (the stock light chips looked out of place).
-  Widget _choice(String label, {required bool selected, required VoidCallback onSelected}) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      showCheckmark: false,
-      onSelected: (_) => onSelected(),
-      // `color` beats the app-wide ChipTheme, which paints unselected chips white.
-      color: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? AiUi.accent : Colors.white.withValues(alpha: 0.04)),
-      side: BorderSide(color: selected ? AiUi.accent : Colors.white.withValues(alpha: 0.14)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : AppColors.textMuted,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-        fontSize: 13,
-      ),
-    );
-  }
+  /// A pill choice (length, version, mode, quality) — see [AiPill].
+  Widget _choice(String label, {required bool selected, required VoidCallback onSelected}) =>
+      AiPill(label: label, selected: selected, onTap: onSelected);
 
   /// "① Script ............ v2 · 15s · 3 scenes"
   Widget _step(int n, String title, {String? summary, Widget? trailing}) {
@@ -881,21 +867,26 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                 ),
               ],
 
-              // ── 3 Your images & videos ────────────────────────────────────
-              if (work.isNotEmpty) ...[
+              // ── 3 Your images, 4 Your videos ─────────────────────────────
+              // Two separate collections, images first (client feedback, 24 Nov).
+              for (final (i, (title, items))
+                  in [
+                    ('Your images', work.where((g) => g.stage == AiStage.image).toList()),
+                    ('Your videos', work.where((g) => g.stage == AiStage.video).toList()),
+                  ].where((c) => c.$2.isNotEmpty).indexed) ...[
                 _step(
-                  3,
-                  'Your images & videos',
+                  3 + i,
+                  title,
                   trailing: GestureDetector(
-                    key: const Key('ai-see-all-work'),
+                    key: Key('ai-see-all-${title.split(' ').last}'),
                     onTap: _openMyVideos,
                     child: Text(
-                      work.length > 6 ? 'See all ${work.length}' : 'See all',
+                      items.length > 6 ? 'See all ${items.length}' : 'See all',
                       style: const TextStyle(color: AiUi.accent, fontSize: 13, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
-                _workGrid(work),
+                _workGrid(items),
               ],
               if (ws.freeEvaluations.limit > 0) ...[
                 const SizedBox(height: 16),

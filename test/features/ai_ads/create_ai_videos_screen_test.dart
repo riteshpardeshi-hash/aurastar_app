@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:aura_app/features/ai_ads/screens/create_ai_videos_screen.dart';
 
+import 'package:aura_app/features/ai_ads/widgets/ai_ui.dart';
+
 import 'ai_ads_fake_backend.dart';
 
 // The workspace: every paid button carries its backend quote, the tap sends
@@ -169,12 +171,12 @@ void main() {
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
     for (final s in ['5s', '10s', '15s', '20s']) {
-      expect(find.widgetWithText(ChoiceChip, s), findsOneWidget);
+      expect(find.widgetWithText(AiPill, s), findsOneWidget);
     }
     expect(find.byKey(const Key('ai-short-take-hint')), findsNothing);
 
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '5s'));
-    await tester.tap(find.widgetWithText(ChoiceChip, '5s'));
+    await tester.ensureVisible(find.widgetWithText(AiPill, '5s'));
+    await tester.tap(find.widgetWithText(AiPill, '5s'));
     await settle(tester);
 
     expect(find.byKey(const Key('ai-short-take-hint')), findsOneWidget);
@@ -185,8 +187,8 @@ void main() {
     quotes();
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    expect(find.widgetWithText(ChoiceChip, '5s'), findsNothing);
-    expect(find.widgetWithText(ChoiceChip, '10s'), findsOneWidget);
+    expect(find.widgetWithText(AiPill, '5s'), findsNothing);
+    expect(find.widgetWithText(AiPill, '10s'), findsOneWidget);
   });
 
   testWidgets('shows the script as a storyboard: length, hook, timed scenes, voiceover, on-screen text, CTA', (tester) async {
@@ -233,8 +235,8 @@ void main() {
     quotes();
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, '15s'));
-    await tester.tap(find.widgetWithText(ChoiceChip, '15s'));
+    await tester.ensureVisible(find.widgetWithText(AiPill, '15s'));
+    await tester.tap(find.widgetWithText(AiPill, '15s'));
     await settle(tester);
     await tester.ensureVisible(find.text('Write with AI'));
     await tester.tap(find.text('Write with AI'));
@@ -244,7 +246,7 @@ void main() {
     expect(sent['stage'], 'SCRIPT');
     expect(sent['settings'], {'durationSeconds': 15});
     // The new script was written for 20s, so the video length follows it.
-    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '20s')).selected, isTrue);
+    expect(tester.widget<AiPill>(find.widgetWithText(AiPill, '20s')).selected, isTrue);
   });
 
   testWidgets('shows the images and videos already made, and opens one on tap', (tester) async {
@@ -258,7 +260,8 @@ void main() {
     quotes();
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    expect(find.text('Your images & videos'), findsOneWidget);
+    expect(find.text('Your images'), findsOneWidget);
+    expect(find.text('Your videos'), findsOneWidget);
     expect(find.byKey(const Key('ai-work-i1')), findsOneWidget);
     expect(find.byKey(const Key('ai-work-v1')), findsOneWidget);
     expect(find.byKey(const Key('ai-work-s1')), findsNothing); // scripts live in "Your script"

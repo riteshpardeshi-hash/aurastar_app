@@ -6,8 +6,9 @@ import '../widgets/ai_job_status_badge.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_video_detail_screen.dart';
 
-/// The creator's image sets and videos in one campaign — in progress, waiting
-/// on an image pick, judged — and which one is their final ad. Generation is
+/// The creator's image sets and videos in one campaign, as two separate
+/// collections (images first) — in progress, waiting on an image pick, judged —
+/// and which one is their final ad. Generation is
 /// asynchronous, so this is where creators come back to.
 class MyAiVideosScreen extends StatefulWidget {
   final String campaignId;
@@ -87,11 +88,17 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               color: AiUi.accent,
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                itemCount: _items.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) => _card(_items[i]),
+              // Images and videos are two separate collections, images first (client
+              // feedback, 24 Nov) — each newest first.
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                children: [
+                  for (final (title, stage) in [('Images', AiStage.image), ('Videos', AiStage.video)])
+                    if (_items.where((g) => g.stage == stage).toList() case final items when items.isNotEmpty) ...[
+                      AiSectionTitle(title, trailing: Text('${items.length}', style: const TextStyle(color: AppColors.textFaint, fontSize: 12))),
+                      for (final g in items) ...[_card(g), const SizedBox(height: 10)],
+                    ],
+                ],
               ),
             ),
     );

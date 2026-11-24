@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aura_app/features/ai_ads/screens/ai_brand_assets_row.dart';
 import 'package:aura_app/features/ai_ads/screens/create_ai_videos_screen.dart';
 
+import 'package:aura_app/features/ai_ads/widgets/ai_ui.dart';
+
 import 'ai_ads_fake_backend.dart';
 
 // Client feedback (24 Nov): the workspace opened on "Your images & videos", so creators
 // landed on old work instead of making the next ad. It now reads as guided steps — the
-// brief folded, 1 Script, 2 Style, 3 Your images & videos — with Generate pinned to the
+// brief folded, 1 Script, 2 Style, then Your images and Your videos — with Generate pinned to the
 // bottom, a count on the My AI videos icon, and the script actions in one row.
 void main() {
   late FakeAiAdsBackend backend;
@@ -37,7 +39,7 @@ void main() {
   testWidgets('your images & videos come after the script and style steps, not first', (tester) async {
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
-    final script = find.text('Script'), style = find.text('Style'), work = find.text('Your images & videos');
+    final script = find.text('Script'), style = find.text('Style'), work = find.text('Your videos');
     expect(work, findsOneWidget);
     expect(top(tester, script), lessThan(top(tester, style)));
     expect(top(tester, style), lessThan(top(tester, work)));
@@ -92,18 +94,43 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('ai-my-videos')), matching: find.text('1')), findsOneWidget);
   });
 
-  // Phone check (24 Nov): unselected chips rendered as white pills with near-white text,
-  // because the app-wide ChipTheme won over the chip's own background colour.
-  testWidgets('unselected chips are dark, selected ones purple — never white', (tester) async {
+  // Phone check (24 Nov): Material ChoiceChips took the app's light theme on device and
+  // showed unselected options as white blanks with unreadable labels. The pills now paint
+  // their own colours, independent of the theme.
+  testWidgets('unselected pills are dark with readable labels, selected ones purple', (tester) async {
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+    expect(find.byType(ChoiceChip), findsNothing);
+
+    BoxDecoration paint(String label) => tester
+        .widget<AnimatedContainer>(find.descendant(of: find.widgetWithText(AiPill, label), matching: find.byType(AnimatedContainer)))
+        .decoration! as BoxDecoration;
     for (final label in ['480p', 'Images first', '20s']) {
-      final chip = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label));
-      expect(chip.selected, isFalse);
-      final bg = chip.color?.resolve(<WidgetState>{});
-      expect(bg, isNotNull, reason: '$label must set its own colour, not inherit the light theme');
-      expect(bg!.a, lessThan(0.2), reason: '$label background should be (nearly) transparent on the dark page');
+      expect(tester.widget<AiPill>(find.widgetWithText(AiPill, label)).selected, isFalse);
+      expect(paint(label).color!.a, lessThan(0.2), reason: '$label must not be a white pill');
+      expect(tester.widget<Text>(find.text(label)).style!.color, isNot(Colors.white));
     }
-    final on = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '720p'));
-    expect(on.color?.resolve({WidgetState.selected}), const Color(0xFF7B2CBF));
+    expect(paint('720p').color, AiUi.accent);
+  });
+
+  // Client feedback (24 Nov): don't merge images and videos into one collection — show
+  // the images first, then the videos, as two separate sections.
+  testWidgets('images and videos are two separate collections, images first', (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(generations: [
+      generationJson(id: 's1'),
+      // Videos still being made: no thumbnail fetch (its 30 s timeout would outlive the test).
+      generationJson(id: 'v1', stage: 'VIDEO', scriptId: 's1', status: 'RUNNING'),
+      generationJson(id: 'i1', stage: 'IMAGE', scriptId: 's1', output: {'imageUrls': ['https://s3/a.png']}),
+      generationJson(id: 'v2', stage: 'VIDEO', scriptId: 's1', version: 2, status: 'RUNNING'),
+    ]));
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+
+    final images = top(tester, find.text('Your images')), videos = top(tester, find.text('Your videos'));
+    expect(images, lessThan(videos));
+    final i1 = top(tester, find.byKey(const Key('ai-work-i1')));
+    expect(i1, greaterThan(images));
+    expect(i1, lessThan(videos));
+    for (final v in ['v1', 'v2']) {
+      expect(top(tester, find.byKey(Key('ai-work-$v'))), greaterThan(videos));
+    }
   });
 }
