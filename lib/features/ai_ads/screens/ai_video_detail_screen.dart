@@ -92,7 +92,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
         _evaluations = (results[2] as List<AiEvaluation>).where((e) => e.videoGenerationId == gen.id).toList();
         _participation = (results[3] as AiCampaign).myParticipation;
         _assets = (results[3] as AiCampaign).assets;
-        _seconds ??= _scriptGen(ws)?.durationSeconds ?? ws.format.minDurationSeconds;
+        _seconds ??= ws.format.inRange(_scriptGen(ws)?.durationSeconds ?? ws.format.minDurationSeconds);
         // A storyboard starts with every scene's frame picked — the closest match to the script.
         if (gen.stage == AiStage.image && gen.isDone && _board == null) {
           _board = [for (var i = 0; i < gen.imageUrls.length; i++) _Slot(gen.id, i, gen.imageUrls[i], gen.versionNumber)];
@@ -452,9 +452,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     final fraction = total == null || total == 0 ? null : (elapsed.inSeconds / total).clamp(0.0, 1.0);
     final overdue = total != null && elapsed.inSeconds > total;
     final remaining = total == null ? null : Duration(seconds: (total - elapsed.inSeconds).clamp(0, total));
-    // Steps track the estimate: sent → generating → finishing.
-    final step = elapsed.inSeconds < 15 ? 0 : (fraction ?? 0) < 0.85 ? 1 : 2;
-    const steps = ['Sending your script to the video AI', 'Generating your scenes', 'Finishing and checking the video'];
+    // The server's real status. An older backend has none: then never claim more than "generating".
+    final step = switch (g.step) {
+      'SENDING' => 0,
+      'WAITING' => 1,
+      'GENERATING' => 2,
+      'FINISHING' => 3,
+      _ => elapsed.inSeconds < 15 ? 0 : 2,
+    };
+    const steps = ['Sending your script to the video AI', 'Waiting for the video AI to start', 'Generating your scenes', 'Saving your video'];
     final scenes = _scriptGen(_workspace!)?.scenes ?? const <AiScriptScene>[];
     return Column(
       key: const Key('ai-video-progress'),
@@ -508,9 +514,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
                     remaining == null
                         ? 'Usually a few minutes'
                         : overdue
-                        ? 'Taking a little longer than usual…'
+                        ? 'Taking longer than usual'
                         : remaining.inSeconds < 60
-                        ? 'Almost there'
+                        ? 'About a minute left'
                         : 'About ${(remaining.inSeconds / 60).ceil()} min left',
                     key: const Key('ai-video-eta'),
                     style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
@@ -606,13 +612,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     final f = ws.format;
     final board = _board ?? [for (var i = 0; i < g.imageUrls.length; i++) _Slot(g.id, i, g.imageUrls[i], g.versionNumber)];
     final versions = _versions(g);
-    final scriptSeconds = _scriptGen(ws)?.durationSeconds;
-    final options = {
-      if (ws.shortClipSeconds > 0 && ws.shortClipSeconds < f.minDurationSeconds) ws.shortClipSeconds,
-      f.minDurationSeconds,
-      ((f.minDurationSeconds + f.maxDurationSeconds) / 2).round(),
-      f.maxDurationSeconds,
-    }.toList()..sort();
+    final written = _scriptGen(ws)?.durationSeconds;
+    final scriptSeconds = written == null ? null : f.inRange(written);
+    final options = f.lengthOptions;
     final storyboard = g.sceneIndexes.isNotEmpty;
     final editCount = _changes.length;
     final eq = _imageEditQuote;
@@ -948,6 +950,13 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     );
   }
 
+  /// How much longer this video can get without passing the brand's maximum.
+  List<int> get _extendOptions {
+    final max = _workspace!.format.maxDurationSeconds;
+    final clip = _gen?.clipSeconds ?? _gen?.durationSeconds ?? 0;
+    return [for (final s in [4, 5, 8, 10]) if (clip + s <= max) s];
+  }
+
   Widget _iterateSection() {
     final q = _iterateQuote;
     return Column(
@@ -957,19 +966,25 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
         Wrap(spacing: 8, children: [
           for (final (mode, label) in [(_Iterate.edit, 'Edit'), (_Iterate.extend, 'Make it longer'), (_Iterate.reaudio, 'New audio')])
             ChoiceChip(label: Text(label), selected: _iterate == mode, onSelected: (_) {
-              setState(() => _iterate = mode);
+              setState(() {
+                _iterate = mode;
+                if (_extendOptions.isNotEmpty && !_extendOptions.contains(_extendSeconds)) _extendSeconds = _extendOptions.last;
+              });
               _requote();
             }),
         ]),
         if (_iterate == _Iterate.extend) ...[
           const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            for (final s in [4, 5, 8, 10])
-              ChoiceChip(label: Text('+${s}s'), selected: _extendSeconds == s, onSelected: (_) {
-                setState(() => _extendSeconds = s);
-                _requote();
-              }),
-          ]),
+          if (_extendOptions.isEmpty)
+            AiWarningText("This video is already as long as the brand allows (${_workspace!.format.maxDurationSeconds}s).")
+          else
+            Wrap(spacing: 8, children: [
+              for (final s in _extendOptions)
+                ChoiceChip(label: Text('+${s}s'), selected: _extendSeconds == s, onSelected: (_) {
+                  setState(() => _extendSeconds = s);
+                  _requote();
+                }),
+            ]),
         ],
         const SizedBox(height: 10),
         TextField(

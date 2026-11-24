@@ -166,11 +166,16 @@ class AiAdFormat {
   final int maxDurationSeconds;
   final String language;
 
+  /// The video quality the brand set for the campaign ("480p" / "720p" / "1080p"); every
+  /// video is made at it (backend ADR 144). Null from a backend that predates it.
+  final String? resolution;
+
   const AiAdFormat({
     this.aspectRatio = '9:16',
     this.minDurationSeconds = 10,
     this.maxDurationSeconds = 30,
     this.language = 'English',
+    this.resolution,
   });
 
   factory AiAdFormat.fromJson(Map<String, dynamic>? j) {
@@ -180,8 +185,23 @@ class AiAdFormat {
       minDurationSeconds: _intOrNull(f['minDurationSeconds']) ?? 10,
       maxDurationSeconds: _intOrNull(f['maxDurationSeconds']) ?? 30,
       language: '${f['language'] ?? 'English'}',
+      resolution: f['resolution'] is String ? f['resolution'] as String : null,
     );
   }
+}
+
+/// The lengths a video may have: always inside the brand's range (backend ADR 145).
+extension AiAdFormatLengths on AiAdFormat {
+  /// Shortest, middle and longest.
+  List<int> get lengthOptions =>
+      {minDurationSeconds, ((minDurationSeconds + maxDurationSeconds) / 2).round(), maxDurationSeconds}.toList()..sort();
+
+  /// [seconds] held inside the range (an older script may be shorter than the minimum).
+  int inRange(int seconds) => seconds < minDurationSeconds
+      ? minDurationSeconds
+      : seconds > maxDurationSeconds
+      ? maxDurationSeconds
+      : seconds;
 }
 
 /// How a format reads to a creator: "15–30s vertical".
@@ -519,6 +539,8 @@ class AiGeneration {
   final String scriptCallToAction;
 
   /// The video length this version was made for (a script's target, a video's length).
+  /// The whole clip's length (an extend adds to its source).
+  final int? clipSeconds;
   final int? durationSeconds;
 
   /// A video's quality ("720p") and whether its on-screen text was on.
@@ -528,6 +550,9 @@ class AiGeneration {
   /// A running video: when it started and how long it should take in total.
   final DateTime? etaStartedAt;
   final int? etaSeconds;
+
+  /// What is really happening to a running video: SENDING, WAITING, GENERATING or FINISHING.
+  final String? step;
   final List<String> imageUrls;
 
   /// Storyboard images: the script scene each image shows (parallel to [imageUrls]).
@@ -558,11 +583,13 @@ class AiGeneration {
     this.scriptTitle = '',
     this.scriptHook = '',
     this.scriptCallToAction = '',
+    this.clipSeconds,
     this.durationSeconds,
     this.resolution,
     this.onScreenText = true,
     this.etaStartedAt,
     this.etaSeconds,
+    this.step,
     this.imageUrls = const [],
     this.sceneIndexes = const [],
     this.editedImageIndexes = const [],
@@ -593,8 +620,12 @@ class AiGeneration {
       scriptCallToAction: '${script?['callToAction'] ?? ''}',
       resolution: j['settings'] is Map ? (j['settings'] as Map)['resolution'] as String? : null,
       onScreenText: !(j['settings'] is Map && (j['settings'] as Map)['onScreenText'] == false),
+      step: j['step'] as String?,
       etaStartedAt: j['eta'] is Map ? _date((j['eta'] as Map)['startedAt']) : null,
       etaSeconds: j['eta'] is Map && (j['eta'] as Map)['estimatedSeconds'] is num ? ((j['eta'] as Map)['estimatedSeconds'] as num).toInt() : null,
+      clipSeconds: j['settings'] is Map && (j['settings'] as Map)['clipSeconds'] is num
+          ? ((j['settings'] as Map)['clipSeconds'] as num).toInt()
+          : null,
       durationSeconds: j['settings'] is Map && (j['settings'] as Map)['durationSeconds'] is num
           ? ((j['settings'] as Map)['durationSeconds'] as num).toInt()
           : null,
@@ -644,8 +675,6 @@ class AiWorkspace {
   final AiFreeEvaluations freeEvaluations;
   final List<AiGeneration> generations;
 
-  /// A new video may always be this short, even below the brand's minimum (0 = not offered).
-  final int shortClipSeconds;
 
   const AiWorkspace({
     required this.campaignStatus,
@@ -656,7 +685,6 @@ class AiWorkspace {
     required this.generations,
     this.freeEvaluations = const AiFreeEvaluations(),
     this.deadline,
-    this.shortClipSeconds = 0,
   });
 
   factory AiWorkspace.fromJson(Map<String, dynamic> j) {
@@ -670,7 +698,6 @@ class AiWorkspace {
       prices: AiPrices.fromJson(j['prices'] as Map<String, dynamic>?),
       freeEvaluations: AiFreeEvaluations.fromJson(j['freeEvaluations']),
       generations: _maps(j['generations']).map(AiGeneration.fromJson).toList(),
-      shortClipSeconds: _int(j['shortClipSeconds']),
     );
   }
 

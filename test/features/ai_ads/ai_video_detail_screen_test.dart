@@ -266,6 +266,26 @@ void main() {
     expect(find.text('On-screen text: off'), findsOneWidget);
   });
 
+  // Tester, 24 Nov: "Finishing" showed while the video was still queued, because the step was a timer.
+  testWidgets('the progress step is the real status, however long it has taken', (tester) async {
+    final running = generationJson(id: 'v1', stage: 'VIDEO', status: 'RUNNING');
+    running['step'] = 'WAITING';
+    running['eta'] = {
+      'startedAt': DateTime.now().subtract(const Duration(minutes: 22)).toUtc().toIso8601String(),
+      'estimatedSeconds': 100,
+    };
+    backend.on('GET $base/workspace/generations/v1', running);
+    backend.on('GET $base/workspace', workspaceJson(generations: [running]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget); // only "Sending" is done
+    final waiting = tester.widget<Text>(find.text('Waiting for the video AI to start'));
+    expect(waiting.style!.fontWeight, FontWeight.w700);
+    expect(find.text('Taking longer than usual'), findsOneWidget);
+  });
+
   testWidgets('a running video can be cancelled (refunded)', (tester) async {
     var status = 'RUNNING';
     backend.routes['GET $base/workspace/generations/v1'] =
@@ -386,6 +406,19 @@ void main() {
       'settings': {'durationSeconds': 8},
       'expectedCredits': 9,
     });
+  });
+
+  // Backend ADR 145: the brand's maximum (20s here) holds for a longer version too.
+  testWidgets("\"Make it longer\" only offers what fits under the brand's maximum", (tester) async {
+    serve(gen: {...doneVideo, 'settings': {'durationSeconds': 15, 'clipSeconds': 15}}, evaluations: [evaluationJson()]);
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+
+    await tester.tap(find.text('Make it longer'));
+    await settle(tester);
+    expect(find.text('+4s'), findsOneWidget);
+    expect(find.text('+5s'), findsOneWidget);
+    expect(find.text('+8s'), findsNothing);
+    expect(find.text('+10s'), findsNothing);
   });
 
   testWidgets('no free evaluations left: the reason shows and the button is off', (tester) async {

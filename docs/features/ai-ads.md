@@ -40,10 +40,20 @@ three work together on the list loaded in the app (no extra request):
 1. **Join** — open campaigns: *Ask to join*; invite-only: *Accept invite*.
    Both show the ownership-terms dialog first and send `acceptTerms: true`.
    A request waits for the brand's approval (`REQUESTED` → `ACTIVE`).
-   **Your images & videos** — once anything exists, the workspace opens with a strip
-   of everything made (image sets with their first image + count, videos, a spinner
-   while generating), newest first; tap to open it, *See all* for the full list.
-2. **Length first** — the *Length* chips sit above the script: the script **and**
+   **The workspace is guided steps** (client feedback, 24 Nov 2026: it used to open on
+   past work). Top to bottom: the **brief & assets** folded to one line (tap to open),
+   **1 Script** (length, versions, the script, then *Refine · Edit (free) · New script*
+   in one row; Refine and New script open their panels), **2 Style** (Text to video /
+   Images first, on-screen text, and the quality — read-only: the brand sets it for the
+   campaign and the app sends it with every quote and video, backend ADR 144), then **Your images** and **Your videos** as
+   two separate collections, images first (client feedback, 24 Nov), each a 3-across
+   grid of up to 6, newest first (*See all* for the rest). *My AI videos* is split the
+   same way. **Generate** is pinned
+   to the bottom with what it will make ("15s · 720p · text to video"), the credits
+   left and any blocking warning. The *My AI videos* icon shows a count badge.
+2. **Length first** — only lengths inside the brand's range (shortest, middle, longest;
+   no 5s takes, and *Make it longer* stops at the maximum: backend ADR 145). The *Length*
+   chips sit above the script: the script **and**
    the video are made for it. *Write with AI* / *Refine with AI* send it as
    `settings.durationSeconds`; the backend makes the scene timings add up to it.
    Picking a script version selects the length it was written for.
@@ -71,16 +81,15 @@ three work together on the list loaded in the app (no extra request):
    ("Your storyboard for this script is ready — Images v3, 3 images") with **Open your
    storyboard** as the main action; *Make a new storyboard · N credits* is secondary,
    so a creator never pays for a new set by accident. The video pins each frame to its scene's time,
-   and its length defaults to the script's. Length chips are the brand's min / middle / max,
-   plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
-   minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
+   and its length defaults to the script's. Length chips are the brand's min / middle / max
+   (ADR 145). Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
-   **Making a video:** *Show on-screen text* (on by default) sits next to Quality and on
+   **Making a video:** *Show on-screen text* (on by default) sits in the Style card and on
    the storyboard screen — off sends `settings.onScreenText: false` (no captions /
    subtitles / titles; the voiceover stays). While it generates, the screen shows a
    progress bar of elapsed time vs. the backend's estimate (`eta`), "About N min left"
-   ("Taking a little longer than usual…" past it), the current step (sending → generating
-   → finishing) and the script's scenes as *What's being made*.
+   ("Taking longer than usual" past it), the **real** step from the server (`step`: sending →
+   waiting for the video AI → generating → saving) and the script's scenes as *What's being made*.
    **The player** (`AiVideoPlayer`) plays **once** and stops on a Replay button — it never
    loops; play / pause, a seek bar with the time, mute, controls fade while playing.
 5. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per

@@ -13,7 +13,7 @@ void main() {
   setUp(() => backend = FakeAiAdsBackend());
   tearDown(FakeAiAdsBackend.reset);
 
-  testWidgets('lists images and videos newest first, with scores and the final ad', (tester) async {
+  testWidgets('lists images, then videos (each newest first), with scores and the final ad', (tester) async {
     backend.on('GET $base/workspace', workspaceJson(generations: [
       generationJson(id: 's1'),
       generationJson(id: 'i1', stage: 'IMAGE'),
@@ -29,7 +29,10 @@ void main() {
 
     expect(find.text('Script v1'), findsNothing);
     final labels = tester.widgetList<Text>(find.textContaining(RegExp(r'^(Images|Video) v\d$'))).map((t) => t.data).toList();
-    expect(labels, ['Video v2', 'Video v1', 'Images v1']);
+    // Two collections, images first; each newest first.
+    expect(labels, ['Images v1', 'Video v2', 'Video v1']);
+    expect(tester.getTopLeft(find.text('Images')).dy, lessThan(tester.getTopLeft(find.text('Videos')).dy));
+    expect(tester.getTopLeft(find.text('Images v1')).dy, lessThan(tester.getTopLeft(find.text('Videos')).dy));
     expect(find.text('81'), findsOneWidget);
     expect(find.text('60'), findsNothing);
     expect(find.text('Final ad'), findsOneWidget);
