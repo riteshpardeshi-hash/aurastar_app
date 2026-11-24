@@ -104,12 +104,12 @@ void main() {
     BoxDecoration paint(String label) => tester
         .widget<AnimatedContainer>(find.descendant(of: find.widgetWithText(AiPill, label), matching: find.byType(AnimatedContainer)))
         .decoration! as BoxDecoration;
-    for (final label in ['480p', 'Images first', '20s']) {
+    for (final label in ['15s', 'Images first', '20s']) {
       expect(tester.widget<AiPill>(find.widgetWithText(AiPill, label)).selected, isFalse);
       expect(paint(label).color!.a, lessThan(0.2), reason: '$label must not be a white pill');
       expect(tester.widget<Text>(find.text(label)).style!.color, isNot(Colors.white));
     }
-    expect(paint('720p').color, AiUi.accent);
+    expect(paint('10s').color, AiUi.accent);
   });
 
   // Client feedback (24 Nov): don't merge images and videos into one collection — show

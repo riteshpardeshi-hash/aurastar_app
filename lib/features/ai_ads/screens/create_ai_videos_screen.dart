@@ -86,8 +86,11 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         _loading = false;
         _scriptId ??= scripts.isEmpty ? null : scripts.last.id;
         _seconds ??= ws.format.minDurationSeconds;
-        _resolution ??=
-            ws.prices.resolutions.contains('720p') ? '720p' : (ws.prices.resolutions.isEmpty ? null : ws.prices.resolutions.first);
+        // The brand sets the quality for the whole campaign (backend ADR 144); the app just
+        // sends it along. An older backend without it falls back to 720p as before.
+        _resolution =
+            ws.format.resolution ??
+            (ws.prices.resolutions.contains('720p') ? '720p' : (ws.prices.resolutions.isEmpty ? null : ws.prices.resolutions.first));
       });
       _refreshQuotes();
     } catch (e) {
@@ -783,23 +786,12 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                                 : '$keyframes keyframes — one per scene — then make the video.',
                       ),
                       if (_method == AiGenerationMethod.textToVideo) ...[
-                        if (ws.prices.resolutions.length > 1)
-                          _styleRow(
-                            'Quality',
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final r in ws.prices.resolutions)
-                                  _choice(
-                                    r,
-                                    selected: r == _resolution,
-                                    onSelected: () {
-                                      setState(() => _resolution = r);
-                                      _quoteFor(_createAction);
-                                    },
-                                  ),
-                              ],
+                        if (_resolution != null)
+                          KeyedSubtree(
+                            key: const Key('ai-quality-set-by-brand'),
+                            child: _styleRow(
+                              'Quality',
+                              Text('$_resolution, set by the brand', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                             ),
                           ),
                         SwitchListTile(

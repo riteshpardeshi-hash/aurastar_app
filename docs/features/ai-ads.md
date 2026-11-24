@@ -44,7 +44,8 @@ three work together on the list loaded in the app (no extra request):
    past work). Top to bottom: the **brief & assets** folded to one line (tap to open),
    **1 Script** (length, versions, the script, then *Refine · Edit (free) · New script*
    in one row; Refine and New script open their panels), **2 Style** (Text to video /
-   Images first, quality, on-screen text), then **Your images** and **Your videos** as
+   Images first, on-screen text, and the quality — read-only: the brand sets it for the
+   campaign and the app sends it with every quote and video, backend ADR 144), then **Your images** and **Your videos** as
    two separate collections, images first (client feedback, 24 Nov), each a 3-across
    grid of up to 6, newest first (*See all* for the rest). *My AI videos* is split the
    same way. **Generate** is pinned

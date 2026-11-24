@@ -166,11 +166,16 @@ class AiAdFormat {
   final int maxDurationSeconds;
   final String language;
 
+  /// The video quality the brand set for the campaign ("480p" / "720p" / "1080p"); every
+  /// video is made at it (backend ADR 144). Null from a backend that predates it.
+  final String? resolution;
+
   const AiAdFormat({
     this.aspectRatio = '9:16',
     this.minDurationSeconds = 10,
     this.maxDurationSeconds = 30,
     this.language = 'English',
+    this.resolution,
   });
 
   factory AiAdFormat.fromJson(Map<String, dynamic>? j) {
@@ -180,6 +185,7 @@ class AiAdFormat {
       minDurationSeconds: _intOrNull(f['minDurationSeconds']) ?? 10,
       maxDurationSeconds: _intOrNull(f['maxDurationSeconds']) ?? 30,
       language: '${f['language'] ?? 'English'}',
+      resolution: f['resolution'] is String ? f['resolution'] as String : null,
     );
   }
 }
