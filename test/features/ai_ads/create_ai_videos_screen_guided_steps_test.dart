@@ -91,4 +91,19 @@ void main() {
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
     expect(find.descendant(of: find.byKey(const Key('ai-my-videos')), matching: find.text('1')), findsOneWidget);
   });
+
+  // Phone check (24 Nov): unselected chips rendered as white pills with near-white text,
+  // because the app-wide ChipTheme won over the chip's own background colour.
+  testWidgets('unselected chips are dark, selected ones purple — never white', (tester) async {
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+    for (final label in ['480p', 'Images first', '20s']) {
+      final chip = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label));
+      expect(chip.selected, isFalse);
+      final bg = chip.color?.resolve(<WidgetState>{});
+      expect(bg, isNotNull, reason: '$label must set its own colour, not inherit the light theme');
+      expect(bg!.a, lessThan(0.2), reason: '$label background should be (nearly) transparent on the dark page');
+    }
+    final on = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '720p'));
+    expect(on.color?.resolve({WidgetState.selected}), const Color(0xFF7B2CBF));
+  });
 }

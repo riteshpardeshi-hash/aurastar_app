@@ -452,8 +452,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
       selected: selected,
       showCheckmark: false,
       onSelected: (_) => onSelected(),
-      selectedColor: AiUi.accent,
-      backgroundColor: Colors.transparent,
+      // `color` beats the app-wide ChipTheme, which paints unselected chips white.
+      color: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? AiUi.accent : Colors.white.withValues(alpha: 0.04)),
       side: BorderSide(color: selected ? AiUi.accent : Colors.white.withValues(alpha: 0.14)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       labelStyle: TextStyle(
