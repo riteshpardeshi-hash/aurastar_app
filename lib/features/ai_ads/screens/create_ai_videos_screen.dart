@@ -121,7 +121,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   /// Picks a script version and, when it was written for a length, matches the video to it.
   void _selectScript(AiGeneration script) {
     _scriptId = script.id;
-    if (script.durationSeconds != null) _seconds = script.durationSeconds;
+    final seconds = script.durationSeconds;
+    if (seconds != null) _seconds = _workspace?.format.inRange(seconds) ?? seconds;
   }
 
   AiAction? get _createAction {
@@ -665,7 +666,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final s in _lengthOptions(ws))
+                  for (final s in ws.format.lengthOptions)
                     _choice(
                       '${s}s',
                       selected: s == _seconds,
@@ -676,15 +677,6 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                     ),
                 ],
               ),
-              if (_seconds != null && _seconds! < ws.format.minDurationSeconds)
-                Padding(
-                  key: const Key('ai-short-take-hint'),
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'A quick ${_seconds}s first take — the brand wants ${ws.format.minDurationSeconds}–${ws.format.maxDurationSeconds}s, you can extend it before you submit.',
-                    style: const TextStyle(color: AiUi.warning, fontSize: 12, height: 1.4),
-                  ),
-                ),
               const SizedBox(height: 14),
               if (scripts.isEmpty)
                 ..._newScriptPanel(first: true, scriptQuote: scriptQuote)
@@ -953,19 +945,6 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
         ),
       ),
     );
-  }
-
-  /// The brand's min / middle / max, plus the always-allowed short first take (5s).
-  List<int> _lengthOptions(AiWorkspace ws) {
-    final f = ws.format;
-    final mid = ((f.minDurationSeconds + f.maxDurationSeconds) / 2).round();
-    return {
-        if (ws.shortClipSeconds > 0 && ws.shortClipSeconds < f.minDurationSeconds) ws.shortClipSeconds,
-        f.minDurationSeconds,
-        mid,
-        f.maxDurationSeconds,
-      }.toList()
-      ..sort();
   }
 
   Widget _textField(TextEditingController c, String hint, {int minLines = 4, ValueChanged<String>? onChanged}) {

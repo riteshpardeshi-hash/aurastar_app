@@ -388,6 +388,19 @@ void main() {
     });
   });
 
+  // Backend ADR 145: the brand's maximum (20s here) holds for a longer version too.
+  testWidgets("\"Make it longer\" only offers what fits under the brand's maximum", (tester) async {
+    serve(gen: {...doneVideo, 'settings': {'durationSeconds': 15, 'clipSeconds': 15}}, evaluations: [evaluationJson()]);
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+
+    await tester.tap(find.text('Make it longer'));
+    await settle(tester);
+    expect(find.text('+4s'), findsOneWidget);
+    expect(find.text('+5s'), findsOneWidget);
+    expect(find.text('+8s'), findsNothing);
+    expect(find.text('+10s'), findsNothing);
+  });
+
   testWidgets('no free evaluations left: the reason shows and the button is off', (tester) async {
     serve(gen: doneVideo);
     backend.on('POST $base/workspace/generations/v1/evaluate/quote', evalQuoteJson(left: 0, reason: "You've used all 5 free AI evaluations in this campaign."));

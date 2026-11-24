@@ -51,7 +51,9 @@ three work together on the list loaded in the app (no extra request):
    same way. **Generate** is pinned
    to the bottom with what it will make ("15s · 720p · text to video"), the credits
    left and any blocking warning. The *My AI videos* icon shows a count badge.
-2. **Length first** — the *Length* chips sit above the script: the script **and**
+2. **Length first** — only lengths inside the brand's range (shortest, middle, longest;
+   no 5s takes, and *Make it longer* stops at the maximum: backend ADR 145). The *Length*
+   chips sit above the script: the script **and**
    the video are made for it. *Write with AI* / *Refine with AI* send it as
    `settings.durationSeconds`; the backend makes the scene timings add up to it.
    Picking a script version selects the length it was written for.
@@ -79,11 +81,10 @@ three work together on the list loaded in the app (no extra request):
    ("Your storyboard for this script is ready — Images v3, 3 images") with **Open your
    storyboard** as the main action; *Make a new storyboard · N credits* is secondary,
    so a creator never pays for a new set by accident. The video pins each frame to its scene's time,
-   and its length defaults to the script's. Length chips are the brand's min / middle / max,
-   plus a **5s first take** (the workspace's `shortClipSeconds`) when the brand's
-   minimum is longer. Picking it shows a hint that the clip can be extended — a shorter ad may still be submitted (product decision). Videos run in the background; the detail screen
+   and its length defaults to the script's. Length chips are the brand's min / middle / max
+   (ADR 145). Videos run in the background; the detail screen
    polls every 5 s and offers *Cancel (refunded)*.
-   **Making a video:** *Show on-screen text* (on by default) sits next to Quality and on
+   **Making a video:** *Show on-screen text* (on by default) sits in the Style card and on
    the storyboard screen — off sends `settings.onScreenText: false` (no captions /
    subtitles / titles; the voiceover stays). While it generates, the screen shows a
    progress bar of elapsed time vs. the backend's estimate (`eta`), "About N min left"

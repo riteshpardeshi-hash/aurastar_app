@@ -165,30 +165,19 @@ void main() {
     expect(find.descendant(of: find.byKey(const Key('ai-selected-script')), matching: find.text('Shorter version')), findsOneWidget);
   });
 
-  testWidgets('offers a 5s first take below the brand minimum, with a hint to extend it', (tester) async {
-    backend.on('GET $base/workspace', workspaceJson(shortClipSeconds: 5));
-    quotes();
-    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
-
-    for (final s in ['5s', '10s', '15s', '20s']) {
-      expect(find.widgetWithText(AiPill, s), findsOneWidget);
-    }
-    expect(find.byKey(const Key('ai-short-take-hint')), findsNothing);
-
-    await tester.ensureVisible(find.widgetWithText(AiPill, '5s'));
-    await tester.tap(find.widgetWithText(AiPill, '5s'));
-    await settle(tester);
-
-    expect(find.byKey(const Key('ai-short-take-hint')), findsOneWidget);
-  });
-
-  testWidgets('without shortClipSeconds (older backend) only the brand lengths are offered', (tester) async {
-    backend.on('GET $base/workspace', workspaceJson());
+  // The brand's range is the rule (24 Nov, backend ADR 145): no 5s takes below its minimum,
+  // not even from an older backend, and an old 5s script is brought into range.
+  testWidgets("only lengths inside the brand's range are offered", (tester) async {
+    backend.on('GET $base/workspace', workspaceJson(shortClipSeconds: 5, generations: [generationJson(id: 's1', durationSeconds: 5)]));
     quotes();
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
 
     expect(find.widgetWithText(AiPill, '5s'), findsNothing);
-    expect(find.widgetWithText(AiPill, '10s'), findsOneWidget);
+    for (final s in ['10s', '15s', '20s']) {
+      expect(find.widgetWithText(AiPill, s), findsOneWidget);
+    }
+    final quoted = backend.calls('POST', '$base/workspace/quote').lastWhere((r) => r.body!['stage'] == 'VIDEO');
+    expect((quoted.body!['settings'] as Map)['durationSeconds'], 10);
   });
 
   testWidgets('shows the script as a storyboard: length, hook, timed scenes, voiceover, on-screen text, CTA', (tester) async {
