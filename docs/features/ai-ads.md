@@ -40,9 +40,14 @@ three work together on the list loaded in the app (no extra request):
 1. **Join** — open campaigns: *Ask to join*; invite-only: *Accept invite*.
    Both show the ownership-terms dialog first and send `acceptTerms: true`.
    A request waits for the brand's approval (`REQUESTED` → `ACTIVE`).
-   **Your images & videos** — once anything exists, the workspace opens with a strip
-   of everything made (image sets with their first image + count, videos, a spinner
-   while generating), newest first; tap to open it, *See all* for the full list.
+   **The workspace is guided steps** (client feedback, 24 Nov 2026: it used to open on
+   past work). Top to bottom: the **brief & assets** folded to one line (tap to open),
+   **1 Script** (length, versions, the script, then *Refine · Edit (free) · New script*
+   in one row; Refine and New script open their panels), **2 Style** (Text to video /
+   Images first, quality, on-screen text) and **3 Your images & videos**, a 3-across
+   grid of up to 6 items, newest first (*See all* for the rest). **Generate** is pinned
+   to the bottom with what it will make ("15s · 720p · text to video"), the credits
+   left and any blocking warning. The *My AI videos* icon shows a count badge.
 2. **Length first** — the *Length* chips sit above the script: the script **and**
    the video are made for it. *Write with AI* / *Refine with AI* send it as
    `settings.durationSeconds`; the backend makes the scene timings add up to it.
