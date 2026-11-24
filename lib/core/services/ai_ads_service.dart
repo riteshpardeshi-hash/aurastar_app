@@ -550,6 +550,9 @@ class AiGeneration {
   /// A running video: when it started and how long it should take in total.
   final DateTime? etaStartedAt;
   final int? etaSeconds;
+
+  /// What is really happening to a running video: SENDING, WAITING, GENERATING or FINISHING.
+  final String? step;
   final List<String> imageUrls;
 
   /// Storyboard images: the script scene each image shows (parallel to [imageUrls]).
@@ -586,6 +589,7 @@ class AiGeneration {
     this.onScreenText = true,
     this.etaStartedAt,
     this.etaSeconds,
+    this.step,
     this.imageUrls = const [],
     this.sceneIndexes = const [],
     this.editedImageIndexes = const [],
@@ -616,6 +620,7 @@ class AiGeneration {
       scriptCallToAction: '${script?['callToAction'] ?? ''}',
       resolution: j['settings'] is Map ? (j['settings'] as Map)['resolution'] as String? : null,
       onScreenText: !(j['settings'] is Map && (j['settings'] as Map)['onScreenText'] == false),
+      step: j['step'] as String?,
       etaStartedAt: j['eta'] is Map ? _date((j['eta'] as Map)['startedAt']) : null,
       etaSeconds: j['eta'] is Map && (j['eta'] as Map)['estimatedSeconds'] is num ? ((j['eta'] as Map)['estimatedSeconds'] as num).toInt() : null,
       clipSeconds: j['settings'] is Map && (j['settings'] as Map)['clipSeconds'] is num

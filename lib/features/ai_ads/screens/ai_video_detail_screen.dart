@@ -452,9 +452,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     final fraction = total == null || total == 0 ? null : (elapsed.inSeconds / total).clamp(0.0, 1.0);
     final overdue = total != null && elapsed.inSeconds > total;
     final remaining = total == null ? null : Duration(seconds: (total - elapsed.inSeconds).clamp(0, total));
-    // Steps track the estimate: sent → generating → finishing.
-    final step = elapsed.inSeconds < 15 ? 0 : (fraction ?? 0) < 0.85 ? 1 : 2;
-    const steps = ['Sending your script to the video AI', 'Generating your scenes', 'Finishing and checking the video'];
+    // The server's real status. An older backend has none: then never claim more than "generating".
+    final step = switch (g.step) {
+      'SENDING' => 0,
+      'WAITING' => 1,
+      'GENERATING' => 2,
+      'FINISHING' => 3,
+      _ => elapsed.inSeconds < 15 ? 0 : 2,
+    };
+    const steps = ['Sending your script to the video AI', 'Waiting for the video AI to start', 'Generating your scenes', 'Saving your video'];
     final scenes = _scriptGen(_workspace!)?.scenes ?? const <AiScriptScene>[];
     return Column(
       key: const Key('ai-video-progress'),
@@ -508,9 +514,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
                     remaining == null
                         ? 'Usually a few minutes'
                         : overdue
-                        ? 'Taking a little longer than usual…'
+                        ? 'Taking longer than usual'
                         : remaining.inSeconds < 60
-                        ? 'Almost there'
+                        ? 'About a minute left'
                         : 'About ${(remaining.inSeconds / 60).ceil()} min left',
                     key: const Key('ai-video-eta'),
                     style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
