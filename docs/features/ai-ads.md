@@ -88,7 +88,10 @@ three work together on the list loaded in the app (no extra request):
    so a creator never pays for a new set by accident. The video pins each frame to its scene's time,
    and its length defaults to the script's. Length chips are the brand's min / middle / max
    (ADR 145). Videos run in the background; the detail screen
-   polls every 5 s and offers *Cancel (refunded)*.
+   polls every 5 s and offers *Cancel (refunded)*. A failed check never stops the polling (it retries
+   after 5–30 s, quietly), coming back to the app checks at once, and a video that finishes while the
+   screen is open says *Your video is ready.* (tester, 24 Nov: one failed check had left the screen
+   on "Making your video" for 33 minutes after the video was done). *My AI videos* keeps polling the same way.
    **Making a video:** *Show on-screen text* (on by default) sits in the Style card and on
    the storyboard screen — off sends `settings.onScreenText: false` (no captions /
    subtitles / titles; the voiceover stays). While it generates, the screen shows a

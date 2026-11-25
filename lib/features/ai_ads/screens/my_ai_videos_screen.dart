@@ -64,7 +64,13 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
         _poll = Timer(const Duration(seconds: 5), _load);
       }
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() => _loading = false);
+      // A failed check must not stop the checking while something is still being made.
+      if (_items.any((g) => g.isRunning) || _latestEval.values.any((e) => e.isPending)) {
+        _poll?.cancel();
+        _poll = Timer(const Duration(seconds: 10), _load);
+      }
     }
   }
 

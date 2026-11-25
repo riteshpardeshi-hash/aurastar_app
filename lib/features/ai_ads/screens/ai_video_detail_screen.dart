@@ -24,7 +24,7 @@ class AiVideoDetailScreen extends StatefulWidget {
 
 enum _Iterate { edit, extend, reaudio }
 
-class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
+class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsBindingObserver {
   final _service = AiAdsService();
   final _instructions = TextEditingController();
 
@@ -60,11 +60,21 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  // Timers don't run while the app is in the background: check again on coming back.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && ((_gen?.isRunning ?? false) || (_latestEval?.isPending ?? false))) {
+      _load(background: true);
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _ticker?.cancel();
     _debounce?.cancel();
@@ -75,7 +85,11 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// [background] = a routine re-check while waiting: a failure there is retried quietly
+  /// instead of shown, and never stops the checking (tester, 24 Nov: one failed check left the
+  /// screen on "Making your video" for 33 minutes after the video was done).
+  Future<void> _load({bool background = false}) async {
+    final wasRunning = _gen?.isRunning ?? false;
     try {
       final results = await Future.wait([
         _service.fetchGeneration(widget.campaignId, widget.generationId),
@@ -103,14 +117,24 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
         }
         _loading = false;
       });
+      _failedChecks = 0;
       _schedulePoll();
       _refreshQuotes();
+      if (wasRunning && gen.stage == AiStage.video && gen.isDone) AiUi.toast(context, 'Your video is ready.');
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      AiUi.toast(context, e is AiAdsException ? e.message : "Couldn't load this.");
+      if (background) {
+        // Try again, a little later each time (5 s → 10 s → … at most 30 s).
+        _failedChecks++;
+        _schedulePoll(delay: Duration(seconds: (5 * (1 << (_failedChecks - 1).clamp(0, 3))).clamp(5, 30)));
+      } else {
+        AiUi.toast(context, e is AiAdsException ? e.message : "Couldn't load this.");
+      }
     }
   }
+
+  int _failedChecks = 0;
 
   AiEvaluation? get _latestEval => _evaluations.isEmpty ? null : _evaluations.first;
 
@@ -124,10 +148,10 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> {
     return '@$handle';
   }
 
-  void _schedulePoll() {
+  void _schedulePoll({Duration delay = const Duration(seconds: 5)}) {
     _poll?.cancel();
     final waiting = (_gen?.isRunning ?? false) || (_latestEval?.isPending ?? false);
-    if (waiting) _poll = Timer(const Duration(seconds: 5), _load);
+    if (waiting) _poll = Timer(delay, () => _load(background: true));
     final generating = _gen?.isRunning ?? false;
     if (generating && _ticker == null) {
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {

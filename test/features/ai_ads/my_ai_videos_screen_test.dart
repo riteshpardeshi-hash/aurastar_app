@@ -48,6 +48,27 @@ void main() {
     expect(find.text('No AI videos yet'), findsOneWidget);
   });
 
+  testWidgets('a failed check does not stop the polling', (tester) async {
+    var status = 'RUNNING';
+    var fail = false;
+    backend.routes['GET $base/workspace'] = (_) => fail
+        ? FakeAiAdsBackend.error(503, 'Service unavailable')
+        : FakeAiAdsBackend.ok(workspaceJson(generations: [generationJson(id: 'v1', stage: 'VIDEO', status: status)]));
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const MyAiVideosScreen(campaignId: campaignId));
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    fail = true;
+    await tester.pump(const Duration(seconds: 5));
+    await settle(tester);
+    fail = false;
+    status = 'COMPLETED';
+    await tester.pump(const Duration(seconds: 10));
+    await settle(tester);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('a running video is polled until it is done', (tester) async {
     var status = 'RUNNING';
     backend.routes['GET $base/workspace'] = (_) =>

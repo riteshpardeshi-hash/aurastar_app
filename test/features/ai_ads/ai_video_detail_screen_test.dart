@@ -324,6 +324,55 @@ void main() {
     expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
   });
 
+  // Tester, 24 Nov: a single failed check stopped the checking for good, so the screen stayed
+  // on "Making your video" for 33 minutes after the video was ready.
+  testWidgets('a failed check does not stop the checking; the finished video then shows, with a ready message', (tester) async {
+    var status = 'RUNNING';
+    var failNext = false;
+    backend.routes['GET $base/workspace/generations/v1'] = (_) => failNext
+        ? FakeAiAdsBackend.error(503, 'Service unavailable')
+        : FakeAiAdsBackend.ok(generationJson(id: 'v1', stage: 'VIDEO', status: status));
+    backend.on('GET $base/workspace', workspaceJson());
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+    expect(find.text('Making your video'), findsOneWidget);
+
+    failNext = true;
+    await tester.pump(const Duration(seconds: 5)); // this check fails
+    await settle(tester);
+    expect(find.text('Service unavailable'), findsNothing); // a background check stays quiet
+    expect(find.text('Making your video'), findsOneWidget);
+
+    failNext = false;
+    status = 'COMPLETED';
+    await tester.pump(const Duration(seconds: 10)); // the retry, a little later
+    await settle(tester);
+    expect(find.text('Making your video'), findsNothing);
+    expect(find.text('Your video is ready.'), findsOneWidget);
+    expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
+  });
+
+  testWidgets('coming back to the app checks a running video again at once', (tester) async {
+    var status = 'RUNNING';
+    backend.routes['GET $base/workspace/generations/v1'] =
+        (_) => FakeAiAdsBackend.ok(generationJson(id: 'v1', stage: 'VIDEO', status: status));
+    backend.on('GET $base/workspace', workspaceJson());
+    backend.on('GET $base/workspace/evaluations', []);
+    backend.on('GET $base', campaignJson());
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+    final before = backend.calls('GET', '$base/workspace/generations/v1').length;
+
+    status = 'COMPLETED';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(backend.calls('GET', '$base/workspace/generations/v1').length, greaterThan(before));
+    expect(find.text('Making your video'), findsNothing);
+  });
+
   testWidgets('get AI score: free, then shows the pending state', (tester) async {
     var evaluations = <Map<String, dynamic>>[];
     serve(gen: doneVideo);
