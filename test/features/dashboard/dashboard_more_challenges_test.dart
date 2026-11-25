@@ -45,6 +45,11 @@ void main() {
         );
       }
       if (path.endsWith('/challenges')) {
+        // Brand Videos asks for brand challenges only: none here.
+        if (request.url.queryParameters['sourceType'] == 'Brand') {
+          return http.Response(
+              jsonEncode({'status': 'success', 'data': {'challenges': []}}), 200);
+        }
         final page = request.url.queryParameters['page'] ?? '1';
         requestedPages.add(page);
         final list = switch (page) {

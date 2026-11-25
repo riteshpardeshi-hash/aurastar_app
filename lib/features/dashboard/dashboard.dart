@@ -59,9 +59,22 @@ class _DashboardState extends State<Dashboard> {
   // Reassigned by [_refresh] (pull-to-refresh), so not `final`.
   late Future<List<Map<String, dynamic>>> _challengesFuture = _fetchChallenges();
 
+  // Home's "Brand Videos": only challenges brands posted (client, 25 Nov 2026). It used to
+  // show the first challenges of the general list, whoever posted them. No brand
+  // challenges → no section.
+  late Future<List<Map<String, dynamic>>> _brandVideosFuture = _fetchBrandVideos();
+
+  Future<List<Map<String, dynamic>>> _fetchBrandVideos() => ChallengesService()
+      .fetchChallenges(sourceType: 'Brand', limit: 5)
+      .then((raw) => raw.map(normaliseChallenge).where((c) => c['sourceType'] == 'Brand').toList());
+
+  // Home's "Top Creators": a fixed 4, most followers first (client, 25 Nov 2026; the
+  // backend ranks them, ADR 149). Always 4, whatever the screen width.
+  static const _topCreatorsCount = 4;
+
   // Creator-page-tagged pages for the "Creator Videos" shelf.
   late Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
-      HomeService().fetchTrendingCreators(limit: 10);
+      HomeService().fetchTrendingCreators(limit: _topCreatorsCount);
 
   // Bumped by [_refresh]. The Featured carousel is keyed on it, so a pull
   // disposes + recreates it → its initState re-fetches the admin-curated list.
@@ -125,10 +138,11 @@ class _DashboardState extends State<Dashboard> {
   // primary feed data settles.
   Future<void> _refresh() async {
     final challenges = _fetchChallenges();
-    final creators = HomeService().fetchTrendingCreators(limit: 10);
+    final creators = HomeService().fetchTrendingCreators(limit: _topCreatorsCount);
     if (!mounted) return;
     setState(() {
       _challengesFuture = challenges;
+      _brandVideosFuture = _fetchBrandVideos();
       _moreExtra.clear();
       _morePage = 1;
       _moreHasMore = true;
@@ -517,7 +531,7 @@ class _DashboardState extends State<Dashboard> {
                           )
                         : _FeaturedCarousel(key: ValueKey('featured-$_refreshTick')),
                   ),
-                  SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildBrandVideosSection(context))),
+                  SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
                   SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                   SliverToBoxAdapter(child: _buildBannersSection(context)),
                   SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildTrendingSection(context))),
@@ -833,7 +847,13 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildBrandVideosSection(BuildContext context) {
-    return Column(
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _brandVideosFuture,
+      builder: (context, brandSnap) {
+        // Only when brands have posted challenges; hidden while loading too, so the
+        // heading never flashes on a Home with no brand videos.
+        if ((brandSnap.data ?? const []).isEmpty) return const SizedBox.shrink();
+        return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
@@ -864,10 +884,9 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _challengesFuture,
-          builder: (context, snap) {
-            final docs = snap.data ?? [];
+        Builder(
+          builder: (context) {
+            final docs = brandSnap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
             return Column(
@@ -887,7 +906,8 @@ class _DashboardState extends State<Dashboard> {
                               data['instructions'] as String? ?? '';
                           final participants =
                               data['submissionsCount'] as int? ?? 0;
-                          const brandLogoUrl = '';
+                          final brandLogoUrl = data['creatorAvatar'] as String? ?? '';
+                          final brandName = data['creatorName'] as String? ?? '';
 
                           return Expanded(
                             child: Padding(
@@ -927,18 +947,11 @@ class _DashboardState extends State<Dashboard> {
                                             participants: participants,
                                           ),
                                         ),
-                                        if (brandLogoUrl.isNotEmpty)
+                                        if (brandLogoUrl.isNotEmpty || brandName.isNotEmpty)
                                           Positioned(
                                             top: 6,
                                             right: 6,
-                                            child: ClipOval(
-                                              child: Image.network(
-                                                brandLogoUrl,
-                                                width: 22,
-                                                height: 22,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
+                                            child: _BrandBadge(logoUrl: brandLogoUrl, name: brandName),
                                           ),
                                       ],
                                     ),
@@ -969,7 +982,8 @@ class _DashboardState extends State<Dashboard> {
                                   data['thumbnailUrl'] as String? ?? '';
                               final participants =
                                   data['submissionsCount'] as int? ?? 0;
-                              const brandLogoUrl = '';
+                              final brandLogoUrl = data['creatorAvatar'] as String? ?? '';
+                              final brandName = data['creatorName'] as String? ?? '';
                               final challengeId = data['id'] as String? ?? '';
 
                               return Expanded(
@@ -1017,18 +1031,11 @@ class _DashboardState extends State<Dashboard> {
                                                 participants: participants,
                                               ),
                                             ),
-                                            if (brandLogoUrl.isNotEmpty)
+                                            if (brandLogoUrl.isNotEmpty || brandName.isNotEmpty)
                                               Positioned(
                                                 top: 8,
                                                 right: 8,
-                                                child: ClipOval(
-                                                  child: Image.network(
-                                                    brandLogoUrl,
-                                                    width: 26,
-                                                    height: 26,
-                                                    fit: BoxFit.cover,
-                                                  ),
-                                                ),
+                                                child: _BrandBadge(logoUrl: brandLogoUrl, name: brandName, size: 26),
                                               ),
                                           ],
                                         ),
@@ -1048,6 +1055,8 @@ class _DashboardState extends State<Dashboard> {
         ),
         const SizedBox(height: 24),
       ],
+    );
+      },
     );
   }
 
@@ -1249,7 +1258,7 @@ class _DashboardState extends State<Dashboard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'Creator Profiles',
+                    'Top Creators',
                     style: AppTextStyles.sectionHeader,
                   ),
                   GestureDetector(
@@ -1272,14 +1281,14 @@ class _DashboardState extends State<Dashboard> {
                 ],
               ),
             ),
-            SizedBox(
-              height: 110,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: docs.length,
-                itemBuilder: (_, i) {
-                  final data = docs[i];
+            // A fixed 4 in one row, spread evenly: no scrolling, the same on every phone.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final data in docs.take(_topCreatorsCount))
+                    Expanded(child: Builder(builder: (context) {
                   final creatorId =
                       data['_id'] as String? ?? data['id'] as String? ?? '';
                   final pageName =
@@ -1287,6 +1296,8 @@ class _DashboardState extends State<Dashboard> {
                       data['displayName'] as String? ??
                       data['name'] as String? ??
                       'Creator';
+                  // Missing from a backend older than ADR 149: then no count line, rather than "0".
+                  final followers = (data['followersCount'] as num?)?.toInt();
                   final imgUrl =
                       data['profileImageUrl'] as String? ??
                       data['avatar'] as String? ??
@@ -1309,14 +1320,14 @@ class _DashboardState extends State<Dashboard> {
                           ),
                         ),
                     child: Container(
-                      width: 90,
-                      margin: const EdgeInsets.only(right: 14),
+                      key: Key('top-creator-$creatorId'),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 74,
-                            height: 74,
+                            width: 68,
+                            height: 68,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
@@ -1363,11 +1374,25 @@ class _DashboardState extends State<Dashboard> {
                               fontFamily: 'SpaceGrotesk',
                             ),
                           ),
+                          if (followers != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_compactCount(followers)} ${followers == 1 ? 'follower' : 'followers'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white54, fontSize: 10),
+                          ),
+                          ],
                         ],
                       ),
                     ),
                   );
-                },
+                    })),
+                  // Fewer than 4 creators: keep each one the same width.
+                  for (var i = docs.length; i < _topCreatorsCount; i++)
+                    const Expanded(child: SizedBox.shrink()),
+                ],
               ),
             ),
             const SizedBox(height: 24),
@@ -1871,4 +1896,44 @@ class _FeaturedCarouselState extends State<_FeaturedCarousel> {
       ),
     );
   }
+}
+
+/// A brand's logo on its Brand Videos tile, or its first letter when it has none.
+class _BrandBadge extends StatelessWidget {
+  final String logoUrl;
+  final String name;
+  final double size;
+  const _BrandBadge({required this.logoUrl, required this.name, this.size = 22});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(color: Color(0xFF7B2CBF), shape: BoxShape.circle),
+      child: Text(
+        name.isEmpty ? '?' : name.characters.first.toUpperCase(),
+        style: TextStyle(color: Colors.white, fontSize: size / 2, fontWeight: FontWeight.w700),
+      ),
+    );
+    if (logoUrl.isEmpty) return initial;
+    return ClipOval(
+      child: Image.network(
+        logoUrl,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => initial,
+      ),
+    );
+  }
+}
+
+/// 1234 → "1.2K", 1500000 → "1.5M" (follower counts on Home's Top Creators).
+String _compactCount(int n) {
+  String one(double v) => v >= 10 ? v.toStringAsFixed(0) : v.toStringAsFixed(1).replaceAll('.0', '');
+  if (n >= 1000000) return '${one(n / 1000000)}M';
+  if (n >= 1000) return '${one(n / 1000)}K';
+  return '$n';
 }
