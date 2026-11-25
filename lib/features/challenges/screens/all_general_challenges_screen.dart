@@ -155,15 +155,13 @@ class _AllGeneralChallengesScreenState
     }
   }
 
-  // Once the backend runs out of pages (`_hasMore` false), the next load
-  // wraps back to page 1 instead of stopping — the grid is meant to scroll
-  // forever, cycling back through the same challenges rather than hitting a
-  // dead end.
+  // Stops once the backend runs out of pages: the grid ends after the last
+  // challenge instead of starting over (client, 25 Nov 2026).
   Future<void> _loadMore() async {
-    if (_loadingMore || _loading) return;
+    if (_loadingMore || _loading || !_hasMore) return;
     setState(() => _loadingMore = true);
     try {
-      final nextPage = _hasMore ? _page + 1 : 1;
+      final nextPage = _page + 1;
       final raw = await ChallengesService().fetchChallenges(
         page: nextPage,
         limit: _pageSize,
@@ -172,7 +170,13 @@ class _AllGeneralChallengesScreenState
       if (!mounted) return;
       setState(() {
         _page = nextPage;
-        _challenges = [...?_challenges, ...list];
+        // A challenge added while scrolling shifts the pages, so a later page
+        // can repeat one already shown: never show it twice.
+        final seen = {for (final c in _challenges ?? const []) c['id']};
+        _challenges = [
+          ...?_challenges,
+          ...list.where((c) => seen.add(c['id'])),
+        ];
         _hasMore = list.length == _pageSize;
         _loadingMore = false;
       });
