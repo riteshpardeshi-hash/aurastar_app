@@ -391,7 +391,7 @@ class _BrandProfileScreenState extends State<BrandProfileScreen> {
                   ),
               icon: const Icon(Icons.auto_awesome_rounded, size: 18),
               label: const Text(
-                'AI Ad Contests',
+                'Ai Ad Contests',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
               style: OutlinedButton.styleFrom(

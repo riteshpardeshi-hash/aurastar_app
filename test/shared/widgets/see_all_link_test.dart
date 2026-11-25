@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:aura_app/shared/widgets/see_all_link.dart';
 
 // Client, 25 Nov 2026: the AI ad section's "See all" looked different from the others, and
-// the sections are now called AI Ad Contests and Brand Challenges.
+// the sections are now called Ai Ad Contests and Brand Challenges.
 void main() {
   testWidgets('reads "See All >", with the count when given, and is tappable', (tester) async {
     var taps = 0;
@@ -33,10 +33,12 @@ void main() {
 
   test('the old section names are gone from what users read', () {
     final old = RegExp(r'''AI ad campaign|Brand Videos''', caseSensitive: false);
+    // The client spells it "Ai Ad Contests" (25 Nov), not "AI".
+    final aiCaps = RegExp(r'''AI Ad Contest''');
     final offenders = [
       for (final f in sources)
         for (final line in f.readAsLinesSync())
-          if (!line.trimLeft().startsWith('//') && old.hasMatch(line)) '${f.path}: ${line.trim()}',
+          if (!line.trimLeft().startsWith('//') && (old.hasMatch(line) || aiCaps.hasMatch(line))) '${f.path}: ${line.trim()}',
     ];
     expect(offenders, isEmpty);
   });

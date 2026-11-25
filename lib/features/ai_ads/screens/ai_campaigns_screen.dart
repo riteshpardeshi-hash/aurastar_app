@@ -246,7 +246,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
     return Scaffold(
       backgroundColor: AiUi.bg,
       appBar: AiUi.appBar(
-        widget.brandName == null ? 'AI Ad Contests' : '${widget.brandName} · AI ads',
+        widget.brandName == null ? 'Ai Ad Contests' : '${widget.brandName} · AI ads',
         actions: [
           // Prizes follow the coupons switch (ADR 119): no rewards entry while it's off.
           ValueListenableBuilder<bool>(
@@ -275,7 +275,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                     const Padding(
                       padding: EdgeInsets.only(top: 60),
                       child: Text(
-                        'No AI Ad Contests right now.\nYou\'ll get a notification when a brand invites you.',
+                        'No Ai Ad Contests right now.\nYou\'ll get a notification when a brand invites you.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.textFaint, fontSize: 13, height: 1.5),
                       ),
