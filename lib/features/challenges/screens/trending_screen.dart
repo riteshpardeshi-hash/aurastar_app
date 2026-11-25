@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/challenge_analytics_service.dart';
 import '../../../core/services/challenges_service.dart';
+import '../../../core/services/home_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/app_bottom_nav.dart';
 import '../../../shared/widgets/impression_tracker.dart';
@@ -30,8 +31,9 @@ class _TrendingScreenState extends State<TrendingScreen> {
   }
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  // Ranked by most-joined (submissionsCount) — the only ranking this screen
-  // shows now that the time-window tabs and sort toggle are gone.
+  // The backend's trending ranking (GET /home/trending: most joined, then most starred,
+  // then newest) across every joinable challenge. It used to sort only the 40 newest
+  // challenges here, so an older popular one never made it.
 
   Future<void> _load() async {
     setState(() => _loading = true);
@@ -46,15 +48,9 @@ class _TrendingScreenState extends State<TrendingScreen> {
 
   Future<List<_TrendingItem>> _fetchMostJoined() async {
     try {
-      final raw = await ChallengesService().fetchChallenges(limit: 40);
-      final normalised =
-          raw.map(normaliseChallenge).toList()..sort(
-            (a, b) => ((b['submissionsCount'] as int?) ?? 0).compareTo(
-              (a['submissionsCount'] as int?) ?? 0,
-            ),
-          );
-      return normalised
-          .take(15)
+      final raw = await HomeService().fetchTrending(limit: 15);
+      return raw
+          .map(normaliseChallenge)
           .map(
             (c) => _TrendingItem(
               challengeId: c['id'] as String? ?? '',

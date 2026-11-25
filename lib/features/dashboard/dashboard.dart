@@ -72,6 +72,13 @@ class _DashboardState extends State<Dashboard> {
   // backend ranks them, ADR 149). Always 5, whatever the screen width.
   static const _topCreatorsCount = 5;
 
+  // Home's "Trending videos": the backend's ranking (most joined, then most starred, then
+  // newest) across every joinable challenge. It used to show the 3 newest challenges.
+  late Future<List<Map<String, dynamic>>> _trendingFuture = _fetchTrending();
+
+  Future<List<Map<String, dynamic>>> _fetchTrending() =>
+      HomeService().fetchTrending(limit: 3).then((raw) => raw.map(normaliseChallenge).toList());
+
   // Creator-page-tagged pages for the "Creator Videos" shelf.
   late Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
       HomeService().fetchTrendingCreators(limit: _topCreatorsCount);
@@ -143,6 +150,7 @@ class _DashboardState extends State<Dashboard> {
     setState(() {
       _challengesFuture = challenges;
       _brandVideosFuture = _fetchBrandVideos();
+      _trendingFuture = _fetchTrending();
       _moreExtra.clear();
       _morePage = 1;
       _moreHasMore = true;
@@ -534,7 +542,7 @@ class _DashboardState extends State<Dashboard> {
                   SliverToBoxAdapter(child: _buildBrandVideosSection(context)),
                   SliverToBoxAdapter(child: _buildCreatorVideosSection(context)),
                   SliverToBoxAdapter(child: _buildBannersSection(context)),
-                  SliverToBoxAdapter(child: _hideWhenNoChallenges(_buildTrendingSection(context))),
+                  SliverToBoxAdapter(child: _buildTrendingSection(context)),
                   if (isAdmin)
                     SliverToBoxAdapter(child: _buildAdminButton(context)),
                   SliverToBoxAdapter(
@@ -1062,7 +1070,13 @@ class _DashboardState extends State<Dashboard> {
 
   // ── Trending ───────────────────────────────────────────────────────────────
   Widget _buildTrendingSection(BuildContext context) {
-    return Column(
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _trendingFuture,
+      builder: (context, trendSnap) {
+        // Hidden while loading and when there's nothing to rank, so the heading never
+        // sits over an empty row.
+        if ((trendSnap.data ?? const []).isEmpty) return const SizedBox.shrink();
+        return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
@@ -1089,10 +1103,9 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: _challengesFuture,
-          builder: (context, snap) {
-            final docs = snap.data ?? [];
+        Builder(
+          builder: (context) {
+            final docs = trendSnap.data ?? [];
             if (docs.isEmpty) return const SizedBox.shrink();
 
             return Padding(
@@ -1176,6 +1189,8 @@ class _DashboardState extends State<Dashboard> {
         ),
         const SizedBox(height: 24),
       ],
+    );
+      },
     );
   }
 
