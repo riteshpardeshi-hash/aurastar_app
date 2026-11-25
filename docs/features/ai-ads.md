@@ -6,6 +6,14 @@ the credit ledger, generation, scoring) — backend ADRs 111–115 and
 `docs/features/ai-ad-campaigns.md` there. Why the client looks the way it does:
 [ADR 030](../decisions/030-ai-ads-ui-wired-to-backend-campaigns.md).
 
+**What users see (client, 25 Nov 2026):** the app calls them **AI Ad Contests**
+("contest" in every creator-facing sentence). The code, API and backend still say
+*campaign*, so file, class and route names are unchanged. Home's other brand
+section is **Brand Challenges** (was Brand Videos). Every section's "See All >"
+link is the shared `SeeAllLink` widget, so they look the same;
+`test/shared/widgets/see_all_link_test.dart` fails if a screen writes its own
+link or an old name comes back.
+
 ## Where it lives
 
 | Piece | File |

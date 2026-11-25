@@ -25,7 +25,7 @@ void main() {
     backend = FakeAiAdsBackend();
     backend.on('GET /notifications', {
       'responses': [
-        _n('n1', 'AI_AD_INVITE', "You're invited to an AI ad campaign", 'Summer Fizz', {
+        _n('n1', 'AI_AD_INVITE', "You're invited to an AI Ad Contest", 'Summer Fizz', {
           'campaignId': campaignId,
           'participationId': 'p1',
         }),
@@ -47,10 +47,10 @@ void main() {
   testWidgets('an invite shows its headline and opens the campaign', (tester) async {
     await pumpAiScreen(tester, const NotificationsScreen());
 
-    expect(find.text("You're invited to an AI ad campaign"), findsOneWidget);
+    expect(find.text("You're invited to an AI Ad Contest"), findsOneWidget);
     expect(find.text('Someone passed you'), findsOneWidget);
 
-    await tester.tap(find.text("You're invited to an AI ad campaign"));
+    await tester.tap(find.text("You're invited to an AI Ad Contest"));
     await settle(tester);
 
     expect(find.byType(AiCampaignScreen), findsOneWidget);

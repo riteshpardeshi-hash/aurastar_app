@@ -30,7 +30,7 @@ void main() {
     expect(find.text('You won'), findsOneWidget);
     expect(find.text('See your win →'), findsOneWidget);
     expect(find.text('Join →'), findsNothing);
-    expect(find.text('AI Ad Campaign'), findsNothing);
+    expect(find.text('AI Ad Contest'), findsNothing);
   });
 
   testWidgets('the campaign list shows a winner "You won" too', (tester) async {

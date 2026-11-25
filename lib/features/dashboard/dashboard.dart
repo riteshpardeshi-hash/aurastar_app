@@ -31,6 +31,7 @@ import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/screen_skeleton.dart';
 import '../../core/services/safety_service.dart';
 import '../ai_ads/widgets/ai_campaign_spotlight.dart';
+import 'package:aura_app/shared/widgets/see_all_link.dart';
 
 int profileAutoRetryDelaySeconds(int attemptNumber) {
   return (8 * (1 << (attemptNumber - 1))).clamp(0, 60);
@@ -869,8 +870,8 @@ class _DashboardState extends State<Dashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Brand Videos', style: AppTextStyles.sectionHeader),
-              GestureDetector(
+              const Text('Brand Challenges', style: AppTextStyles.sectionHeader),
+              SeeAllLink(
                 onTap: () {
                   AnalyticsService().logExploreBrandsClick();
                   Navigator.push(
@@ -880,14 +881,6 @@ class _DashboardState extends State<Dashboard> {
                     ),
                   );
                 },
-                child: const Text(
-                  'See All >',
-                  style: TextStyle(
-                    color: Color(0xFF9B4DCA),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),
@@ -1085,20 +1078,12 @@ class _DashboardState extends State<Dashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Trending videos', style: AppTextStyles.sectionHeader),
-              GestureDetector(
+              SeeAllLink(
                 onTap:
                     () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const TrendingScreen()),
                     ),
-                child: const Text(
-                  'See All >',
-                  style: TextStyle(
-                    color: Color(0xFF9B4DCA),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),
@@ -1276,7 +1261,7 @@ class _DashboardState extends State<Dashboard> {
                     'Top Creators',
                     style: AppTextStyles.sectionHeader,
                   ),
-                  GestureDetector(
+                  SeeAllLink(
                     onTap:
                         () => Navigator.push(
                           context,
@@ -1284,14 +1269,6 @@ class _DashboardState extends State<Dashboard> {
                             builder: (_) => const CreatorVideosScreen(),
                           ),
                         ),
-                    child: const Text(
-                      'See All ›',
-                      style: TextStyle(
-                        color: Color(0xFF9B4DCA),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ),
                 ],
               ),

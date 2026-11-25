@@ -17,6 +17,7 @@ import 'challenge_detail.dart';
 import 'category_challenges_screen.dart';
 import 'all_categories_screen.dart';
 import '../../../core/services/safety_service.dart';
+import 'package:aura_app/shared/widgets/see_all_link.dart';
 
 class AllGeneralChallengesScreen extends StatefulWidget {
   /// True when hosted inside [MainShell]'s IndexedStack: the shell draws the
@@ -294,7 +295,7 @@ class _AllGeneralChallengesScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Categories', style: AppTextStyles.sectionHeader),
-              GestureDetector(
+              SeeAllLink(
                 onTap:
                     () => Navigator.push(
                       context,
@@ -303,14 +304,6 @@ class _AllGeneralChallengesScreenState
                             (_) => AllCategoriesScreen(categories: _categories),
                       ),
                     ),
-                child: const Text(
-                  'See All >',
-                  style: TextStyle(
-                    color: Color(0xFF9B4DCA),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),

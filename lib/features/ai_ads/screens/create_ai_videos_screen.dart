@@ -1,3 +1,4 @@
+import 'package:aura_app/shared/widgets/see_all_link.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
@@ -869,13 +870,10 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                 _step(
                   3 + i,
                   title,
-                  trailing: GestureDetector(
+                  trailing: SeeAllLink(
                     key: Key('ai-see-all-${title.split(' ').last}'),
                     onTap: _openMyVideos,
-                    child: Text(
-                      items.length > 6 ? 'See all ${items.length}' : 'See all',
-                      style: const TextStyle(color: AiUi.accent, fontSize: 13, fontWeight: FontWeight.w700),
-                    ),
+                    count: items.length > 6 ? items.length : null,
                   ),
                 ),
                 _workGrid(items),
@@ -898,7 +896,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
           const Icon(Icons.check_circle_rounded, color: AiUi.success, size: 48),
           const SizedBox(height: 12),
           const Text(
-            "You've submitted your ad for this campaign, so there's nothing more to make here.",
+            "You've submitted your ad for this contest, so there's nothing more to make here.",
             key: Key('ai-workspace-done'),
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white, fontSize: 15, height: 1.4),

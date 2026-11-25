@@ -68,7 +68,7 @@ void main() {
     await tester.tap(find.byKey(const Key('safety-block-account')));
     await settle(tester);
     expect(find.text('Block Riya?'), findsOneWidget);
-    expect(find.textContaining("challenges, ads or AI ad campaigns"), findsOneWidget); // brand wording
+    expect(find.textContaining("challenges, ads or AI Ad Contests"), findsOneWidget); // brand wording
     await tester.tap(find.text('Cancel'));
     await settle(tester);
     expect(backend.calls('POST', '/users/u9/block'), isEmpty);

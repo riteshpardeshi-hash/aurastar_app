@@ -62,7 +62,7 @@ flowchart TD
 
 ## After blocking: Home and Search stay tidy
 
-- **Home:** Brand Videos, Trending videos and More Challenges all list the same challenge feed.
+- **Home:** Brand Challenges, Trending videos and More Challenges all list the same challenge feed.
   When it loads empty (for example, after blocking every creator and brand that had
   challenges), those sections disappear instead of leaving headings with nothing under them
   (`Dashboard._hideWhenNoChallenges`). While the feed is loading they stay, so the layout

@@ -78,7 +78,7 @@ void main() {
     await pumpList(tester);
 
     await search(tester, 'zzz');
-    expect(find.text('No campaigns match "zzz".'), findsOneWidget);
+    expect(find.text('No contests match "zzz".'), findsOneWidget);
     expect(find.text('Summer splash'), findsNothing);
 
     await tester.tap(find.byTooltip('Clear search'));
@@ -98,6 +98,6 @@ void main() {
 
     await search(tester, 'stride'); // not joined
     expect(find.text('Night run'), findsNothing);
-    expect(find.text('No campaigns match "stride".'), findsOneWidget);
+    expect(find.text('No contests match "stride".'), findsOneWidget);
   });
 }
