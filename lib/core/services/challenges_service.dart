@@ -372,6 +372,8 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'creatorId': _extractRefId(c['creatorId']),
     // Who posted it and its reference video — for the report / block menu (ADR 117).
     'creatorName': c['creatorId'] is Map ? ((c['creatorId'] as Map)['displayName'] as String? ?? '') : '',
+    // The poster's picture (a brand's logo on Home's Brand Videos), when they have one.
+    'creatorAvatar': c['creatorId'] is Map ? ((c['creatorId'] as Map)['avatar'] as String? ?? '') : '',
     'videoId': _extractRefId(c['videoId']),
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,

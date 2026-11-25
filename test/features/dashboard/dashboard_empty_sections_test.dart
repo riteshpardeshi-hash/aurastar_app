@@ -24,7 +24,10 @@ void main() {
   });
   tearDown(() => ApiClient.httpClient = http.Client());
 
+  final requestedSourceTypes = <String?>[];
+
   void mockBackend(List<Map<String, dynamic>> challenges) {
+    requestedSourceTypes.clear();
     ApiClient.httpClient = MockClient((request) async {
       final path = request.url.path;
       if (path.endsWith('/profile')) {
@@ -42,8 +45,14 @@ void main() {
         );
       }
       if (path.endsWith('/challenges')) {
+        // Brand Videos asks for brand challenges only (sourceType=Brand).
+        final brandOnly = request.url.queryParameters['sourceType'] == 'Brand';
+        final list = brandOnly
+            ? challenges.where((c) => c['sourceType'] == 'Brand').toList()
+            : challenges;
+        requestedSourceTypes.add(request.url.queryParameters['sourceType']);
         return http.Response(
-          jsonEncode({'status': 'success', 'data': {'challenges': challenges}}),
+          jsonEncode({'status': 'success', 'data': {'challenges': list}}),
           200,
         );
       }
@@ -74,13 +83,33 @@ void main() {
     }
   });
 
-  testWidgets('with challenges: the sections show', (tester) async {
+  // Client, 25 Nov 2026: Brand Videos shows only challenges brands posted, and no section
+  // at all without any. It used to fill up with whatever challenges came first.
+  testWidgets('challenges but none from a brand: no Brand Videos section', (tester) async {
     mockBackend([
-      {'_id': 'c1', 'title': 'Dance Off', 'starsCount': 12, 'submissionsCount': 3},
+      {'_id': 'c1', 'title': 'Dance Off', 'sourceType': 'Aura Original', 'starsCount': 12, 'submissionsCount': 3},
+    ]);
+    await pumpHome(tester);
+    expect(find.text('Brand Videos'), findsNothing);
+    expect(find.text('Trending videos'), findsOneWidget);
+    expect(find.text('More Challenges'), findsOneWidget);
+    expect(requestedSourceTypes, contains('Brand'));
+  });
+
+  testWidgets('with brand challenges: Brand Videos shows them, with the brand', (tester) async {
+    mockBackend([
+      {'_id': 'c1', 'title': 'Dance Off', 'sourceType': 'Aura Original', 'starsCount': 12, 'submissionsCount': 3},
+      {
+        '_id': 'b1',
+        'title': 'Sip Challenge',
+        'sourceType': 'Brand',
+        'starsCount': 5,
+        'submissionsCount': 1,
+        'creatorId': {'_id': 'brand-1', 'displayName': 'Zesto', 'role': 'brand'},
+      },
     ]);
     await pumpHome(tester);
     expect(find.text('Brand Videos'), findsOneWidget);
-    expect(find.text('Trending videos'), findsOneWidget);
-    expect(find.text('More Challenges'), findsOneWidget);
+    expect(find.text('Z'), findsOneWidget); // the brand's badge (no logo uploaded → its initial)
   });
 }
