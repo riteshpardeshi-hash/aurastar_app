@@ -3,6 +3,9 @@ workflows:
     name: iOS TestFlight
     max_build_duration: 60
     triggering:
+      # A newer push cancels this workflow's queued / running builds, so merges
+      # don't pile up a queue of stale TestFlight builds (25 Nov 2026).
+      cancel_previous_builds: true
       events:
         - push
       branch_patterns:
@@ -75,6 +78,9 @@ workflows:
     name: iOS TestFlight - Prototype
     max_build_duration: 60
     triggering:
+      # A newer push cancels this workflow's queued / running builds, so merges
+      # don't pile up a queue of stale TestFlight builds (25 Nov 2026).
+      cancel_previous_builds: true
       events:
         - push
       branch_patterns:
