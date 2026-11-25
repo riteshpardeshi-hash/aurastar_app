@@ -256,7 +256,8 @@ class BrandDashboardScreen extends StatelessWidget {
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay')),
+                            fontFamily: 'ClashDisplay',
+                            wordSpacing: 4.5)),
                     if (username.isNotEmpty)
                       Text('@$username',
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
@@ -385,7 +386,8 @@ class BrandDashboardScreen extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 4)),
             const SizedBox(height: 8),
             Text(
               'Get $target unique participants on Challenge ${nextNumber - 1} to unlock your next slot.',
@@ -494,7 +496,8 @@ class BrandDashboardScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -783,6 +786,7 @@ class BrandDashboardScreen extends StatelessWidget {
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     fontFamily: 'ClashDisplay',
+                    wordSpacing: 3,
                   ),
                 ),
               ],
@@ -878,7 +882,8 @@ class BrandDashboardScreen extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 3.5)),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -915,7 +920,8 @@ class BrandDashboardScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
         ),
         SizedBox(
           height: 110,
@@ -1082,7 +1088,8 @@ class BrandDashboardScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
         ),
         ...recentSubs.map((sub) {
           final data = sub.data() as Map<String, dynamic>;

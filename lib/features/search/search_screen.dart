@@ -432,7 +432,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 4)),
             const Spacer(),
             GestureDetector(
               onTap: _clearRecent,

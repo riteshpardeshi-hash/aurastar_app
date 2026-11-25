@@ -193,7 +193,8 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay')),
+                            fontFamily: 'ClashDisplay',
+                            wordSpacing: 4.5)),
                     if (username.isNotEmpty)
                       Text('@$username',
                           style: const TextStyle(
@@ -313,7 +314,8 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -366,7 +368,8 @@ class _CreatorDashboardScreenState extends State<CreatorDashboardScreen> {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,

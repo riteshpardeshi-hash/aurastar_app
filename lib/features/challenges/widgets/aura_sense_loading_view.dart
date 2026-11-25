@@ -139,6 +139,7 @@ class _AuraSenseLoadingViewState extends State<AuraSenseLoadingView>
                             '$pct%',
                             style: TextStyle(
                               fontFamily: 'ClashDisplay',
+                              wordSpacing: 4,
                               color: Colors.white,
                               fontSize: percentFontSize,
                               fontWeight: FontWeight.w700,

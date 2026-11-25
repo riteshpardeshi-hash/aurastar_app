@@ -97,7 +97,8 @@ class _OfferInventoryScreenState extends State<OfferInventoryScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w800,
-                        fontFamily: 'ClashDisplay')),
+                        fontFamily: 'ClashDisplay',
+                        wordSpacing: 3.5)),
                 if (brand.isNotEmpty)
                   Text(brand,
                       style: TextStyle(
@@ -1267,7 +1268,8 @@ class _EditOfferSheetState extends State<_EditOfferSheet> {
                     color: Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 3.5)),
             const SizedBox(height: 18),
 
             // Type selector

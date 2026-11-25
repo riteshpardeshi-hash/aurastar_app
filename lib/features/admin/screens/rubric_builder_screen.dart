@@ -182,7 +182,8 @@ class _RubricBuilderScreenState extends State<RubricBuilderScreen> {
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 3.5)),
             Text(widget.challengeTitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -450,7 +451,8 @@ class _SectionHeader extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3)),
           const SizedBox(height: 4),
           Text(subtitle,
               style: const TextStyle(

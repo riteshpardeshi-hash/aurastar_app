@@ -270,6 +270,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> with SingleTickerProv
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       fontFamily: 'ClashDisplay',
+                      wordSpacing: 5.5,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -401,7 +402,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> with SingleTickerProv
               child: Text(
                 'Verify your number',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay'),
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 4.5),
               ),
             ),
           ],

@@ -262,6 +262,7 @@ class _SpotlightCard extends StatelessWidget {
                         height: 1.15,
                         fontWeight: FontWeight.w800,
                         fontFamily: 'ClashDisplay',
+                        wordSpacing: 5,
                         shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
                       ),
                     ),
