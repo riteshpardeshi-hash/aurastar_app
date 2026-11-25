@@ -31,6 +31,7 @@ import 'saved_challenges_screen.dart';
 import 'edit_profile_screen.dart';
 import '../../../core/services/app_config_service.dart';
 import '../../../core/utils/share_origin.dart';
+import 'package:aura_app/shared/widgets/see_all_link.dart';
 
 // ── Achievement Cards Section ──────────────────────────────────────────────────
 
@@ -1349,18 +1350,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             const Text('MY VIDEOS', style: AppTextStyles.sectionHeader),
             const Spacer(),
             if (_videos.length > 4)
-              GestureDetector(
+              SeeAllLink(
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const AllVideosScreen()),
-                ),
-                child: const Text(
-                  'VIEW ALL  ›',
-                  style: TextStyle(
-                    color: _accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
                 ),
               ),
           ],
@@ -1673,19 +1666,11 @@ class _SavedChallengesGrid extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            GestureDetector(
+            SeeAllLink(
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
                     builder: (_) => const SavedChallengesScreen()),
-              ),
-              child: const Text(
-                'VIEW ALL  ›',
-                style: TextStyle(
-                  color: Color(0xFF7B2CBF),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
               ),
             ),
           ],

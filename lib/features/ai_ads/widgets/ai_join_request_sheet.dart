@@ -107,7 +107,7 @@ class _JoinRequestBodyState extends State<_JoinRequestBody> {
       return;
     }
     if (!_agreed) {
-      setState(() => _error = 'Please agree to the campaign terms.');
+      setState(() => _error = 'Please agree to the contest terms.');
       return;
     }
     setState(() {
@@ -268,7 +268,7 @@ class _JoinRequestBodyState extends State<_JoinRequestBody> {
                       child: Padding(
                         padding: EdgeInsets.only(top: 12),
                         child: Text(
-                          'I agree that everything I create in this campaign — scripts, images and videos — belongs to the brand.',
+                          'I agree that everything I create in this contest — scripts, images and videos — belongs to the brand.',
                           style: TextStyle(color: AppColors.textMuted, fontSize: 12, height: 1.4),
                         ),
                       ),

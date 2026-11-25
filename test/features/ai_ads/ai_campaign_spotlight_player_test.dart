@@ -51,7 +51,7 @@ void main() {
   testWidgets('"Not now" leaves the player on the home, and See all asks too', (tester) async {
     await _pump(tester, isCreator: false);
 
-    await tester.tap(find.text('See all ›'));
+    await tester.tap(find.text('See All >'));
     await tester.pumpAndSettle();
     expect(find.text('Become a creator to join'), findsOneWidget);
     await tester.tap(find.text('Not now'));

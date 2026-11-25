@@ -36,7 +36,7 @@ Future<bool> showLeaveCampaignDialog(BuildContext context, {required bool submit
     builder: (ctx) => AlertDialog(
       backgroundColor: AiUi.card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Leave this campaign?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      title: const Text('Leave this contest?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       content: Text(
         submitted
             ? "Your submitted ad stays with the brand, but you can't be picked as a winner while you're out. "
@@ -67,7 +67,7 @@ Future<bool> showSubmitFinalDialog(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Submit this as your final ad?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       content: const Text(
-        "You can submit only once. After this you can't change it or make more videos in this campaign, "
+        "You can submit only once. After this you can't change it or make more videos in this contest, "
         'and your remaining credits go back to the brand.',
         style: TextStyle(color: AppColors.textMuted, height: 1.4),
       ),
@@ -94,7 +94,7 @@ Future<bool> showBecomeCreatorDialog(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Become a creator to join', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       content: const Text(
-        'AI ad campaigns are for creators. Apply to become one, and once approved you can join and make AI ads.',
+        'AI Ad Contests are for creators. Apply to become one, and once approved you can join and make AI ads.',
         style: TextStyle(color: AppColors.textMuted, height: 1.4),
       ),
       actions: [

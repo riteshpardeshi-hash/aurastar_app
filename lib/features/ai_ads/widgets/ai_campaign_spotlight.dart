@@ -8,6 +8,8 @@ import '../screens/ai_campaigns_screen.dart';
 import '../screens/create_ai_videos_screen.dart';
 import 'ai_campaign_bits.dart';
 import 'ai_dialogs.dart';
+import 'package:aura_app/shared/theme/app_text_styles.dart';
+import 'package:aura_app/shared/widgets/see_all_link.dart';
 
 /// The top of a creator's home screen: open AI ad campaigns as big swipeable cards (the
 /// client-approved "campaign spotlight", backend ADR 141).
@@ -136,21 +138,12 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
             children: [
               const Expanded(
                 child: Text(
-                  'AI ad campaigns',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay',
-                  ),
+                  'AI Ad Contests',
+                  style: AppTextStyles.sectionHeader,
                 ),
               ),
-              GestureDetector(
+              SeeAllLink(
                 onTap: () => _asCreator(_seeAll),
-                child: const Text(
-                  'See all ›',
-                  style: TextStyle(color: AiCampaignBits.lilac, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
               ),
             ],
           ),

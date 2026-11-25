@@ -50,7 +50,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e is AiAdsException ? e.message : "Couldn't load this campaign.";
+        _error = e is AiAdsException ? e.message : "Couldn't load this contest.";
       });
     }
   }
@@ -64,9 +64,9 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
               ? null
               : () async {
                   if (!await showLeaveCampaignDialog(context, submitted: submitted)) return;
-                  await _run(() => _service.withdraw(c.id), 'You left the campaign.');
+                  await _run(() => _service.withdraw(c.id), 'You left the contest.');
                 },
-          child: const Text('Leave campaign', style: TextStyle(color: AiUi.danger)),
+          child: const Text('Leave contest', style: TextStyle(color: AiUi.danger)),
         ),
       );
 
@@ -117,11 +117,11 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
     final c = _campaign;
     return Scaffold(
       backgroundColor: AiUi.bg,
-      appBar: AiUi.appBar(c?.title ?? 'AI ad campaign'),
+      appBar: AiUi.appBar(c?.title ?? 'AI Ad Contest'),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AiUi.accent))
           : c == null
-          ? Center(child: Text(_error ?? 'Campaign not found', style: const TextStyle(color: AppColors.textMuted)))
+          ? Center(child: Text(_error ?? 'Contest not found', style: const TextStyle(color: AppColors.textMuted)))
           : RefreshIndicator(
               onRefresh: _load,
               color: AiUi.accent,
@@ -268,18 +268,18 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
     final status = p?.status;
     if (status == null || status == 'DECLINED' || status == 'REVOKED' || status == 'WITHDRAWN') {
       if (c.participationMode == 'INVITE_ONLY') {
-        return const Text('This campaign is invite-only.',
+        return const Text('This contest is invite-only.',
             textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted));
       }
       if (!c.isLive || (c.seatsLeft != null && c.seatsLeft! <= 0)) {
-        return const Text("This campaign isn't taking creators right now.",
+        return const Text("This contest isn't taking creators right now.",
             textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted));
       }
       final leftAfterSubmitting = status == 'WITHDRAWN' && p?.finalGenerationId != null;
       return Column(children: [
         if (leftAfterSubmitting) ...[
           const Text(
-            "You left this campaign. Your submitted ad still counts, but you can't win unless "
+            "You left this contest. Your submitted ad still counts, but you can't win unless "
             'the brand lets you back in before the winners are picked.',
             key: Key('ai-left-after-submitting'),
             textAlign: TextAlign.center,
@@ -327,8 +327,8 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
           if (c.hasEnded)
             Text(
               c.status == 'CANCELLED'
-                  ? 'This campaign was cancelled.'
-                  : 'This campaign has ended — the brand is picking the winners.',
+                  ? 'This contest was cancelled.'
+                  : 'This contest has ended — the brand is picking the winners.',
               key: const Key('ai-campaign-ended'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textMuted),
@@ -338,7 +338,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
                 textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             if (c.isPaused) ...[
               const SizedBox(height: 6),
-              const Text('The brand has paused this campaign for now — you can look, but not create.',
+              const Text('The brand has paused this contest for now — you can look, but not create.',
                   key: Key('ai-campaign-paused'),
                   textAlign: TextAlign.center, style: TextStyle(color: AiUi.warning, fontSize: 12)),
             ],
@@ -360,9 +360,9 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
         ]),
       _ => Text(
           switch (status) {
-            'NOT_SELECTED' => "The campaign has finished — your ad wasn't picked this time.",
+            'NOT_SELECTED' => "The contest has finished — your ad wasn't picked this time.",
             'REJECTED' => "The brand didn't accept your request.",
-            'REMOVED' => 'You were removed from this campaign.',
+            'REMOVED' => 'You were removed from this contest.',
             _ => status,
           },
           textAlign: TextAlign.center,

@@ -66,7 +66,7 @@ void main() {
   testWidgets('an open campaign: brand, title, format, seats and a Join button', (tester) async {
     await _pump(tester, [_c('1', seatsLeft: 7, cap: 10)]);
     expect(find.text('FEATURED'), findsNothing);
-    expect(find.text('AI ad campaigns'), findsOneWidget);
+    expect(find.text('AI Ad Contests'), findsOneWidget);
     expect(find.text('Brand 1'), findsOneWidget);
     expect(find.text('Campaign 1'), findsOneWidget);
     expect(find.text('15–30s vertical AI video · Lemonade'), findsOneWidget);

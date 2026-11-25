@@ -82,7 +82,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e is AiAdsException ? e.message : "Couldn't load campaigns. Pull to retry.";
+        _error = e is AiAdsException ? e.message : "Couldn't load contests. Pull to retry.";
       });
     }
   }
@@ -126,7 +126,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
       style: const TextStyle(color: Colors.white, fontSize: 14),
       cursorColor: AiUi.accent,
       decoration: InputDecoration(
-        hintText: 'Search by campaign or brand name',
+        hintText: 'Search by contest or brand name',
         hintStyle: const TextStyle(color: AppColors.textFaint, fontSize: 13.5),
         prefixIcon: const Icon(Icons.search, color: Colors.white38, size: 20),
         suffixIcon: _search.isEmpty
@@ -246,7 +246,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
     return Scaffold(
       backgroundColor: AiUi.bg,
       appBar: AiUi.appBar(
-        widget.brandName == null ? 'AI ad campaigns' : '${widget.brandName} · AI ads',
+        widget.brandName == null ? 'AI Ad Contests' : '${widget.brandName} · AI ads',
         actions: [
           // Prizes follow the coupons switch (ADR 119): no rewards entry while it's off.
           ValueListenableBuilder<bool>(
@@ -275,7 +275,7 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                     const Padding(
                       padding: EdgeInsets.only(top: 60),
                       child: Text(
-                        'No AI ad campaigns right now.\nYou\'ll get a notification when a brand invites you.',
+                        'No AI Ad Contests right now.\nYou\'ll get a notification when a brand invites you.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppColors.textFaint, fontSize: 13, height: 1.5),
                       ),
@@ -290,10 +290,10 @@ class _AiCampaignsScreenState extends State<AiCampaignsScreen> {
                         padding: const EdgeInsets.only(top: 40),
                         child: Text(
                             _search.isNotEmpty
-                                ? 'No campaigns match "$_search".'
+                                ? 'No contests match "$_search".'
                                 : _joinedOnly
-                                    ? "You haven't joined a campaign yet."
-                                    : 'No campaigns to show.',
+                                    ? "You haven't joined a contest yet."
+                                    : 'No contests to show.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: AppColors.textFaint, fontSize: 13)),
                       ),

@@ -417,7 +417,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
                   _imagePicker(g)
                 else if (g.stage == AiStage.image)
                   const Text(
-                    "You've submitted your ad for this campaign, so these images can't be turned into a video now.",
+                    "You've submitted your ad for this contest, so these images can't be turned into a video now.",
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
                   )
                 else if (g.stage == AiStage.video)
@@ -853,7 +853,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
         if (!_canSubmit && _participation != null && !isFinal) ...[
           const SizedBox(height: 16),
           const Text(
-            "You've already submitted your ad for this campaign, so there's nothing more to make here.",
+            "You've already submitted your ad for this contest, so there's nothing more to make here.",
             key: Key('ai-done-note'),
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),

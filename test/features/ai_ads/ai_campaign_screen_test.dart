@@ -72,7 +72,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('ai-join-send')));
     await tester.tap(find.byKey(const Key('ai-join-send')));
     await tester.pump();
-    expect(find.textContaining('agree to the campaign terms'), findsOneWidget);
+    expect(find.textContaining('agree to the contest terms'), findsOneWidget);
     expect(backend.calls('POST', '$base/request'), isEmpty);
   });
 
@@ -93,7 +93,7 @@ void main() {
     backend.on('GET $base', {...campaignJson(myStatus: null), 'participationMode': 'INVITE_ONLY'});
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
 
-    expect(find.text('This campaign is invite-only.'), findsOneWidget);
+    expect(find.text('This contest is invite-only.'), findsOneWidget);
     expect(find.text('Ask to join'), findsNothing);
   });
 
@@ -101,7 +101,7 @@ void main() {
     backend.on('GET $base', {...campaignJson(myStatus: null), 'seatsLeft': 0});
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
 
-    expect(find.text("This campaign isn't taking creators right now."), findsOneWidget);
+    expect(find.text("This contest isn't taking creators right now."), findsOneWidget);
   });
 
   testWidgets('an active creator sees their credits and the workspace button', (tester) async {
@@ -138,14 +138,14 @@ void main() {
     backend.on('GET $base', {...campaignJson(myStatus: 'ACTIVE'), 'status': 'CLOSED'});
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
     expect(find.byKey(const Key('ai-campaign-ended')), findsOneWidget);
-    expect(find.text('This campaign has ended — the brand is picking the winners.'), findsOneWidget);
+    expect(find.text('This contest has ended — the brand is picking the winners.'), findsOneWidget);
     expect(find.text('Open my workspace'), findsNothing);
   });
 
   testWidgets('a cancelled campaign says so and offers nothing to make', (tester) async {
     backend.on('GET $base', {...campaignJson(myStatus: 'ACTIVE'), 'status': 'CANCELLED'});
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
-    expect(find.text('This campaign was cancelled.'), findsOneWidget);
+    expect(find.text('This contest was cancelled.'), findsOneWidget);
     expect(find.text('Open my workspace'), findsNothing);
   });
 

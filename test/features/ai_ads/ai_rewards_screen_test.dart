@@ -37,6 +37,6 @@ void main() {
   testWidgets('no rewards yet', (tester) async {
     backend.on('GET /creator/ai-rewards', []);
     await pumpAiScreen(tester, const AiRewardsScreen());
-    expect(find.text('No rewards yet — win a campaign to get one.'), findsOneWidget);
+    expect(find.text('No rewards yet — win a contest to get one.'), findsOneWidget);
   });
 }

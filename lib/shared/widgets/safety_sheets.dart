@@ -129,7 +129,7 @@ Future<bool> blockWithConfirm(
           title: Text('Block $name?', style: const TextStyle(color: Colors.white, fontSize: 17)),
           content: Text(
             isBrand
-                ? "You won't see this brand's profile, challenges, ads or AI ad campaigns, and it can't invite you. "
+                ? "You won't see this brand's profile, challenges, ads or AI Ad Contests, and it can't invite you. "
                     "You'll stop following each other. They aren't told you blocked them."
                 : "Neither of you will see the other's profile, videos, challenges or comments, and you'll stop "
                     "following each other. They aren't told you blocked them.",

@@ -54,7 +54,7 @@ class _AiRewardsScreenState extends State<AiRewardsScreen> {
           ? const Center(child: CircularProgressIndicator(color: AiUi.accent))
           : _rewards.isEmpty
           ? const Center(
-              child: Text('No rewards yet — win a campaign to get one.',
+              child: Text('No rewards yet — win a contest to get one.',
                   style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
             )
           : ListView.separated(

@@ -11,7 +11,7 @@ import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
 
 // Found on device after blocking every creator and brand that had challenges: Home kept
-// the "Brand Videos", "Trending videos" and "More Challenges" headings with nothing under
+// the "Brand Challenges", "Trending videos" and "More Challenges" headings with nothing under
 // them. Those sections now disappear when the challenge list loads empty.
 void main() {
   setUp(() {
@@ -54,7 +54,7 @@ void main() {
         );
       }
       if (path.endsWith('/challenges')) {
-        // Brand Videos asks for brand challenges only (sourceType=Brand).
+        // Brand Challenges asks for brand challenges only (sourceType=Brand).
         final brandOnly = request.url.queryParameters['sourceType'] == 'Brand';
         final list = brandOnly
             ? challenges.where((c) => c['sourceType'] == 'Brand').toList()
@@ -82,7 +82,7 @@ void main() {
     await tester.pump();
   }
 
-  const headings = ['Brand Videos', 'Trending videos', 'More Challenges'];
+  const headings = ['Brand Challenges', 'Trending videos', 'More Challenges'];
 
   testWidgets('no challenges: the challenge sections and their headings are gone', (tester) async {
     mockBackend([]);
@@ -92,20 +92,20 @@ void main() {
     }
   });
 
-  // Client, 25 Nov 2026: Brand Videos shows only challenges brands posted, and no section
+  // Client, 25 Nov 2026: Brand Challenges shows only challenges brands posted, and no section
   // at all without any. It used to fill up with whatever challenges came first.
-  testWidgets('challenges but none from a brand: no Brand Videos section', (tester) async {
+  testWidgets('challenges but none from a brand: no Brand Challenges section', (tester) async {
     mockBackend([
       {'_id': 'c1', 'title': 'Dance Off', 'sourceType': 'Aura Original', 'starsCount': 12, 'submissionsCount': 3},
     ]);
     await pumpHome(tester);
-    expect(find.text('Brand Videos'), findsNothing);
+    expect(find.text('Brand Challenges'), findsNothing);
     expect(find.text('Trending videos'), findsOneWidget);
     expect(find.text('More Challenges'), findsOneWidget);
     expect(requestedSourceTypes, contains('Brand'));
   });
 
-  testWidgets('with brand challenges: Brand Videos shows them, with the brand', (tester) async {
+  testWidgets('with brand challenges: Brand Challenges shows them, with the brand', (tester) async {
     mockBackend([
       {'_id': 'c1', 'title': 'Dance Off', 'sourceType': 'Aura Original', 'starsCount': 12, 'submissionsCount': 3},
       {
@@ -118,7 +118,7 @@ void main() {
       },
     ]);
     await pumpHome(tester);
-    expect(find.text('Brand Videos'), findsOneWidget);
+    expect(find.text('Brand Challenges'), findsOneWidget);
     expect(find.text('Z'), findsOneWidget); // the brand's badge (no logo uploaded → its initial)
   });
 
