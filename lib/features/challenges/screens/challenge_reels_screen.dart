@@ -17,9 +17,10 @@ import '../../../core/services/safety_service.dart';
 /// auto-advances to the next, and the user can also swipe manually. The feed
 /// shows each video once and ends after the last one with an "all caught up"
 /// page: it never starts over from the first video (client, 25 Nov 2026), and a
-/// video that shifts onto a later page is never shown twice. Tapping the
-/// video opens its ChallengeDetail page. The only chrome is a bottom
-/// overlay with the category icon, aura points, and participant count.
+/// video that shifts onto a later page is never shown twice. Tapping the video
+/// plays / pauses it; the glowing Aura logo at the bottom right takes the challenge
+/// (client, 25 Nov 2026). The rest of the chrome is a bottom overlay with the
+/// category icon, aura points, and participant count.
 class ChallengeReelsScreen extends StatefulWidget {
   const ChallengeReelsScreen({super.key});
 
@@ -154,12 +155,13 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
     }
   }
 
-  Future<void> _openDetail(Map<String, dynamic> c) {
+  Future<void> _takeChallenge(Map<String, dynamic> c) {
     return Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChallengeDetail(
           source: 'reels',
+          startTaking: true,
           title: c['title'] as String,
           instructions: c['instructions'] as String,
           videoUrl: c['videoUrl'] as String,
@@ -202,7 +204,7 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
                           thumbnailUrl: c['thumbnailUrl'] as String? ?? '',
                           participants: c['submissionsCount'] as int,
                           isActive: index == _currentIndex,
-                          onTap: () => _openDetail(c),
+                          onTake: () => _takeChallenge(c),
                           onEnd: _goToNext,
                         );
                       },
@@ -228,7 +230,7 @@ class _ReelPage extends StatefulWidget {
   final String thumbnailUrl;
   final int participants;
   final bool isActive;
-  final Future<void> Function() onTap;
+  final Future<void> Function() onTake;
   final VoidCallback onEnd;
 
   const _ReelPage({
@@ -238,7 +240,7 @@ class _ReelPage extends StatefulWidget {
     required this.thumbnailUrl,
     required this.participants,
     required this.isActive,
-    required this.onTap,
+    required this.onTake,
     required this.onEnd,
   });
 
@@ -258,6 +260,8 @@ class _ReelPageState extends State<_ReelPage> {
   VideoPlayerController? _ctrl;
   bool _ready = false;
   bool _ended = false;
+  /// The viewer paused this reel by tapping it. Cleared when it becomes active again.
+  bool _userPaused = false;
 
   @override
   void initState() {
@@ -314,6 +318,7 @@ class _ReelPageState extends State<_ReelPage> {
     if (ctrl == null || !_ready || widget.isActive == old.isActive) return;
     if (widget.isActive) {
       _ended = false;
+      if (_userPaused) setState(() => _userPaused = false);
       ctrl.seekTo(Duration.zero).then((_) => ctrl.play());
     } else {
       ctrl.pause();
@@ -341,10 +346,17 @@ class _ReelPageState extends State<_ReelPage> {
   // (just covered) underneath the pushed route, and without pausing here
   // its audio kept playing on top of ChallengeDetail's own video. Resume
   // only if this reel is still the active one once the user comes back.
-  Future<void> _handleTap() async {
+  Future<void> _take() async {
     _ctrl?.pause();
-    await widget.onTap();
-    if (mounted && widget.isActive) _ctrl?.play();
+    await widget.onTake();
+    if (mounted && widget.isActive && !_userPaused) _ctrl?.play();
+  }
+
+  void _togglePlay() {
+    final ctrl = _ctrl;
+    if (ctrl == null || !_ready) return;
+    setState(() => _userPaused = !_userPaused);
+    _userPaused ? ctrl.pause() : ctrl.play();
   }
 
   @override
@@ -354,7 +366,9 @@ class _ReelPageState extends State<_ReelPage> {
         ? correctedVideoAspectRatio(ctrl.value)
         : 9 / 16;
     return GestureDetector(
-      onTap: _handleTap,
+      key: Key('reel-${widget.challengeId}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: _togglePlay,
       child: Container(
         color: Colors.black,
         child: Stack(
@@ -378,6 +392,13 @@ class _ReelPageState extends State<_ReelPage> {
             if (!_ready)
               const Center(
                 child: CircularProgressIndicator(color: _accent),
+              ),
+            if (_userPaused)
+              const IgnorePointer(
+                child: Center(
+                  key: Key('reel-paused'),
+                  child: Icon(Icons.play_arrow_rounded, color: Colors.white70, size: 84),
+                ),
               ),
             // Bottom gradient + overlay — category icon, aura points, participants.
             IgnorePointer(
@@ -411,11 +432,76 @@ class _ReelPageState extends State<_ReelPage> {
                 ),
               ),
             ),
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 70,
+              child: _TakeChallengeButton(onTap: _take),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// The glowing Aura Arena logo on every reel: tap it to take that challenge.
+class _TakeChallengeButton extends StatefulWidget {
+  const _TakeChallengeButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_TakeChallengeButton> createState() => _TakeChallengeButtonState();
+}
+
+class _TakeChallengeButtonState extends State<_TakeChallengeButton>
+    with SingleTickerProviderStateMixin {
+  static const _accent = Color(0xFF7B2CBF);
+  late final _glow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: 'Take this challenge',
+        child: GestureDetector(
+          key: const Key('reels-take-challenge'),
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedBuilder(
+            animation: _glow,
+            builder: (_, child) => Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF0D0020),
+                border: Border.all(color: _accent.withValues(alpha: 0.8), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accent.withValues(alpha: 0.45 + 0.4 * _glow.value),
+                    blurRadius: 14 + 14 * _glow.value,
+                    spreadRadius: 1 + 3 * _glow.value,
+                  ),
+                ],
+              ),
+              child: child,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Image.asset('assets/images/Aura Arena Mono.png', fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      );
 }
 
 /// After the last video: the feed doesn't start over (client, 25 Nov 2026).

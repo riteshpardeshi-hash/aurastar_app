@@ -94,7 +94,7 @@ Future<bool> showBecomeCreatorDialog(BuildContext context) async {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Become a creator to join', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       content: const Text(
-        'AI Ad Contests are for creators. Apply to become one, and once approved you can join and make AI ads.',
+        'Ai Ad Contests are for creators. Apply to become one, and once approved you can join and make AI ads.',
         style: TextStyle(color: AppColors.textMuted, height: 1.4),
       ),
       actions: [

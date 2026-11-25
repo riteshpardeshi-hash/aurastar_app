@@ -138,7 +138,7 @@ class _AiCampaignSpotlightState extends State<AiCampaignSpotlight> {
             children: [
               const Expanded(
                 child: Text(
-                  'AI Ad Contests',
+                  'Ai Ad Contests',
                   style: AppTextStyles.sectionHeader,
                 ),
               ),

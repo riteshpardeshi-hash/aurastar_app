@@ -57,6 +57,8 @@ class AppTextStyles {
     fontSize: 18,
     fontWeight: FontWeight.w700,
     letterSpacing: 0.2,
+    // Clash Display sets words tight: "Ai Ad Contests" read as one word (client, 25 Nov).
+    wordSpacing: 4,
     color: AppColors.textPrimary,
   );
 

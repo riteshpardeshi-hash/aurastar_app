@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'package:aura_app/core/services/api_client.dart';
+import 'package:aura_app/features/challenges/screens/challenge_detail.dart';
 import 'package:aura_app/features/challenges/screens/challenge_reels_screen.dart';
 
 // Client, 25 Nov 2026: the reels feed (centre star button) shows each video
@@ -26,9 +27,13 @@ Map<String, dynamic> _challenge(int i) => {
 void main() {
   final requestedPages = <String>[];
 
+  late _FakeVideoPlayerPlatform player;
+  var challengeStatus = 'approved';
+
   setUp(() {
     requestedPages.clear();
-    VideoPlayerPlatform.instance = _FakeVideoPlayerPlatform();
+    challengeStatus = 'approved';
+    VideoPlayerPlatform.instance = player = _FakeVideoPlayerPlatform();
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({
       'api_access_token': 'test-access-token',
@@ -38,6 +43,14 @@ void main() {
     // 21 challenges: page 1 has c0..c19, page 2 has c18 and c19 again (new
     // challenges shifted them) plus c20. Pages past 2 are empty.
     ApiClient.httpClient = MockClient((request) async {
+      if (request.url.path.contains('/challenges/c0') && request.url.pathSegments.last == 'c0') {
+        return http.Response(
+            jsonEncode({
+              'status': 'success',
+              'data': {'challenge': {..._challenge(0), 'status': challengeStatus}}
+            }),
+            200);
+      }
       if (!request.url.path.endsWith('/challenges')) {
         return http.Response(jsonEncode({'status': 'success', 'data': {}}), 200);
       }
@@ -91,6 +104,64 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 2));
   });
+
+  Future<void> settle(WidgetTester tester) async {
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  // Client, 25 Nov 2026: tapping a reel plays / pauses it (it used to open the
+  // challenge); the glowing Aura logo at the bottom right takes the challenge.
+  testWidgets('tapping the video pauses it and tapping again plays it', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ChallengeReelsScreen()));
+    await settle(tester);
+    expect(find.byKey(const Key('reel-paused')), findsNothing);
+
+    player.calls.clear();
+    await tester.tap(find.byKey(const Key('reel-c0')));
+    await tester.pump();
+    expect(find.byKey(const Key('reel-paused')), findsOneWidget);
+    expect(player.calls.last, 'pause');
+    expect(find.byType(ChallengeDetail), findsNothing);
+
+    await tester.tap(find.byKey(const Key('reel-c0')));
+    await tester.pump();
+    expect(find.byKey(const Key('reel-paused')), findsNothing);
+    expect(player.calls.last, 'play');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 2));
+  });
+
+  testWidgets('the Aura logo opens the challenge with its take sheet up', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ChallengeReelsScreen()));
+    await settle(tester);
+    expect(find.byKey(const Key('reels-take-challenge')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('reels-take-challenge')));
+    await settle(tester);
+    final detail = tester.widget<ChallengeDetail>(find.byType(ChallengeDetail));
+    expect(detail.challengeId, 'c0');
+    expect(detail.startTaking, isTrue);
+    expect(find.text('Record Now'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 2));
+  });
+
+  testWidgets('a challenge that is not open shows its page without the take sheet', (tester) async {
+    challengeStatus = 'paused';
+    await tester.pumpWidget(const MaterialApp(home: ChallengeReelsScreen()));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('reels-take-challenge')));
+    await settle(tester);
+    expect(find.byType(ChallengeDetail), findsOneWidget);
+    expect(find.text('Record Now'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 2));
+  });
 }
 
 class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
@@ -115,11 +186,13 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   @override
   Future<void> setLooping(int playerId, bool looping) async {}
 
-  @override
-  Future<void> play(int playerId) async {}
+  final calls = <String>[];
 
   @override
-  Future<void> pause(int playerId) async {}
+  Future<void> play(int playerId) async => calls.add('play');
+
+  @override
+  Future<void> pause(int playerId) async => calls.add('pause');
 
   @override
   Future<void> setVolume(int playerId, double volume) async {}

@@ -30,6 +30,10 @@ class ChallengeDetail extends StatefulWidget {
   /// analytics only.
   final String source;
 
+  /// Opens the "Take this Challenge" sheet as soon as the challenge is known to be
+  /// open (the reels' Aura button). A paused or unreachable challenge just shows the page.
+  final bool startTaking;
+
   const ChallengeDetail({
     super.key,
     required this.title,
@@ -37,6 +41,7 @@ class ChallengeDetail extends StatefulWidget {
     required this.videoUrl,
     required this.challengeId,
     this.source = 'unknown',
+    this.startTaking = false,
   });
 
   @override
@@ -104,12 +109,18 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     // Logged once the challenge fetch settles (success or failure) so the
     // event can carry owner_type / owner_id; deliberately not gated on
     // `mounted` — the view happened even if the user already backed out.
-    _fetchChallengeData().whenComplete(() => AnalyticsService().logChallengeView(
-          widget.challengeId,
-          source: widget.source,
-          ownerType: _ownerType,
-          ownerId: _ownerId,
-        ));
+    _fetchChallengeData().whenComplete(() {
+      AnalyticsService().logChallengeView(
+        widget.challengeId,
+        source: widget.source,
+        ownerType: _ownerType,
+        ownerId: _ownerId,
+      );
+      // Same gate as the Take this Challenge button: only once the status is known and open.
+      if (widget.startTaking && mounted && _statusReady && !_statusCheckFailed && !_isPaused) {
+        _showTakeChallengeSheet();
+      }
+    });
     _fetchSubmissions();
     // Start warming the reference-video cache immediately — by the time the
     // user reads the challenge, opens the rules sheet, and taps Record,

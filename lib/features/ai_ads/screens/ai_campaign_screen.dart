@@ -117,7 +117,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
     final c = _campaign;
     return Scaffold(
       backgroundColor: AiUi.bg,
-      appBar: AiUi.appBar(c?.title ?? 'AI Ad Contest'),
+      appBar: AiUi.appBar(c?.title ?? 'Ai Ad Contest'),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AiUi.accent))
           : c == null

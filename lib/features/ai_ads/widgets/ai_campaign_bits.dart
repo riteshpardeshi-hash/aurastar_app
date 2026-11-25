@@ -125,7 +125,7 @@ class AiStandingChip extends StatelessWidget {
       // The brand picked this creator's ad (tester run, 25 Nov: a winner was shown "Join").
       'WINNER' => const AiChip(label: 'You won', icon: Icons.emoji_events_rounded, color: AiCampaignBits.timeColor, filled: true),
       'NOT_SELECTED' => const AiChip(label: 'Not selected', icon: Icons.flag_rounded, color: AppColors.textMuted, filled: true),
-      _ => const AiChip(label: 'AI Ad Contest', icon: Icons.auto_awesome_rounded, color: AiCampaignBits.lilac, filled: true),
+      _ => const AiChip(label: 'Ai Ad Contest', icon: Icons.auto_awesome_rounded, color: AiCampaignBits.lilac, filled: true),
     };
   }
 }
