@@ -446,7 +446,9 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
               ? const Center(child: CircularProgressIndicator(color: AiUi.accent))
               : ws == null || _campaign == null
               ? Center(child: Text(_error ?? 'Not available', style: const TextStyle(color: AppColors.textMuted)))
-              : _buildBody(_campaign!, ws),
+              : _campaign!.myParticipation?.status == 'ACTIVE' || _campaign!.myParticipation == null
+              ? _buildBody(_campaign!, ws)
+              : _doneBody(),
     );
   }
 
@@ -879,6 +881,28 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
       ],
     );
   }
+
+  /// Submitted (or otherwise done): once only, nothing more to make (backend ADR 147).
+  Widget _doneBody() => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_rounded, color: AiUi.success, size: 48),
+          const SizedBox(height: 12),
+          const Text(
+            "You've submitted your ad for this campaign, so there's nothing more to make here.",
+            key: Key('ai-workspace-done'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+          ),
+          const SizedBox(height: 16),
+          AiPrimaryButton(label: 'See my videos', onPressed: _openMyVideos),
+        ],
+      ),
+    ),
+  );
 
   /// Pinned to the bottom: what will be made, the warnings that block it, and the button.
   Widget _generateBar(AiWorkspace ws, AiGeneration? board) {

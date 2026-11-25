@@ -28,6 +28,33 @@ Future<bool> showAiTermsDialog(BuildContext context, {required String campaignTi
   return accepted == true;
 }
 
+/// Submitting is once per campaign (backend ADR 147): ask before it happens. Returns true
+/// when the creator confirms.
+Future<bool> showSubmitFinalDialog(BuildContext context) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AiUi.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Submit this as your final ad?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      content: const Text(
+        "You can submit only once. After this you can't change it or make more videos in this campaign, "
+        'and your remaining credits go back to the brand.',
+        style: TextStyle(color: AppColors.textMuted, height: 1.4),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
+        TextButton(
+          key: const Key('ai-submit-confirm'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Submit', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 /// A player tapped a campaign: AI ad campaigns are for creators. Returns true when they
 /// want to become one.
 Future<bool> showBecomeCreatorDialog(BuildContext context) async {

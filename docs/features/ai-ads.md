@@ -107,7 +107,10 @@ three work together on the list loaded in the app (no extra request):
    creator's Aura wallet as that many points.
 6. **Iterate** — *Edit*, *Make it longer* (+4/5/8/10 s) or *New audio* on any
    finished video (paid, quoted).
-7. **Submit** — *Submit as my final ad* (free, changeable until the deadline).
+7. **Submit** — *Submit as my final ad* (free), **once per campaign** (backend ADR 147). The app
+   asks to confirm first. Afterwards the creator can't change it or make anything more: the
+   campaign screen says it's submitted (with *Watch my ad*), the workspace shows no tools, and
+   their remaining credits go back to the brand.
    The brand picks winners; rewards show under *My rewards*, where the creator
    confirms *I got it*.
 

@@ -298,4 +298,14 @@ void main() {
     final quoted = backend.calls('POST', '$base/workspace/quote').where((c) => c.body!['stage'] == 'VIDEO').last.body!;
     expect((quoted['settings'] as Map)['onScreenText'], false);
   });
+
+  // Backend ADR 147: after submitting there's nothing more to make in the workspace.
+  testWidgets('a submitted creator gets no tools in the workspace, just their videos', (tester) async {
+    backend.on('GET $base', campaignJson(myStatus: 'SUBMITTED', finalGenerationId: 'v1'));
+    backend.on('GET $base/workspace', workspaceJson());
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+    expect(find.byKey(const Key('ai-workspace-done')), findsOneWidget);
+    expect(find.textContaining('Generate video'), findsNothing);
+    expect(find.text('See my videos'), findsOneWidget);
+  });
 }

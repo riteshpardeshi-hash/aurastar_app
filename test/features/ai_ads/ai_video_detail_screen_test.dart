@@ -378,7 +378,8 @@ void main() {
   testWidgets('submit as final ad is free and marks it final', (tester) async {
     String? finalId;
     serve(gen: doneVideo, evaluations: [evaluationJson()]);
-    backend.routes['GET $base'] = (_) => FakeAiAdsBackend.ok(campaignJson(finalGenerationId: finalId));
+    backend.routes['GET $base'] =
+        (_) => FakeAiAdsBackend.ok(campaignJson(myStatus: finalId == null ? 'ACTIVE' : 'SUBMITTED', finalGenerationId: finalId));
     backend.routes['POST $base/workspace/generations/v1/submit'] = (req) {
       finalId = 'v1';
       return FakeAiAdsBackend.ok({'_id': 'p1', 'status': 'SUBMITTED', 'finalGenerationId': 'v1', 'finalScore': 72});
@@ -386,6 +387,8 @@ void main() {
     await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
 
     await tester.tap(find.text('Submit as my final ad (free)'));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('ai-submit-confirm')));
     await settle(tester);
 
     expect(backend.calls('POST', '$base/workspace/generations/v1/submit').single.body, isEmpty); // free — no expectedCredits
@@ -448,6 +451,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('ai-submit-final')));
     await settle(tester);
+    await tester.tap(find.byKey(const Key('ai-submit-confirm')));
+    await settle(tester);
     expect(backend.calls('POST', '$base/workspace/generations/v1/submit'), hasLength(1));
   });
 
@@ -462,5 +467,29 @@ void main() {
     for (final label in ['Edit', 'Make it longer', 'New audio']) {
       expect(find.widgetWithText(AiPill, label), findsOneWidget);
     }
+  });
+
+  // Backend ADR 147 (client, 25 Nov): a creator submits once per campaign.
+  testWidgets('submitting asks first, and "Not yet" sends nothing', (tester) async {
+    serve(gen: doneVideo);
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+    await tester.tap(find.byKey(const Key('ai-submit-final')));
+    await settle(tester);
+    expect(find.text('Submit this as your final ad?'), findsOneWidget);
+    expect(find.textContaining("After this you can't change it"), findsOneWidget);
+    await tester.tap(find.text('Not yet'));
+    await settle(tester);
+    expect(backend.calls('POST', '$base/workspace/generations/v1/submit'), isEmpty);
+  });
+
+  testWidgets('after submitting, another video offers nothing to submit or make', (tester) async {
+    final other = generationJson(id: 'v2', stage: 'VIDEO', scriptId: 's1');
+    backend.on('GET $base/workspace/generations/v2', other);
+    backend.on('GET $base/workspace', workspaceJson(generations: [generationJson(id: 's1'), doneVideo, other]));
+    backend.on('GET $base', campaignJson(myStatus: 'SUBMITTED', finalGenerationId: 'v1'));
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v2'));
+    expect(find.byKey(const Key('ai-submit-final')), findsNothing);
+    expect(find.text('Improve this video'), findsNothing);
+    expect(find.byKey(const Key('ai-done-note')), findsOneWidget);
   });
 }
