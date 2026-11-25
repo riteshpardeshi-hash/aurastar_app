@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:aura_app/features/ai_ads/screens/ai_video_detail_screen.dart';
 
+import 'package:aura_app/features/ai_ads/widgets/ai_ui.dart';
+
 import 'ai_ads_fake_backend.dart';
 
 // One generation: picking keyframes → video, waiting on / cancelling a video,
@@ -77,7 +79,7 @@ void main() {
     expect(find.text('Scene 3 · 7–10s'), findsOneWidget);
     // The script set the length — no choice here.
     expect(find.descendant(of: find.byKey(const Key('ai-fixed-length')), matching: find.text('10s')), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '10s'), findsNothing);
+    expect(find.widgetWithText(AiPill, '10s'), findsNothing);
 
     await tester.ensureVisible(find.text('Create video · 20 credits'));
     await tester.tap(find.text('Create video · 20 credits'));
@@ -449,4 +451,16 @@ void main() {
     expect(backend.calls('POST', '$base/workspace/generations/v1/submit'), hasLength(1));
   });
 
+
+  // Full-flow run, 25 Nov: the Edit / Make it longer / New audio options showed as light
+  // "white pills" (Material chips take the app's light theme on device). They're AiPills now.
+  testWidgets('the improve options are dark pills, not Material chips', (tester) async {
+    serve(gen: doneVideo);
+    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(FilterChip), findsNothing);
+    for (final label in ['Edit', 'Make it longer', 'New audio']) {
+      expect(find.widgetWithText(AiPill, label), findsOneWidget);
+    }
+  });
 }
