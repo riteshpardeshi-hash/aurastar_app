@@ -872,13 +872,6 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
                 ),
                 _workGrid(items),
               ],
-              if (ws.freeEvaluations.limit > 0) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Getting your ad judged by AI is free — ${ws.freeEvaluations.left} of ${ws.freeEvaluations.limit} left.',
-                  style: const TextStyle(color: AppColors.textFaint, fontSize: 11),
-                ),
-              ],
             ],
           ),
         ),

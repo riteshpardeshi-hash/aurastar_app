@@ -100,13 +100,11 @@ three work together on the list loaded in the app (no extra request):
    waiting for the video AI → generating → saving) and the script's scenes as *What's being made*.
    **The player** (`AiVideoPlayer`) plays **once** and stops on a Replay button — it never
    loops; play / pause, a seek bar with the time, mute, controls fade while playing.
-5. **Judge** — *Get AI score* (**free** — the platform pays — up to a number per creator per
-   campaign, shown as "Free · N left"; a background job). The score card shows the
-   0–100 score, per-criterion scores, missing mandatory brand assets, forbidden
-   claims / safety issues (these cap the score), timed feedback and
-   suggestions. A failed evaluation doesn't count and can be retried; a video that was already
-   judged can't be judged again (change it first). When none are left, the backend's reason is
-   shown and the button is off.
+5. **No AI score for creators** (client, 25 Nov 2026; backend ADR 146). A finished video shows
+   the player and **Submit as my final ad (free)** — no score, no *Get AI score*, and the app
+   never fetches evaluations. The backend scores a submitted ad for the brand, who sorts
+   submissions by it; once the brand completes the campaign, the score is added to the
+   creator's Aura wallet as that many points.
 6. **Iterate** — *Edit*, *Make it longer* (+4/5/8/10 s) or *New audio* on any
    finished video (paid, quoted).
 7. **Submit** — *Submit as my final ad* (free, changeable until the deadline).

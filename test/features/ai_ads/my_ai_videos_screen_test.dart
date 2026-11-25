@@ -13,7 +13,7 @@ void main() {
   setUp(() => backend = FakeAiAdsBackend());
   tearDown(FakeAiAdsBackend.reset);
 
-  testWidgets('lists images, then videos (each newest first), with scores and the final ad', (tester) async {
+  testWidgets('lists images, then videos (each newest first), without scores, and the final ad', (tester) async {
     backend.on('GET $base/workspace', workspaceJson(generations: [
       generationJson(id: 's1'),
       generationJson(id: 'i1', stage: 'IMAGE'),
@@ -33,8 +33,9 @@ void main() {
     expect(labels, ['Images v1', 'Video v2', 'Video v1']);
     expect(tester.getTopLeft(find.text('Images')).dy, lessThan(tester.getTopLeft(find.text('Videos')).dy));
     expect(tester.getTopLeft(find.text('Images v1')).dy, lessThan(tester.getTopLeft(find.text('Videos')).dy));
-    expect(find.text('81'), findsOneWidget);
-    expect(find.text('60'), findsNothing);
+    // No scores for creators (backend ADR 146).
+    expect(find.text('81'), findsNothing);
+    expect(find.text('score'), findsNothing);
     expect(find.text('Final ad'), findsOneWidget);
     expect(find.text('Show the can earlier'), findsOneWidget);
   });
