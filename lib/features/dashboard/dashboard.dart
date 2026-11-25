@@ -65,8 +65,8 @@ class _DashboardState extends State<Dashboard> {
   late Future<List<Map<String, dynamic>>> _brandVideosFuture = _fetchBrandVideos();
 
   Future<List<Map<String, dynamic>>> _fetchBrandVideos() => ChallengesService()
-      .fetchChallenges(sourceType: 'Brand', limit: 5)
-      .then((raw) => raw.map(normaliseChallenge).where((c) => c['sourceType'] == 'Brand').toList());
+      .fetchChallenges(sourceType: 'Brand', limit: 30)
+      .then((raw) => brandVideosMix(raw.map(normaliseChallenge).where((c) => c['sourceType'] == 'Brand').toList()));
 
   // Home's "Top Creators": a fixed 5, most followers first (client, 25 Nov 2026; the
   // backend ranks them, ADR 149). Always 5, whatever the screen width.
@@ -1951,4 +1951,28 @@ String _compactCount(int n) {
   if (n >= 1000000) return '${one(n / 1000000)}M';
   if (n >= 1000) return '${one(n / 1000)}K';
   return '$n';
+}
+
+/// Home's Brand Videos: up to [count], one brand at a time (each brand's newest first, then
+/// round the brands again), so five videos don't all come from the one brand that posted
+/// last. The list comes in newest first.
+@visibleForTesting
+List<Map<String, dynamic>> brandVideosMix(List<Map<String, dynamic>> newestFirst, {int count = 5}) {
+  final byBrand = <String, List<Map<String, dynamic>>>{};
+  for (final c in newestFirst) {
+    byBrand.putIfAbsent(c['creatorId'] as String? ?? '', () => []).add(c);
+  }
+  final queues = byBrand.values.toList();
+  final out = <Map<String, dynamic>>[];
+  for (var round = 0; out.length < count; round++) {
+    var added = false;
+    for (final q in queues) {
+      if (round < q.length && out.length < count) {
+        out.add(q[round]);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+  return out;
 }
