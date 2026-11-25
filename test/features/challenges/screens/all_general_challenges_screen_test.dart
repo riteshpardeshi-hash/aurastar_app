@@ -17,9 +17,9 @@ import 'package:aura_app/shared/widgets/video_thumbnail_widget.dart';
 // user scrolling past the first 20 challenges just hit the end of the grid
 // even when the backend had more. Now the grid listens for the scroll
 // position nearing the bottom and fetches the next `page`, appending to what
-// was already shown — and once the backend itself runs out of pages, it
-// wraps back around to page 1 instead of stopping, so the grid never
-// dead-ends.
+// was already shown. Once the backend runs out of pages the grid stops there:
+// it no longer wraps back to page 1 (client, 25 Nov 2026: no repeated
+// challenges).
 Map<String, dynamic> _challenge(String id, {String? createdAt}) => {
       '_id': id,
       'title': 'Challenge $id',
@@ -102,15 +102,14 @@ void main() {
             'at the first 20 challenges');
 
     // Page 2 is the backend's real last page (fewer than `limit` items), so
-    // once it's been consumed the grid should keep going by wrapping back
-    // to page 1 instead of dead-ending — that's what makes the scroll
-    // endless rather than stopping once every challenge has been seen.
+    // the grid ends there. Client, 25 Nov 2026: it must not wrap back to
+    // page 1 and show the same challenges again.
     final afterLastPage =
         capturedPages.sublist(capturedPages.indexOf('2') + 1);
-    expect(afterLastPage, contains('1'),
+    expect(afterLastPage, isNot(contains('1')),
         reason:
-            'once the backend runs out of pages, the grid must loop back to '
-            'page 1 instead of the scroll simply ending');
+            'once the backend runs out of pages, the grid must stop, not '
+            'loop back to page 1');
   });
 
   testWidgets(

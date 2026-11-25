@@ -14,9 +14,10 @@ import '../../../core/services/safety_service.dart';
 /// Full-screen vertical video feed opened from the bottom nav's center
 /// star button — for every role (player, creator, brand, admin alike).
 /// Autoplays each challenge's reference video; when one finishes it
-/// auto-advances to the next, the user can also swipe manually, and the
-/// feed loops forever (wraps back to page 1 once the backend runs out of
-/// pages, same pattern as AllGeneralChallengesScreen's grid). Tapping the
+/// auto-advances to the next, and the user can also swipe manually. The feed
+/// shows each video once and ends after the last one with an "all caught up"
+/// page: it never starts over from the first video (client, 25 Nov 2026), and a
+/// video that shifts onto a later page is never shown twice. Tapping the
 /// video opens its ChallengeDetail page. The only chrome is a bottom
 /// overlay with the category icon, aura points, and participant count.
 class ChallengeReelsScreen extends StatefulWidget {
@@ -32,6 +33,9 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
 
   final _pageController = PageController();
   final List<Map<String, dynamic>> _reels = [];
+  /// Ids already in the feed: a challenge added while scrolling shifts the
+  /// pages, so a later page can repeat one we already have.
+  final Set<String> _seen = {};
   int _currentIndex = 0;
   int _page = 1;
   bool _hasMore = true;
@@ -65,10 +69,17 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
           .toList();
       if (!mounted) return;
       setState(() {
-        _reels.addAll(list);
-        _hasMore = list.length == _pageSize;
+        // A reload (e.g. after a block) starts the feed over rather than
+        // appending a second copy of it.
+        _reels.clear();
+        _seen.clear();
+        _page = 1;
+        _currentIndex = 0;
+        _reels.addAll(_fresh(list));
+        _hasMore = raw.length == _pageSize;
         _loading = false;
       });
+      if (_pageController.hasClients) _pageController.jumpToPage(0);
       // onPageChanged never fires for the page the feed opens on, so the
       // first reel's impression has to be recorded here.
       if (_reels.isNotEmpty) {
@@ -81,13 +92,17 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
     }
   }
 
-  // Once the backend runs out of pages the next load wraps back to page 1
-  // instead of stopping, so the feed never dead-ends.
+  /// The ones not already in the feed (and records them as seen).
+  List<Map<String, dynamic>> _fresh(List<Map<String, dynamic>> list) =>
+      list.where((c) => _seen.add(c['id'] as String)).toList();
+
+  // Stops once the backend runs out of pages: the feed ends after the last
+  // video instead of starting over (client, 25 Nov 2026).
   Future<void> _loadMore() async {
-    if (_loadingMore) return;
+    if (_loadingMore || !_hasMore) return;
     _loadingMore = true;
     try {
-      final nextPage = _hasMore ? _page + 1 : 1;
+      final nextPage = _page + 1;
       final raw = await ChallengesService()
           .fetchChallenges(page: nextPage, limit: _pageSize);
       final list = raw
@@ -97,8 +112,8 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
       if (!mounted) return;
       setState(() {
         _page = nextPage;
-        _reels.addAll(list);
-        _hasMore = list.length == _pageSize;
+        _reels.addAll(_fresh(list));
+        _hasMore = raw.length == _pageSize;
       });
     } catch (_) {
       // keep whatever's already loaded — the next scroll-near-end retries
@@ -174,9 +189,11 @@ class _ChallengeReelsScreenState extends State<ChallengeReelsScreen> {
                     PageView.builder(
                       controller: _pageController,
                       scrollDirection: Axis.vertical,
-                      itemCount: _reels.length,
+                      // One extra page after the last video once there are no more.
+                      itemCount: _reels.length + (_hasMore ? 0 : 1),
                       onPageChanged: _onPageChanged,
                       itemBuilder: (context, index) {
+                        if (index >= _reels.length) return const _EndOfFeed();
                         final c = _reels[index];
                         return _ReelPage(
                           key: ValueKey('${c['id']}_$index'),
@@ -399,4 +416,34 @@ class _ReelPageState extends State<_ReelPage> {
       ),
     );
   }
+}
+
+/// After the last video: the feed doesn't start over (client, 25 Nov 2026).
+class _EndOfFeed extends StatelessWidget {
+  const _EndOfFeed();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+        key: Key('reels-end'),
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle_outline_rounded,
+                  color: Colors.white70, size: 48),
+              SizedBox(height: 12),
+              Text("You're all caught up",
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700)),
+              SizedBox(height: 6),
+              Text("You've seen every challenge video. Check back later for new ones.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white54, height: 1.4)),
+            ],
+          ),
+        ),
+      );
 }
