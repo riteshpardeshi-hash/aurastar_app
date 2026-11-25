@@ -165,4 +165,60 @@ void main() {
     expect(find.text('Watch my ad'), findsOneWidget);
     expect(find.textContaining('credits to make your ad'), findsNothing);
   });
+
+  // 25 Nov 2026: a joined creator can leave (backend ADR 147). Their credits go back to the
+  // brand; an ad they'd submitted still counts, but they can't win while they're out.
+  group('leaving a campaign', () {
+    testWidgets('an active creator leaves after confirming; Stay does nothing', (tester) async {
+      var status = 'ACTIVE';
+      backend.routes['GET $base'] = (_) => FakeAiAdsBackend.ok(campaignJson(myStatus: status));
+      backend.routes['POST $base/withdraw'] = (_) {
+        status = 'WITHDRAWN';
+        return FakeAiAdsBackend.ok({'_id': 'p1', 'status': 'WITHDRAWN'});
+      };
+      await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+
+      await tester.ensureVisible(find.byKey(const Key('ai-leave-campaign')));
+      await tester.tap(find.byKey(const Key('ai-leave-campaign')));
+      await settle(tester);
+      expect(find.textContaining('Your unused credits go back to the brand'), findsOneWidget);
+      await tester.tap(find.text('Stay'));
+      await settle(tester);
+      expect(backend.calls('POST', '$base/withdraw'), isEmpty);
+
+      await tester.tap(find.byKey(const Key('ai-leave-campaign')));
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('ai-leave-confirm')));
+      await settle(tester);
+      expect(backend.calls('POST', '$base/withdraw'), hasLength(1));
+      expect(find.text('Ask to join'), findsOneWidget); // they can ask to join again
+      expect(find.byKey(const Key('ai-leave-campaign')), findsNothing);
+    });
+
+    testWidgets('a submitted creator is told their ad stays but they cannot win while out', (tester) async {
+      backend.on('GET $base', campaignJson(myStatus: 'SUBMITTED', finalGenerationId: 'v1'));
+      await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+      await tester.ensureVisible(find.byKey(const Key('ai-leave-campaign')));
+      await tester.tap(find.byKey(const Key('ai-leave-campaign')));
+      await settle(tester);
+      expect(find.textContaining("can't be picked as a winner while you're out"), findsOneWidget);
+    });
+
+    testWidgets('after leaving with a submitted ad: a note, and Ask to rejoin', (tester) async {
+      backend.on('GET $base', campaignJson(myStatus: 'WITHDRAWN', finalGenerationId: 'v1'));
+      await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+      expect(find.byKey(const Key('ai-left-after-submitting')), findsOneWidget);
+      expect(find.text('Ask to rejoin'), findsOneWidget);
+    });
+
+    testWidgets('no Leave for a winner, or once the campaign has ended', (tester) async {
+      backend.on('GET $base', campaignJson(myStatus: 'WINNER', finalGenerationId: 'v1'));
+      await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+      expect(find.byKey(const Key('ai-leave-campaign')), findsNothing);
+
+      backend.on('GET $base', {...campaignJson(myStatus: 'SUBMITTED', finalGenerationId: 'v1'), 'status': 'CLOSED'});
+      await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+      expect(find.byKey(const Key('ai-leave-campaign')), findsNothing);
+    });
+  });
 }

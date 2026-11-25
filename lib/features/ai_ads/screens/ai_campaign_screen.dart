@@ -55,6 +55,21 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
     }
   }
 
+  /// Leave the campaign (only while it's running; a winner or a finished campaign has none).
+  Widget _leaveButton(AiCampaign c, {required bool submitted}) => Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: TextButton(
+          key: const Key('ai-leave-campaign'),
+          onPressed: _busy
+              ? null
+              : () async {
+                  if (!await showLeaveCampaignDialog(context, submitted: submitted)) return;
+                  await _run(() => _service.withdraw(c.id), 'You left the campaign.');
+                },
+          child: const Text('Leave campaign', style: TextStyle(color: AiUi.danger)),
+        ),
+      );
+
   Future<void> _run(Future<void> Function() action, String done) async {
     setState(() => _busy = true);
     try {
@@ -260,7 +275,20 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
         return const Text("This campaign isn't taking creators right now.",
             textAlign: TextAlign.center, style: TextStyle(color: AppColors.textMuted));
       }
-      return AiPrimaryButton(label: 'Ask to join', onPressed: () => _join(c), busy: _busy);
+      final leftAfterSubmitting = status == 'WITHDRAWN' && p?.finalGenerationId != null;
+      return Column(children: [
+        if (leftAfterSubmitting) ...[
+          const Text(
+            "You left this campaign. Your submitted ad still counts, but you can't win unless "
+            'the brand lets you back in before the winners are picked.',
+            key: Key('ai-left-after-submitting'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+        ],
+        AiPrimaryButton(label: leftAfterSubmitting ? 'Ask to rejoin' : 'Ask to join', onPressed: () => _join(c), busy: _busy),
+      ]);
     }
     return switch (status) {
       'INVITED' => Column(children: [
@@ -293,6 +321,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
             const SizedBox(height: 12),
             AiPrimaryButton(label: 'Watch my ad', onPressed: () => _openFinal(c, p.finalGenerationId!)),
           ],
+          if (!c.hasEnded) _leaveButton(c, submitted: true),
         ]),
       'ACTIVE' => Column(children: [
           if (c.hasEnded)
@@ -315,6 +344,7 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
             ],
             const SizedBox(height: 12),
             AiPrimaryButton(label: 'Open my workspace', onPressed: () => _openWorkspace(c)),
+            _leaveButton(c, submitted: false),
           ],
         ]),
       'WINNER' => Column(children: [

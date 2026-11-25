@@ -28,6 +28,35 @@ Future<bool> showAiTermsDialog(BuildContext context, {required String campaignTi
   return accepted == true;
 }
 
+/// Leaving a campaign (backend ADR 147). What happens depends on whether they'd submitted:
+/// their ad still counts, but they can't win while they're out. Returns true to leave.
+Future<bool> showLeaveCampaignDialog(BuildContext context, {required bool submitted}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AiUi.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Leave this campaign?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+      content: Text(
+        submitted
+            ? "Your submitted ad stays with the brand, but you can't be picked as a winner while you're out. "
+                "You can ask to join again; if the brand lets you back in before the winners are picked, you can still win."
+            : 'Your unused credits go back to the brand. You can ask to join again later, and the brand will need to approve you.',
+        style: const TextStyle(color: AppColors.textMuted, height: 1.4),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay')),
+        TextButton(
+          key: const Key('ai-leave-confirm'),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Leave', style: TextStyle(color: AiUi.danger, fontWeight: FontWeight.w700)),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 /// Submitting is once per campaign (backend ADR 147): ask before it happens. Returns true
 /// when the creator confirms.
 Future<bool> showSubmitFinalDialog(BuildContext context) async {
