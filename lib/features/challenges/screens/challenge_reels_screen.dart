@@ -433,8 +433,10 @@ class _ReelPageState extends State<_ReelPage> {
               ),
             ),
             Positioned(
-              right: 16,
-              bottom: MediaQuery.of(context).padding.bottom + 70,
+              // Lined up with the aura points / participants row at the bottom
+              // (client picked option D, 25 Nov 2026: design/reels-button/options.html).
+              right: 24,
+              bottom: MediaQuery.of(context).padding.bottom + 8,
               child: _TakeChallengeButton(onTap: _take),
             ),
           ],

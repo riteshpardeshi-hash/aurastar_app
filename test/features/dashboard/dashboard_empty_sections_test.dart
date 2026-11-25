@@ -11,7 +11,7 @@ import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
 
 // Found on device after blocking every creator and brand that had challenges: Home kept
-// the "Brand Challenges", "Trending videos" and "More Challenges" headings with nothing under
+// the "Brand Challenges", "Trending Challenges" and "More Challenges" headings with nothing under
 // them. Those sections now disappear when the challenge list loads empty.
 void main() {
   setUp(() {
@@ -82,7 +82,7 @@ void main() {
     await tester.pump();
   }
 
-  const headings = ['Brand Challenges', 'Trending videos', 'More Challenges'];
+  const headings = ['Brand Challenges', 'Trending Challenges', 'More Challenges'];
 
   testWidgets('no challenges: the challenge sections and their headings are gone', (tester) async {
     mockBackend([]);
@@ -100,7 +100,7 @@ void main() {
     ]);
     await pumpHome(tester);
     expect(find.text('Brand Challenges'), findsNothing);
-    expect(find.text('Trending videos'), findsOneWidget);
+    expect(find.text('Trending Challenges'), findsOneWidget);
     expect(find.text('More Challenges'), findsOneWidget);
     expect(requestedSourceTypes, contains('Brand'));
   });
@@ -122,16 +122,16 @@ void main() {
     expect(find.text('Z'), findsOneWidget); // the brand's badge (no logo uploaded → its initial)
   });
 
-  // 25 Nov 2026: Home's Trending videos shows the backend's ranking (GET /home/trending),
+  // 25 Nov 2026: Home's Trending Challenges shows the backend's ranking (GET /home/trending),
   // not the newest challenges.
-  testWidgets('Trending videos follows the trending ranking, not newest first', (tester) async {
+  testWidgets('Trending Challenges follows the trending ranking, not newest first', (tester) async {
     mockBackend([
       {'_id': 'new', 'title': 'Brand New', 'sourceType': 'Aura Original', 'starsCount': 0, 'submissionsCount': 0},
       {'_id': 'hot', 'title': 'Hot One', 'sourceType': 'Aura Original', 'starsCount': 9, 'submissionsCount': 42},
     ]);
     await pumpHome(tester);
-    expect(find.text('Trending videos'), findsOneWidget);
-    final row = find.ancestor(of: find.text('Trending videos'), matching: find.byType(Column)).first;
+    expect(find.text('Trending Challenges'), findsOneWidget);
+    final row = find.ancestor(of: find.text('Trending Challenges'), matching: find.byType(Column)).first;
     final counts = tester
         .widgetList<Text>(find.descendant(of: row, matching: find.byType(Text)))
         .map((t) => t.data)

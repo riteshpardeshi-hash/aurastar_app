@@ -1077,7 +1077,7 @@ class _DashboardState extends State<Dashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Trending videos', style: AppTextStyles.sectionHeader),
+              const Text('Trending Challenges', style: AppTextStyles.sectionHeader),
               SeeAllLink(
                 onTap:
                     () => Navigator.push(
