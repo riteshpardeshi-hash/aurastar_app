@@ -89,9 +89,37 @@ void main() {
     expect(find.text('Refine with AI'), findsNothing);
   });
 
-  testWidgets('the My AI videos icon shows how many images and videos were made', (tester) async {
+  // Phone check (25 Nov): the badge showed the total made, so it never went away however
+  // many times the creator opened My AI videos. It now counts finished work not seen yet.
+  testWidgets('the My AI videos badge counts new work and clears once My AI videos is opened', (tester) async {
+    final badge = find.descendant(of: find.byKey(const Key('ai-my-videos')), matching: find.text('1'));
     await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
-    expect(find.descendant(of: find.byKey(const Key('ai-my-videos')), matching: find.text('1')), findsOneWidget);
+    expect(badge, findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('ai-my-videos')));
+    await settle(tester);
+    expect(find.text('My AI videos'), findsWidgets);
+    await tester.pageBack();
+    await settle(tester);
+    expect(badge, findsNothing);
+
+    // Still cleared when the screen is opened again later (a fresh screen, not the old one)...
+    await tester.pumpWidget(const SizedBox());
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+    expect(badge, findsNothing);
+
+    // ...until the video that was generating is ready: that's new again.
+    backend.on('GET $base/workspace', workspaceJson(generations: [
+      generationJson(id: 's1'),
+      generationJson(id: 'v1', stage: 'VIDEO', scriptId: 's1'),
+    ]));
+    await tester.pumpWidget(const SizedBox());
+    await pumpAiScreen(tester, const CreateAiVideosScreen(campaignId: campaignId));
+    expect(badge, findsOneWidget);
+
+    // The ready video's thumbnail waits up to 30 s for a frame.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 31));
   });
 
   // Phone check (24 Nov): Material ChoiceChips took the app's light theme on device and

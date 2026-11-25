@@ -5,6 +5,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/video_thumbnail_widget.dart';
 import '../widgets/ai_dialogs.dart';
 import '../widgets/ai_script_view.dart';
+import '../ai_seen_work.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_brand_assets_row.dart';
 import 'ai_video_detail_screen.dart';
@@ -37,6 +38,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   final _directionController = TextEditingController();
 
   AiCampaign? _campaign;
+  /// Images / videos already seen in My AI videos, as [AiSeenWork.keyOf] (kept on the phone).
+  Set<String> _seenWork = const {};
   AiWorkspace? _workspace;
   bool _loading = true;
   String? _error;
@@ -77,10 +80,12 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   Future<void> _load() async {
     try {
       final results = await Future.wait([_service.fetchCampaign(widget.campaignId), _service.fetchWorkspace(widget.campaignId)]);
+      final seen = await AiSeenWork.load(widget.campaignId);
       if (!mounted) return;
       final ws = results[1] as AiWorkspace;
       final scripts = ws.of(AiStage.script).where((g) => g.isDone).toList();
       setState(() {
+        _seenWork = seen;
         _campaign = results[0] as AiCampaign;
         _workspace = ws;
         _loading = false;
@@ -420,7 +425,8 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
   @override
   Widget build(BuildContext context) {
     final ws = _workspace;
-    final made = ws == null ? 0 : _work(ws).length;
+    // Only work not seen yet in My AI videos (it used to be the total, so it never cleared).
+    final unseen = ws == null ? 0 : _work(ws).where((g) => !_seenWork.contains(AiSeenWork.keyOf(g))).length;
     return Scaffold(
       backgroundColor: AiUi.bg,
       appBar: AiUi.appBar(
@@ -430,9 +436,9 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
             key: const Key('ai-my-videos'),
             tooltip: 'My AI videos',
             icon: Badge(
-              isLabelVisible: made > 0,
+              isLabelVisible: unseen > 0,
               backgroundColor: AiUi.accent,
-              label: Text('$made'),
+              label: Text('$unseen'),
               child: const Icon(Icons.video_library_outlined),
             ),
             onPressed: _openMyVideos,

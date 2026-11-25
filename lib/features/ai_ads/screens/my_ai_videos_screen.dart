@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/ai_ads_service.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../widgets/ai_job_status_badge.dart';
+import '../ai_seen_work.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_video_detail_screen.dart';
 
@@ -51,6 +52,9 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
         _finalId = (results[1] as AiCampaign).myParticipation?.finalGenerationId;
         _loading = false;
       });
+      // Everything this page shows now counts as seen: the media icon on Create AI Videos
+      // stops counting it (until a video seen generating is ready).
+      AiSeenWork.markSeen(widget.campaignId, _items.map(AiSeenWork.keyOf));
       _poll?.cancel();
       if (_items.any((g) => g.isRunning)) {
         _poll = Timer(const Duration(seconds: 5), _load);
