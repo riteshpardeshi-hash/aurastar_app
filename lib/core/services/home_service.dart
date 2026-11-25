@@ -31,7 +31,9 @@ class HomeService {
     try {
       final res = await _client.get('/home/trending?limit=$limit', auth: true);
       final data = res['data'] as Map<String, dynamic>;
-      return (data['docs'] as List).cast<Map<String, dynamic>>();
+      // A paginated response keeps its list under `responses` (it used to read `docs`,
+      // which isn't there, so this always came back empty).
+      return ((data['responses'] ?? data['docs']) as List).cast<Map<String, dynamic>>();
     } catch (_) {
       return [];
     }
