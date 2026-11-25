@@ -485,7 +485,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
                   const Icon(Icons.movie_creation_outlined, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   const Expanded(
-                    child: Text('Making your video', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
+                    child: Text('Making your video', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5)),
                   ),
                   Text(
                     [if (g.durationSeconds != null) '${g.durationSeconds}s', if (g.resolution != null) g.resolution!].join(' · '),
@@ -621,7 +621,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(storyboard ? 'Your storyboard' : 'Pick the images for your video',
-            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5)),
         const SizedBox(height: 4),
         Text(
           storyboard

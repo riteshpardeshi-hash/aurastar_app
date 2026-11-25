@@ -752,6 +752,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       fontFamily: 'ClashDisplay',
+                      wordSpacing: 3.5,
                     ),
                   ),
                   const SizedBox(height: 3),

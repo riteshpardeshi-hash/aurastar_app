@@ -22,6 +22,7 @@ class AppTextStyles {
   // at w800/w900 — collapsed to one size, real-weight bold.
   static const heroTitle = TextStyle(
     fontFamily: 'ClashDisplay',
+    wordSpacing: 5.5,
     fontSize: 26,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.4,
@@ -33,6 +34,7 @@ class AppTextStyles {
   // Auth, Rules, Trust Setup). Was 28-30px at w800/w900.
   static const compactTitle = TextStyle(
     fontFamily: 'ClashDisplay',
+    wordSpacing: 5.5,
     fontSize: 24,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.3,
@@ -44,6 +46,7 @@ class AppTextStyles {
   // 17-22px, ranging from an unstyled Material default up to w800.
   static const screenTitle = TextStyle(
     fontFamily: 'ClashDisplay',
+    wordSpacing: 4.5,
     fontSize: 20,
     fontWeight: FontWeight.w600,
     letterSpacing: -0.2,
@@ -95,6 +98,7 @@ class AppTextStyles {
   // the same "same component, different constant" problem.
   static const avatarInitial = TextStyle(
     fontFamily: 'ClashDisplay',
+    wordSpacing: 4.5,
     fontSize: 20,
     fontWeight: FontWeight.w700,
     color: AppColors.textPrimary,

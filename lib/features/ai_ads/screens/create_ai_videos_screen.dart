@@ -477,7 +477,7 @@ class _CreateAiVideosScreenState extends State<CreateAiVideosScreen> {
             child: Text('$n', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
           ),
           const SizedBox(width: 8),
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay')),
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5)),
           const Spacer(),
           if (trailing != null)
             trailing

@@ -28,7 +28,8 @@ class CreatorAdminScreen extends StatelessWidget {
         elevation: 0,
         title: const Text('Analytics',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
-                fontFamily: 'ClashDisplay')),
+                fontFamily: 'ClashDisplay',
+                wordSpacing: 3.5)),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -120,7 +121,8 @@ class CreatorAdminScreen extends StatelessWidget {
                                   color: Colors.white,
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  fontFamily: 'ClashDisplay')),
+                                  fontFamily: 'ClashDisplay',
+                                  wordSpacing: 3.5)),
                           const SizedBox(height: 12),
                           Row(
                             children: [
@@ -172,7 +174,8 @@ class CreatorAdminScreen extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              fontFamily: 'ClashDisplay')),
+                              fontFamily: 'ClashDisplay',
+                              wordSpacing: 3.5)),
                     ),
                   ),
 

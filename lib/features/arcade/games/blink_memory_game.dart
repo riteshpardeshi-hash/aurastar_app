@@ -245,7 +245,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
             children: [
               const Text('IQ', style: TextStyle(color: _green, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
               const SizedBox(height: 6),
-              const Text('Blink Memory', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay')),
+              const Text('Blink Memory', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
               const SizedBox(height: 5),
               Text(
                 switch (_phase) {
@@ -267,7 +267,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
             decoration: BoxDecoration(color: _surfaceElevated, borderRadius: BorderRadius.circular(17), border: Border.all(color: _borderBright)),
             child: Column(
               children: [
-                Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5)),
                 const Text('SEC', style: TextStyle(color: _textMuted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1, fontFamily: 'SpaceGrotesk')),
               ],
             ),
@@ -294,7 +294,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
           children: [
             const Text('HOW TO PLAY', style: TextStyle(color: _green, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 12),
-            const Text('Lights on. Lights off. Go.', style: TextStyle(color: _text, fontSize: 25, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+            const Text('Lights on. Lights off. Go.', style: TextStyle(color: _text, fontSize: 25, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
             const SizedBox(height: 10),
             const Text(
               'A pattern of cells lights up briefly. Then the grid goes dark — tap every cell you remember. Speed matters: faster recall earns a bonus.',
@@ -327,7 +327,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('SCORE', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-                    Text('$_score', style: const TextStyle(color: _text, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                    Text('$_score', style: const TextStyle(color: _text, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 7)),
                   ],
                 ),
               ),
@@ -341,7 +341,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text('COMBO', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-                    Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                    Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 7)),
                   ],
                 ),
               ),
@@ -446,7 +446,7 @@ class _BlinkMemoryGameState extends State<BlinkMemoryGame> {
           children: [
             const Text('MEMORY COMPLETE', style: TextStyle(color: _green, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 8),
-            Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+            Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 12)),
             const SizedBox(height: 6),
             Text('$_correct / $_kRounds recalled', style: const TextStyle(color: _textMuted, fontSize: 15, fontFamily: 'SpaceGrotesk')),
           ],

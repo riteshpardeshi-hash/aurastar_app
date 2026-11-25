@@ -328,6 +328,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                             '$pct%',
                             style: TextStyle(
                               fontFamily: 'ClashDisplay',
+                              wordSpacing: 4,
                               color: Colors.white,
                               fontSize: percentFontSize,
                               fontWeight: FontWeight.w700,
@@ -578,6 +579,7 @@ class _AuraSubmittedPopupState extends State<AuraSubmittedPopup>
                     '+$n',
                     style: const TextStyle(
                       fontFamily: 'ClashDisplay',
+                      wordSpacing: 12.5,
                       color: Colors.white,
                       fontSize: 56,
                       fontWeight: FontWeight.w700,

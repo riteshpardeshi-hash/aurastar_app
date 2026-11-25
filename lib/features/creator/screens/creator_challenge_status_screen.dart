@@ -329,7 +329,7 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text('Challenge Status',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay', wordSpacing: 3.5)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))

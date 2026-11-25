@@ -94,6 +94,7 @@ class CreatorActivityScreen extends StatelessWidget {
               fontSize: 22,
               fontWeight: FontWeight.w800,
               fontFamily: 'ClashDisplay',
+              wordSpacing: 5,
             ),
           ),
         ],

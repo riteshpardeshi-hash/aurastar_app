@@ -22,7 +22,7 @@ class AiUi {
     iconTheme: const IconThemeData(color: Colors.white),
     title: Text(
       title,
-      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay'),
+      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5),
     ),
     actions: actions,
   );
@@ -49,7 +49,7 @@ class AiSectionTitle extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay'),
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5),
             ),
           ),
           if (trailing != null) trailing!,

@@ -100,7 +100,7 @@ class _CreatorFollowListScreenState extends State<CreatorFollowListScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
         title: Text(_isFollowers ? 'Followers' : 'Following',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay', wordSpacing: 4)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))

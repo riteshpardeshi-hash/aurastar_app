@@ -319,7 +319,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
           children: [
             const Text('IQ', style: TextStyle(color: _danger, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 6),
-            const Text('Rule Breaker', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay')),
+            const Text('Rule Breaker', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
             const SizedBox(height: 5),
             const Text('Find the one that breaks the rule.', style: TextStyle(color: _textMuted, fontSize: 13, fontFamily: 'SpaceGrotesk')),
           ],
@@ -333,7 +333,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
           decoration: BoxDecoration(color: _surfaceElevated, borderRadius: BorderRadius.circular(17), border: Border.all(color: _borderBright)),
           child: Column(
             children: [
-              Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+              Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5)),
               const Text('SEC', style: TextStyle(color: _textMuted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1, fontFamily: 'SpaceGrotesk')),
             ],
           ),
@@ -359,7 +359,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
           children: [
             const Text('HOW TO PLAY', style: TextStyle(color: _danger, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 12),
-            const Text('One of these doesn\'t belong', style: TextStyle(color: _text, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+            const Text('One of these doesn\'t belong', style: TextStyle(color: _text, fontSize: 24, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
             const SizedBox(height: 10),
             const Text(
               'Five numbers appear. Four of them share a hidden rule. One breaks it. Tap the outsider before time runs out. Speed earns bonus points.',
@@ -376,7 +376,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: v == 7 ? _danger : _borderBright),
                 ),
-                child: Text('$v', style: TextStyle(color: v == 7 ? _danger : _textMuted, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+                child: Text('$v', style: TextStyle(color: v == 7 ? _danger : _textMuted, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay', wordSpacing: 4)),
               )).toList(),
             ),
           ],
@@ -402,7 +402,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('SCORE', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-                    Text('$_score', style: const TextStyle(color: _text, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                    Text('$_score', style: const TextStyle(color: _text, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 7)),
                   ],
                 ),
               ),
@@ -416,7 +416,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text('COMBO', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-                    Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                    Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 32, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 7)),
                   ],
                 ),
               ),
@@ -467,7 +467,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
                 height: 80,
                 decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(18), border: Border.all(color: border, width: 2)),
                 alignment: Alignment.center,
-                child: Text('$v', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+                child: Text('$v', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
               ),
             );
           }),
@@ -498,7 +498,7 @@ class _RuleBreakerGameState extends State<RuleBreakerGame> {
           children: [
             const Text('BREAKER RUN COMPLETE', style: TextStyle(color: _danger, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 8),
-            Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+            Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 12)),
             const SizedBox(height: 6),
             Text('$_correct / $_kRounds broken', style: const TextStyle(color: _textMuted, fontSize: 15, fontFamily: 'SpaceGrotesk')),
           ],

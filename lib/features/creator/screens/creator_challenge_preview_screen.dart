@@ -50,7 +50,7 @@ class _CreatorChallengePreviewScreenState
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text('Preview',
-            style: TextStyle(fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+            style: TextStyle(fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay', wordSpacing: 4)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: _accent))
@@ -96,7 +96,8 @@ class _CreatorChallengePreviewScreenState
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay'),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 4.5),
               ),
             ),
             if (status != null) _statusBadge(status),
@@ -122,7 +123,8 @@ class _CreatorChallengePreviewScreenState
                   color: Colors.white,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
           const SizedBox(height: 10),
           if ((instructions['whatToCopy'] as String?)?.isNotEmpty == true)
             _instructionRow('What to copy', instructions['whatToCopy'] as String),

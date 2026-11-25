@@ -40,7 +40,7 @@ class AiScriptView extends StatelessWidget {
             Expanded(
               child: Text(
                 script.scriptTitle.isEmpty ? 'Your ad' : script.scriptTitle,
-                style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.3, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay'),
+                style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.3, fontWeight: FontWeight.w700, fontFamily: 'ClashDisplay', wordSpacing: 3.5),
               ),
             ),
             const SizedBox(width: 10),

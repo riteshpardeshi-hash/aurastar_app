@@ -219,6 +219,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
                               fontFamily: 'ClashDisplay',
+                              wordSpacing: 5,
                             ),
                           ),
                           const Text(

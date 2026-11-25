@@ -227,7 +227,8 @@ class CreatorHomeScreen extends StatelessWidget {
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            fontFamily: 'ClashDisplay')),
+                            fontFamily: 'ClashDisplay',
+                            wordSpacing: 4.5)),
                     if (username.isNotEmpty)
                       Text('@$username',
                           style: const TextStyle(
@@ -366,7 +367,8 @@ class CreatorHomeScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
           const SizedBox(height: 12),
           // Row 1: Challenges + Submissions
           Row(
@@ -697,7 +699,8 @@ class CreatorHomeScreen extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 3.5)),
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -736,7 +739,8 @@ class CreatorHomeScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
         ),
         SizedBox(
           height: 110,
@@ -837,7 +841,8 @@ class CreatorHomeScreen extends StatelessWidget {
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  fontFamily: 'ClashDisplay')),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 3.5)),
         ),
         ...recentSubs.map((sub) {
           final data = sub.data() as Map<String, dynamic>;

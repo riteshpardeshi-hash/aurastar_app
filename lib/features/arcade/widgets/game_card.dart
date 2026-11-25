@@ -160,6 +160,7 @@ class GameCard extends StatelessWidget {
                       fontSize: 23,
                       fontWeight: FontWeight.w800,
                       fontFamily: 'ClashDisplay',
+                      wordSpacing: 5,
                     ),
                   ),
                   const SizedBox(height: 7),

@@ -578,7 +578,8 @@ class _CreateOfferSheetState extends State<_CreateOfferSheet> {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 4)),
             const SizedBox(height: 20),
 
             // ── Type selector ────────────────────────────────────────
@@ -934,7 +935,8 @@ class _AddCodesSheetState extends State<_AddCodesSheet> {
                     color: Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 3.5)),
             const SizedBox(height: 6),
             const Text('Paste new codes — one per line. Duplicates are ignored.',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),

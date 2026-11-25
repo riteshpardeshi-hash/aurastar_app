@@ -222,7 +222,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
           children: [
             const Text('FOCUS', style: TextStyle(color: _pink, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
             const SizedBox(height: 6),
-            const Text('Swipe Direction Rush', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay')),
+            const Text('Swipe Direction Rush', style: TextStyle(color: _text, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: -0.8, fontFamily: 'ClashDisplay', wordSpacing: 5.5)),
             const SizedBox(height: 5),
             const Text('Read it. Swipe it. Keep moving.', style: TextStyle(color: _textMuted, fontSize: 13, fontFamily: 'SpaceGrotesk')),
           ],
@@ -235,7 +235,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
         decoration: BoxDecoration(color: _surfaceElevated, borderRadius: BorderRadius.circular(17), border: Border.all(color: _borderBright)),
         child: Column(
           children: [
-            Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+            Text('$_timeLeft', style: const TextStyle(color: _text, fontSize: 22, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 5)),
             const Text('SEC', style: TextStyle(color: _textMuted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1, fontFamily: 'SpaceGrotesk')),
           ],
         ),
@@ -253,7 +253,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('SCORE', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-              Text('$_score', style: const TextStyle(color: _text, fontSize: 36, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+              Text('$_score', style: const TextStyle(color: _text, fontSize: 36, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 8)),
             ],
           ),
         ),
@@ -267,7 +267,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               const Text('COMBO', style: TextStyle(color: _text, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5, fontFamily: 'SpaceGrotesk')),
-              Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 31, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+              Text('x$_combo', style: const TextStyle(color: _violet, fontSize: 31, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 7)),
             ],
           ),
         ),
@@ -337,7 +337,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
       children: [
         const Text('HOW TO PLAY', style: TextStyle(color: _violet, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
         const SizedBox(height: 12),
-        const Text('Follow the signal', style: TextStyle(color: _text, fontSize: 27, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+        const Text('Follow the signal', style: TextStyle(color: _text, fontSize: 27, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 6)),
         const SizedBox(height: 10),
         const Text(
           'Swipe in the direction shown. Correct swipes build your combo, and each new signal gives you less time to react.',
@@ -363,7 +363,7 @@ class _SwipeDirectionRushGameState extends State<SwipeDirectionRushGame>
       children: [
         const Text('RUSH COMPLETE', style: TextStyle(color: _violet, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.8, fontFamily: 'SpaceGrotesk')),
         const SizedBox(height: 7),
-        Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay')),
+        Text('$_score', style: const TextStyle(color: _text, fontSize: 54, fontWeight: FontWeight.w900, fontFamily: 'ClashDisplay', wordSpacing: 12)),
         const SizedBox(height: 10),
         Text('$_correct clean swipes · $accuracy% accuracy · best combo x$_bestCombo',
           textAlign: TextAlign.center,

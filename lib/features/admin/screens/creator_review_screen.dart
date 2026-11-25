@@ -229,7 +229,8 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
           style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
-              fontFamily: 'ClashDisplay'),
+              fontFamily: 'ClashDisplay',
+              wordSpacing: 3.5),
         ),
       ),
       body: SingleChildScrollView(
@@ -259,6 +260,7 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       fontFamily: 'ClashDisplay',
+                      wordSpacing: 4.5,
                     ),
                   ),
                 ),
@@ -586,6 +588,7 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 14,
           fontWeight: FontWeight.w700,
           fontFamily: 'ClashDisplay',
+          wordSpacing: 3,
         ),
       );
 }

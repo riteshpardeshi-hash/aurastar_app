@@ -44,7 +44,7 @@ class _CreatorChallengeScoringScreenState extends State<CreatorChallengeScoringS
             onPressed: _busy ? null : () => Navigator.pop(context, _changed),
           ),
           title: const Text('Scoring Criteria',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay')),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, fontFamily: 'ClashDisplay', wordSpacing: 3.5)),
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),

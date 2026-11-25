@@ -180,7 +180,8 @@ class _CreatorEntriesScreenState extends State<CreatorEntriesScreen> {
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  fontFamily: 'ClashDisplay'),
+                  fontFamily: 'ClashDisplay',
+                  wordSpacing: 4),
             ),
             const SizedBox(height: 10),
             Text(

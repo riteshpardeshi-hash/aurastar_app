@@ -65,7 +65,8 @@ class AdminScreen extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      fontFamily: 'ClashDisplay')),
+                      fontFamily: 'ClashDisplay',
+                      wordSpacing: 3.5)),
               bottom: TabBar(
                 indicatorColor: _accent,
                 labelColor: Colors.white,
@@ -598,7 +599,8 @@ class _AuraEditSheetState extends State<_AuraEditSheet> {
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    fontFamily: 'ClashDisplay')),
+                    fontFamily: 'ClashDisplay',
+                    wordSpacing: 4)),
             const SizedBox(height: 4),
             Text(widget.title,
                 maxLines: 1,

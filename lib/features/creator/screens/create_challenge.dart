@@ -352,6 +352,7 @@ class _SectionLabel extends StatelessWidget {
           fontSize: 14,
           fontWeight: FontWeight.w700,
           fontFamily: 'ClashDisplay',
+          wordSpacing: 3,
         ),
       );
 }

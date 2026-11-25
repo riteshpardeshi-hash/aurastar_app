@@ -212,6 +212,7 @@ class _AuraFlashTapGameState extends State<AuraFlashTapGame>
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.8,
                         fontFamily: 'ClashDisplay',
+                        wordSpacing: 7,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -345,6 +346,7 @@ class _AuraFlashTapGameState extends State<AuraFlashTapGame>
                                 fontSize: 44,
                                 fontWeight: FontWeight.w900,
                                 fontFamily: 'ClashDisplay',
+                                wordSpacing: 9.5,
                               ),
                             ),
                             Text(
