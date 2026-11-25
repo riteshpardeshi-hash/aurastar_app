@@ -135,7 +135,7 @@ void main() {
   });
 
   testWidgets('a closed campaign no longer offers the workspace', (tester) async {
-    backend.on('GET $base', {...campaignJson(myStatus: 'SUBMITTED'), 'status': 'CLOSED'});
+    backend.on('GET $base', {...campaignJson(myStatus: 'ACTIVE'), 'status': 'CLOSED'});
     await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
     expect(find.byKey(const Key('ai-campaign-ended')), findsOneWidget);
     expect(find.text('This campaign has ended — the brand is picking the winners.'), findsOneWidget);
@@ -155,5 +155,14 @@ void main() {
     expect(find.byKey(const Key('ai-campaign-paused')), findsOneWidget);
     expect(find.text('Open my workspace'), findsOneWidget);
   });
-}
 
+  // Backend ADR 147: submitting is once only — the campaign screen shows it's done.
+  testWidgets('a submitted creator sees it is done: no workspace, a way to watch the ad', (tester) async {
+    backend.on('GET $base', campaignJson(myStatus: 'SUBMITTED', finalGenerationId: 'v1'));
+    await pumpAiScreen(tester, const AiCampaignScreen(campaignId: campaignId));
+    expect(find.byKey(const Key('ai-submitted-note')), findsOneWidget);
+    expect(find.text('Open my workspace'), findsNothing);
+    expect(find.text('Watch my ad'), findsOneWidget);
+    expect(find.textContaining('credits to make your ad'), findsNothing);
+  });
+}

@@ -8,6 +8,7 @@ import '../widgets/ai_job_status_badge.dart';
 import '../widgets/ai_ui.dart';
 import 'ai_brand_assets_row.dart';
 import 'ai_rewards_screen.dart';
+import 'ai_video_detail_screen.dart';
 import 'create_ai_videos_screen.dart';
 import '../../../core/services/app_config_service.dart';
 
@@ -81,6 +82,14 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
   Future<void> _acceptInvite(AiCampaign c) async {
     if (!await showAiTermsDialog(context, campaignTitle: c.title)) return;
     await _run(() => _service.respondToInvite(c.myParticipation!.id, accept: true), "You're in!");
+  }
+
+  Future<void> _openFinal(AiCampaign c, String generationId) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AiVideoDetailScreen(campaignId: c.id, generationId: generationId)),
+    );
+    if (mounted) _load();
   }
 
   Future<void> _openWorkspace(AiCampaign c) async {
@@ -270,7 +279,22 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
             child: const Text('Withdraw request', style: TextStyle(color: AppColors.textMuted)),
           ),
         ]),
-      'ACTIVE' || 'SUBMITTED' => Column(children: [
+      // Submitted: once only, nothing more to make (backend ADR 147). They can watch their ad.
+      'SUBMITTED' => Column(children: [
+          const Text('Your final ad is submitted 🎉', style: TextStyle(color: AiUi.success, fontSize: 16, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text(
+            'The brand will review it and pick the winners. Your remaining credits went back to the brand.',
+            key: Key('ai-submitted-note'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
+          ),
+          if (p!.finalGenerationId != null) ...[
+            const SizedBox(height: 12),
+            AiPrimaryButton(label: 'Watch my ad', onPressed: () => _openFinal(c, p.finalGenerationId!)),
+          ],
+        ]),
+      'ACTIVE' => Column(children: [
           if (c.hasEnded)
             Text(
               c.status == 'CANCELLED'
@@ -291,12 +315,6 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
             ],
             const SizedBox(height: 12),
             AiPrimaryButton(label: 'Open my workspace', onPressed: () => _openWorkspace(c)),
-          ],
-          if (status == 'SUBMITTED') ...[
-            // No score for creators (backend ADR 146): it ranks ads for the brand.
-            const SizedBox(height: 10),
-            const Text('Your final ad is submitted. You can change it until the deadline.',
-                textAlign: TextAlign.center, style: TextStyle(color: AiUi.success, fontSize: 12)),
           ],
         ]),
       'WINNER' => Column(children: [

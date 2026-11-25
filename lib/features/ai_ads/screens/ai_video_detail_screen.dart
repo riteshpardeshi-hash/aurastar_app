@@ -368,13 +368,15 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
     }
   }
 
-  /// Submitting is for creators still working in the campaign (or changing their pick).
-  bool get _canSubmit => const {'ACTIVE', 'SUBMITTED'}.contains(_participation?.status);
+  /// Only a creator still working in the campaign can make or submit anything: submitting
+  /// is once only, and after it there's nothing more to do (backend ADR 147).
+  bool get _canSubmit => _participation?.status == 'ACTIVE';
 
   Future<void> _submitFinal() async {
+    if (!await showSubmitFinalDialog(context)) return;
     final p = await _guard(() => _service.submitFinal(widget.campaignId, widget.generationId));
     if (p != null) {
-      if (mounted) AiUi.toast(context, 'Submitted! You can change your pick until the deadline.');
+      if (mounted) AiUi.toast(context, 'Submitted! The brand will review your ad.');
       await _load();
     }
   }
@@ -411,8 +413,13 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
                   Text(g.error ?? "This didn't work — you weren't charged.", style: const TextStyle(color: AiUi.danger))
                 else if (g.isRunning)
                   _progress(g)
-                else if (g.stage == AiStage.image)
+                else if (g.stage == AiStage.image && _canSubmit)
                   _imagePicker(g)
+                else if (g.stage == AiStage.image)
+                  const Text(
+                    "You've submitted your ad for this campaign, so these images can't be turned into a video now.",
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
+                  )
                 else if (g.stage == AiStage.video)
                   _videoResult(g),
                 if (g.chargeState != 'FREE') ...[
@@ -828,10 +835,10 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
         ],
         // No AI score for creators (backend ADR 146): watch it, and submit it if you like it.
         // The brand gets it scored when it's submitted.
-        if (!isFinal && g.isDone) ...[
+        if (!isFinal && g.isDone && _canSubmit) ...[
           const SizedBox(height: 16),
           const Text(
-            'Happy with it? Submit it as your final ad. You can change your pick until the deadline.',
+            'Happy with it? Submit it as your final ad. You can submit only once.',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
           ),
           const SizedBox(height: 10),
@@ -839,10 +846,19 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
             key: const Key('ai-submit-final'),
             label: 'Submit as my final ad (free)',
             busy: _busy,
-            onPressed: _canSubmit ? _submitFinal : null,
+            onPressed: _submitFinal,
           ),
         ],
-        if (g.isDone) _iterateSection(),
+        if (g.isDone && _canSubmit) _iterateSection(),
+        if (!_canSubmit && _participation != null && !isFinal) ...[
+          const SizedBox(height: 16),
+          const Text(
+            "You've already submitted your ad for this campaign, so there's nothing more to make here.",
+            key: Key('ai-done-note'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
+          ),
+        ],
       ],
     );
   }
