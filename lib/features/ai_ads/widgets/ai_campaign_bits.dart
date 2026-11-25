@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/services/ai_ads_service.dart';
 import '../../../core/services/app_config_service.dart';
+import '../../../shared/theme/app_colors.dart';
 
 /// Small pieces shared by the home campaign spotlight, the campaign list and the campaign
 /// screen (backend ADR 141): time left, status chips, the brand's avatar, the cover picture.
@@ -121,6 +122,9 @@ class AiStandingChip extends StatelessWidget {
       'SUBMITTED' => const AiChip(label: 'Submitted', icon: Icons.check_circle_rounded, color: AiCampaignBits.joinedColor, filled: true),
       'REQUESTED' => const AiChip(label: 'Request sent', icon: Icons.hourglass_top_rounded, color: AiCampaignBits.timeColor, filled: true),
       'INVITED' => const AiChip(label: "You're invited", icon: Icons.mail_rounded, color: AiCampaignBits.lilac, filled: true),
+      // The brand picked this creator's ad (tester run, 25 Nov: a winner was shown "Join").
+      'WINNER' => const AiChip(label: 'You won', icon: Icons.emoji_events_rounded, color: AiCampaignBits.timeColor, filled: true),
+      'NOT_SELECTED' => const AiChip(label: 'Not selected', icon: Icons.flag_rounded, color: AppColors.textMuted, filled: true),
       _ => const AiChip(label: 'AI Ad Campaign', icon: Icons.auto_awesome_rounded, color: AiCampaignBits.lilac, filled: true),
     };
   }
