@@ -641,11 +641,11 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (var i = 0; i < board.length; i++)
-            FilterChip(
+            AiPill(
               key: Key('ai-edit-image-$i'),
-              label: Text('Image ${i + 1}'),
+              label: 'Image ${i + 1}',
               selected: _changes.containsKey(i),
-              onSelected: (_) => _toggleChange(i),
+              onTap: () => _toggleChange(i),
             ),
         ]),
         for (final i in (_changes.keys.toList()..sort())) ...[
@@ -696,7 +696,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
           const AiSectionTitle('Length'),
           Wrap(spacing: 8, children: [
             for (final s in options)
-              ChoiceChip(label: Text('${s}s'), selected: s == _seconds, onSelected: (_) {
+              AiPill(label: '${s}s', selected: s == _seconds, onTap: () {
                 setState(() => _seconds = s);
                 _requote();
               }),
@@ -860,9 +860,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const AiSectionTitle('Improve this video'),
-        Wrap(spacing: 8, children: [
+        Wrap(spacing: 8, runSpacing: 8, children: [
           for (final (mode, label) in [(_Iterate.edit, 'Edit'), (_Iterate.extend, 'Make it longer'), (_Iterate.reaudio, 'New audio')])
-            ChoiceChip(label: Text(label), selected: _iterate == mode, onSelected: (_) {
+            AiPill(label: label, selected: _iterate == mode, onTap: () {
               setState(() {
                 _iterate = mode;
                 if (_extendOptions.isNotEmpty && !_extendOptions.contains(_extendSeconds)) _extendSeconds = _extendOptions.last;
@@ -877,7 +877,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
           else
             Wrap(spacing: 8, children: [
               for (final s in _extendOptions)
-                ChoiceChip(label: Text('+${s}s'), selected: _extendSeconds == s, onSelected: (_) {
+                AiPill(label: '+${s}s', selected: _extendSeconds == s, onTap: () {
                   setState(() => _extendSeconds = s);
                   _requote();
                 }),
