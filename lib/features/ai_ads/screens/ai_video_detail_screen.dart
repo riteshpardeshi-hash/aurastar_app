@@ -10,8 +10,9 @@ import '../widgets/ai_video_player.dart';
 /// One generation in the workspace. What it shows depends on what it is:
 ///  - images: pick keyframes → turn them into a video;
 ///  - a video being made: progress (poll) + cancel;
-///  - a finished video: play it, get it judged by AI (score + feedback),
-///    iterate on it (edit / extend / new audio), submit it as the final ad.
+///  - a finished video: play it, iterate on it (edit / extend / new audio), and submit it
+///    as the final ad. Creators never see an AI score: it's made for the brand when they
+///    submit (backend ADR 146).
 class AiVideoDetailScreen extends StatefulWidget {
   final String campaignId;
   final String generationId;
@@ -31,8 +32,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
   AiGeneration? _gen;
   AiWorkspace? _workspace;
   AiParticipation? _participation;
-  List<AiBrandAsset> _assets = [];
-  List<AiEvaluation> _evaluations = [];
   bool _loading = true;
   bool _busy = false;
   Timer? _poll;
@@ -54,7 +53,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
   // "Change images": the slots being changed, each with what to change in it.
   final Map<int, TextEditingController> _changes = {};
   AiQuote? _imageEditQuote;
-  AiQuote? _evalQuote;
   String? _quoteError;
 
   @override
@@ -67,7 +65,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
   // Timers don't run while the app is in the background: check again on coming back.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && ((_gen?.isRunning ?? false) || (_latestEval?.isPending ?? false))) {
+    if (state == AppLifecycleState.resumed && (_gen?.isRunning ?? false)) {
       _load(background: true);
     }
   }
@@ -94,7 +92,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       final results = await Future.wait([
         _service.fetchGeneration(widget.campaignId, widget.generationId),
         _service.fetchWorkspace(widget.campaignId),
-        _service.fetchEvaluations(widget.campaignId),
         _service.fetchCampaign(widget.campaignId),
       ]);
       if (!mounted) return;
@@ -103,9 +100,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       setState(() {
         _gen = gen;
         _workspace = ws;
-        _evaluations = (results[2] as List<AiEvaluation>).where((e) => e.videoGenerationId == gen.id).toList();
-        _participation = (results[3] as AiCampaign).myParticipation;
-        _assets = (results[3] as AiCampaign).assets;
+        _participation = (results[2] as AiCampaign).myParticipation;
         _seconds ??= ws.format.inRange(_scriptGen(ws)?.durationSeconds ?? ws.format.minDurationSeconds);
         // A storyboard starts with every scene's frame picked — the closest match to the script.
         if (gen.stage == AiStage.image && gen.isDone && _board == null) {
@@ -136,21 +131,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
 
   int _failedChecks = 0;
 
-  AiEvaluation? get _latestEval => _evaluations.isEmpty ? null : _evaluations.first;
-
-  /// No score yet, or the last try failed (refunded) — the creator can (re)request one.
-  bool get _canRequestEval => _latestEval == null || _latestEval!.status == 'FAILED';
-
-  String _assetName(String handle) {
-    for (final a in _assets) {
-      if (a.handle == handle) return a.name;
-    }
-    return '@$handle';
-  }
-
   void _schedulePoll({Duration delay = const Duration(seconds: 5)}) {
     _poll?.cancel();
-    final waiting = (_gen?.isRunning ?? false) || (_latestEval?.isPending ?? false);
+    final waiting = _gen?.isRunning ?? false;
     if (waiting) _poll = Timer(delay, () => _load(background: true));
     final generating = _gen?.isRunning ?? false;
     if (generating && _ticker == null) {
@@ -284,10 +267,7 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       final quotes = await Future.wait([
         if (video != null) _service.quote(widget.campaignId, video) else Future<AiQuote?>.value(null),
         if (iterate != null) _service.quote(widget.campaignId, iterate) else Future<AiQuote?>.value(null),
-        if (g.stage == AiStage.video && g.isDone && _canRequestEval)
-          _service.quoteEvaluation(widget.campaignId, g.id)
-        else
-          Future<AiQuote?>.value(null),
+        Future<AiQuote?>.value(null), // (was the AI-score quote; scores are the brand's now)
         if (imageEdit != null) _service.quote(widget.campaignId, imageEdit) else Future<AiQuote?>.value(null),
       ]);
       if (!mounted) return;
@@ -295,7 +275,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
         _imageEditQuote = quotes[3];
         _videoQuote = quotes[0];
         _iterateQuote = quotes[1];
-        _evalQuote = quotes[2] ?? _evalQuote;
         _quoteError = null;
       });
     } on AiAdsException catch (e) {
@@ -381,20 +360,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
     }
   }
 
-  /// "Free · 4 left" — judging costs no credits (the platform pays), up to a limit.
-  String _evalLabel(AiQuote? q) {
-    if (q == null) return '…';
-    final left = q.freeEvaluations?.left;
-    return left == null ? 'Free' : 'Free · $left left';
-  }
-
-  Future<void> _evaluate() async {
-    final quote = _evalQuote;
-    if (quote == null) return;
-    final e = await _guard(() => _service.requestEvaluation(widget.campaignId, widget.generationId));
-    if (e != null) await _load();
-  }
-
   Future<void> _cancel() async {
     final g = await _guard(() => _service.cancelVideo(widget.campaignId, widget.generationId));
     if (g != null) {
@@ -402,6 +367,9 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
       await _load();
     }
   }
+
+  /// Submitting is for creators still working in the campaign (or changing their pick).
+  bool get _canSubmit => const {'ACTIVE', 'SUBMITTED'}.contains(_participation?.status);
 
   Future<void> _submitFinal() async {
     final p = await _guard(() => _service.submitFinal(widget.campaignId, widget.generationId));
@@ -849,7 +817,6 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
   }
 
   Widget _videoResult(AiGeneration g) {
-    final eval = _latestEval;
     final isFinal = _participation?.finalGenerationId == g.id;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -859,118 +826,24 @@ class _AiVideoDetailScreenState extends State<AiVideoDetailScreen> with WidgetsB
           const SizedBox(height: 10),
           const Text('✓ This is your final ad', textAlign: TextAlign.center, style: TextStyle(color: AiUi.success, fontWeight: FontWeight.w700)),
         ],
-        const AiSectionTitle('AI score'),
-        if (eval == null || _canRequestEval) ...[
-          if (eval != null)
-            Text(eval.error ?? "It couldn't be judged — you weren't charged.", style: const TextStyle(color: AiUi.danger))
-          else
-            const Text(
-              'The AI judges your ad (with the brand\'s logo, end card and sound added) against the brief and the brand\'s rules.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          const SizedBox(height: 12),
-          if (_evalQuote != null && !_evalQuote!.canAfford)
-            AiWarningText(_evalQuote!.reason ?? "You can't get this video judged right now."),
-          AiPrimaryButton(
-            label: '${eval == null ? 'Get AI score' : 'Try again'} · ${_evalLabel(_evalQuote)}',
-            busy: _busy,
-            onPressed: _evalQuote == null || !_evalQuote!.canAfford ? null : _evaluate,
-          ),
-        ] else if (eval.isPending)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Column(children: [
-              CircularProgressIndicator(color: AiUi.accent),
-              SizedBox(height: 12),
-              Text('Scoring your video against the brand brief…', style: TextStyle(color: Colors.white)),
-            ]),
-          )
-        else ...[
-          _scoreCard(eval),
+        // No AI score for creators (backend ADR 146): watch it, and submit it if you like it.
+        // The brand gets it scored when it's submitted.
+        if (!isFinal && g.isDone) ...[
           const SizedBox(height: 16),
-          if (!isFinal) AiPrimaryButton(label: 'Submit as my final ad (free)', busy: _busy, onPressed: _submitFinal),
+          const Text(
+            'Happy with it? Submit it as your final ad. You can change your pick until the deadline.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12.5, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          AiPrimaryButton(
+            key: const Key('ai-submit-final'),
+            label: 'Submit as my final ad (free)',
+            busy: _busy,
+            onPressed: _canSubmit ? _submitFinal : null,
+          ),
         ],
         if (g.isDone) _iterateSection(),
       ],
-    );
-  }
-
-  Widget _scoreCard(AiEvaluation e) {
-    String clock(double s) => '${(s ~/ 60)}:${(s % 60).round().toString().padLeft(2, '0')}';
-    return Container(
-      key: const Key('ai-score-card'),
-      padding: const EdgeInsets.all(16),
-      decoration: AiUi.cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${e.overallScore ?? '-'}',
-                  style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800, fontFamily: 'SpaceGrotesk')),
-              const SizedBox(width: 6),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 6),
-                child: Text('/ 100 · match with the brand brief', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              ),
-            ],
-          ),
-          if (e.summary.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(e.summary, style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4)),
-          ],
-          if (e.mandatoryPass == false)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Missing brand assets: ${e.mandatoryAssets.where((m) => !m.present).map((m) => _assetName(m.handle)).join(', ')}',
-                style: const TextStyle(color: AiUi.warning, fontSize: 12),
-              ),
-            ),
-          for (final v in [...e.forbiddenClaimViolations, ...e.safetyIssues])
-            Padding(padding: const EdgeInsets.only(top: 6), child: Text('⚠ $v', style: const TextStyle(color: AiUi.danger, fontSize: 12))),
-          const SizedBox(height: 12),
-          for (final c in e.criteria)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Expanded(child: Text(c.name, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600))),
-                    Text('${c.score.toStringAsFixed(c.score % 1 == 0 ? 0 : 1)}/10', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                  ]),
-                  const SizedBox(height: 4),
-                  LinearProgressIndicator(
-                    value: c.score / 10,
-                    minHeight: 4,
-                    backgroundColor: Colors.white12,
-                    color: c.score >= 7 ? AiUi.success : c.score >= 4 ? AiUi.warning : AiUi.danger,
-                  ),
-                  if (c.reason.isNotEmpty)
-                    Text(c.reason, style: const TextStyle(color: AppColors.textFaint, fontSize: 11)),
-                ],
-              ),
-            ),
-          if (e.feedback.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            const Text('Feedback', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            for (final f in e.feedback)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('${f.atSeconds == null ? '•' : clock(f.atSeconds!)}  ${f.note}',
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              ),
-          ],
-          if (e.suggestions.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Text('Try this', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            for (final s in e.suggestions)
-              Padding(padding: const EdgeInsets.only(top: 4), child: Text('→ $s', style: const TextStyle(color: AppColors.textMuted, fontSize: 12))),
-          ],
-        ],
-      ),
     );
   }
 

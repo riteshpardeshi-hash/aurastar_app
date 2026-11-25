@@ -7,7 +7,7 @@ import '../widgets/ai_ui.dart';
 import 'ai_video_detail_screen.dart';
 
 /// The creator's image sets and videos in one campaign, as two separate
-/// collections (images first) — in progress, waiting on an image pick, judged —
+/// collections (images first) — in progress, waiting on an image pick, ready —
 /// and which one is their final ad. Generation is
 /// asynchronous, so this is where creators come back to.
 class MyAiVideosScreen extends StatefulWidget {
@@ -22,7 +22,6 @@ class MyAiVideosScreen extends StatefulWidget {
 class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
   final _service = AiAdsService();
   List<AiGeneration> _items = [];
-  Map<String, AiEvaluation> _latestEval = {};
   String? _finalId;
   bool _loading = true;
   Timer? _poll;
@@ -43,31 +42,24 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
     try {
       final results = await Future.wait([
         _service.fetchWorkspace(widget.campaignId),
-        _service.fetchEvaluations(widget.campaignId),
         _service.fetchCampaign(widget.campaignId),
       ]);
       if (!mounted) return;
       final ws = results[0] as AiWorkspace;
-      final evals = results[1] as List<AiEvaluation>;
-      final latest = <String, AiEvaluation>{};
-      for (final e in evals) {
-        latest.putIfAbsent(e.videoGenerationId, () => e); // newest first from the API
-      }
       setState(() {
         _items = ws.generations.where((g) => g.stage != AiStage.script).toList().reversed.toList();
-        _latestEval = latest;
-        _finalId = (results[2] as AiCampaign).myParticipation?.finalGenerationId;
+        _finalId = (results[1] as AiCampaign).myParticipation?.finalGenerationId;
         _loading = false;
       });
       _poll?.cancel();
-      if (_items.any((g) => g.isRunning) || latest.values.any((e) => e.isPending)) {
+      if (_items.any((g) => g.isRunning)) {
         _poll = Timer(const Duration(seconds: 5), _load);
       }
     } catch (_) {
       if (!mounted) return;
       setState(() => _loading = false);
       // A failed check must not stop the checking while something is still being made.
-      if (_items.any((g) => g.isRunning) || _latestEval.values.any((e) => e.isPending)) {
+      if (_items.any((g) => g.isRunning)) {
         _poll?.cancel();
         _poll = Timer(const Duration(seconds: 10), _load);
       }
@@ -111,7 +103,6 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
   }
 
   Widget _card(AiGeneration g) {
-    final eval = _latestEval[g.id];
     return GestureDetector(
       onTap: () => _open(g),
       child: Container(
@@ -125,7 +116,6 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
                 children: [
                   Wrap(spacing: 6, runSpacing: 4, children: [
                     AiStatusBadge.generation(g),
-                    if (eval != null) AiStatusBadge.evaluation(eval),
                     if (g.id == _finalId) const AiStatusBadge(label: 'Final ad', color: AiUi.success),
                   ]),
                   const SizedBox(height: 8),
@@ -139,13 +129,7 @@ class _MyAiVideosScreenState extends State<MyAiVideosScreen> {
               ),
             ),
             const SizedBox(width: 12),
-            if (eval?.overallScore != null)
-              Column(children: [
-                Text('${eval!.overallScore}',
-                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800, fontFamily: 'SpaceGrotesk')),
-                const Text('score', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              ])
-            else if (g.isRunning || (eval?.isPending ?? false))
+            if (g.isRunning)
               const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AiUi.accent))
             else
               const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),

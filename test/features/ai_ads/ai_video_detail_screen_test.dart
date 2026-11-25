@@ -321,7 +321,7 @@ void main() {
     await settle(tester);
 
     expect(find.text('Making your video'), findsNothing);
-    expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
+    expect(find.text('Submit as my final ad (free)'), findsOneWidget);
   });
 
   // Tester, 24 Nov: a single failed check stopped the checking for good, so the screen stayed
@@ -350,7 +350,7 @@ void main() {
     await settle(tester);
     expect(find.text('Making your video'), findsNothing);
     expect(find.text('Your video is ready.'), findsOneWidget);
-    expect(find.text('Get AI score · Free · 4 left'), findsOneWidget);
+    expect(find.text('Submit as my final ad (free)'), findsOneWidget);
   });
 
   testWidgets('coming back to the app checks a running video again at once', (tester) async {
@@ -371,46 +371,6 @@ void main() {
 
     expect(backend.calls('GET', '$base/workspace/generations/v1').length, greaterThan(before));
     expect(find.text('Making your video'), findsNothing);
-  });
-
-  testWidgets('get AI score: free, then shows the pending state', (tester) async {
-    var evaluations = <Map<String, dynamic>>[];
-    serve(gen: doneVideo);
-    backend.routes['GET $base/workspace/evaluations'] = (_) => FakeAiAdsBackend.ok(evaluations);
-    backend.routes['POST $base/workspace/generations/v1/evaluate'] = (_) {
-      evaluations = [evaluationJson(status: 'QUEUED')];
-      return FakeAiAdsBackend.ok(evaluations.single, status: 202);
-    };
-    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
-
-    await tester.tap(find.text('Get AI score · Free · 4 left'));
-    await settle(tester);
-
-    // Free — no price is sent.
-    expect(backend.calls('POST', '$base/workspace/generations/v1/evaluate').single.body, isEmpty);
-    expect(find.text('Scoring your video against the brand brief…'), findsOneWidget);
-  });
-
-  testWidgets('the score card shows score, criteria, missing assets by name, timed feedback', (tester) async {
-    serve(gen: doneVideo, evaluations: [evaluationJson()]);
-    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
-
-    final card = find.byKey(const Key('ai-score-card'));
-    expect(find.descendant(of: card, matching: find.text('72')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('6.5/10')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('Missing brand assets: Logo')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('0:04  Logo too small')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('→ Show the logo in the first 2 seconds')), findsOneWidget);
-    // Already judged — no second paid evaluation offered.
-    expect(find.textContaining('Get AI score'), findsNothing);
-  });
-
-  testWidgets('a failed evaluation (refunded) can be retried', (tester) async {
-    serve(gen: doneVideo, evaluations: [{...evaluationJson(status: 'FAILED'), 'error': 'The AI could not watch the video'}]);
-    await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
-
-    expect(find.text('The AI could not watch the video'), findsOneWidget);
-    expect(find.text('Try again · Free · 4 left'), findsOneWidget);
   });
 
   testWidgets('submit as final ad is free and marks it final', (tester) async {
@@ -470,13 +430,23 @@ void main() {
     expect(find.text('+10s'), findsNothing);
   });
 
-  testWidgets('no free evaluations left: the reason shows and the button is off', (tester) async {
+  // Client decision, 25 Nov (backend ADR 146): the AI score is for the brand. A creator only
+  // watches the video and submits it; no score, no "Get AI score", and no scores are fetched.
+  testWidgets('a finished video shows no AI score — only Submit, which needs no score', (tester) async {
     serve(gen: doneVideo);
-    backend.on('POST $base/workspace/generations/v1/evaluate/quote', evalQuoteJson(left: 0, reason: "You've used all 5 free AI evaluations in this campaign."));
+    backend.routes['POST $base/workspace/generations/v1/submit'] =
+        (_) => FakeAiAdsBackend.ok({'_id': 'p1', 'status': 'SUBMITTED', 'finalGenerationId': 'v1'});
     await pumpAiScreen(tester, const AiVideoDetailScreen(campaignId: campaignId, generationId: 'v1'));
 
-    expect(find.text("You've used all 5 free AI evaluations in this campaign."), findsOneWidget);
-    final button = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Get AI score · Free · 0 left'));
-    expect(button.onPressed, isNull);
+    expect(find.text('AI score'), findsNothing);
+    expect(find.textContaining('Get AI score'), findsNothing);
+    expect(find.byKey(const Key('ai-score-card')), findsNothing);
+    expect(backend.calls('GET', '$base/workspace/evaluations'), isEmpty);
+    expect(backend.calls('POST', '$base/workspace/generations/v1/evaluate/quote'), isEmpty);
+
+    await tester.tap(find.byKey(const Key('ai-submit-final')));
+    await settle(tester);
+    expect(backend.calls('POST', '$base/workspace/generations/v1/submit'), hasLength(1));
   });
+
 }

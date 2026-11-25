@@ -37,7 +37,7 @@ void main() {
     expect(find.text('2 credits'), findsOneWidget);
     expect(find.text('Free'), findsOneWidget);
     expect(find.text('Get a script first — write it, or let the AI write it.'), findsOneWidget);
-    expect(find.text('Getting your ad judged by AI is free — 5 of 5 left.'), findsOneWidget);
+    expect(find.textContaining('judged by AI'), findsNothing); // scores are the brand's (ADR 146)
     final generate = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Generate video'));
     expect(generate.onPressed, isNull);
   });

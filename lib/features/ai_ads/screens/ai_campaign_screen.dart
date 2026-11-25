@@ -292,10 +292,11 @@ class _AiCampaignScreenState extends State<AiCampaignScreen> {
             const SizedBox(height: 12),
             AiPrimaryButton(label: 'Open my workspace', onPressed: () => _openWorkspace(c)),
           ],
-          if (status == 'SUBMITTED' && p!.finalScore != null) ...[
+          if (status == 'SUBMITTED') ...[
+            // No score for creators (backend ADR 146): it ranks ads for the brand.
             const SizedBox(height: 10),
-            Text('Your final ad is submitted · AI score ${p.finalScore}',
-                textAlign: TextAlign.center, style: const TextStyle(color: AiUi.success, fontSize: 12)),
+            const Text('Your final ad is submitted. You can change it until the deadline.',
+                textAlign: TextAlign.center, style: TextStyle(color: AiUi.success, fontSize: 12)),
           ],
         ]),
       'WINNER' => Column(children: [
