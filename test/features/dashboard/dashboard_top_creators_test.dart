@@ -11,7 +11,7 @@ import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/features/dashboard/dashboard.dart';
 
 // Client, 25 Nov 2026: Home shows "Top Creators", the creators with the most followers
-// (the backend ranks them, ADR 149), and always exactly 4, whatever the screen width.
+// (the backend ranks them, ADR 149), and always exactly 5, whatever the screen width.
 void main() {
   String? requestedLimit;
 
@@ -41,9 +41,9 @@ void main() {
       }
       if (path.endsWith('/home/trending-creators')) {
         requestedLimit = request.url.queryParameters['limit'];
-        // Already ranked by the backend; one more than fits, to check only 4 show.
+        // Already ranked by the backend; one more than fits, to check only 5 show.
         final creators = [
-          for (final (i, f) in [(1, 2400), (2, 312), (3, 40), (4, 1), (5, 0)].indexed)
+          for (final (i, f) in [(1, 2400), (2, 312), (3, 40), (4, 1), (5, 0), (6, 0)].indexed)
             {'_id': 'cr${f.$1}', 'displayName': 'Creator ${f.$1}', 'avatar': '', 'followersCount': f.$2, 'n': i},
         ];
         return http.Response(
@@ -73,18 +73,18 @@ void main() {
   // (Headings use the test font's wide block glyphs, so a narrow test screen overflows the
   // section titles; the phone check covers narrow screens.)
   for (final size in const [Size(1080, 8000), Size(1440, 8000)]) {
-    testWidgets('Top Creators: exactly 4, in the ranked order, with followers (width ${size.width})',
+    testWidgets('Top Creators: exactly 5, in the ranked order, with followers (width ${size.width})',
         (tester) async {
       await pumpHome(tester, size);
       expect(find.text('Top Creators'), findsOneWidget);
       expect(find.text('Creator Profiles'), findsNothing);
-      expect(requestedLimit, '4');
-      for (final n in [1, 2, 3, 4]) {
+      expect(requestedLimit, '5');
+      for (final n in [1, 2, 3, 4, 5]) {
         expect(find.byKey(Key('top-creator-cr$n')), findsOneWidget);
       }
-      expect(find.byKey(const Key('top-creator-cr5')), findsNothing);
+      expect(find.byKey(const Key('top-creator-cr6')), findsNothing);
       // Left to right in the backend's order.
-      final xs = [for (final n in [1, 2, 3, 4]) tester.getCenter(find.byKey(Key('top-creator-cr$n'))).dx];
+      final xs = [for (final n in [1, 2, 3, 4, 5]) tester.getCenter(find.byKey(Key('top-creator-cr$n'))).dx];
       expect(xs, orderedEquals([...xs]..sort()));
       expect(find.text('2.4K followers'), findsOneWidget);
       expect(find.text('1 follower'), findsOneWidget);

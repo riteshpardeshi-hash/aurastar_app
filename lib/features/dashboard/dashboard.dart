@@ -68,9 +68,9 @@ class _DashboardState extends State<Dashboard> {
       .fetchChallenges(sourceType: 'Brand', limit: 5)
       .then((raw) => raw.map(normaliseChallenge).where((c) => c['sourceType'] == 'Brand').toList());
 
-  // Home's "Top Creators": a fixed 4, most followers first (client, 25 Nov 2026; the
-  // backend ranks them, ADR 149). Always 4, whatever the screen width.
-  static const _topCreatorsCount = 4;
+  // Home's "Top Creators": a fixed 5, most followers first (client, 25 Nov 2026; the
+  // backend ranks them, ADR 149). Always 5, whatever the screen width.
+  static const _topCreatorsCount = 5;
 
   // Creator-page-tagged pages for the "Creator Videos" shelf.
   late Future<List<Map<String, dynamic>>> _trendingCreatorsFuture =
@@ -1281,7 +1281,7 @@ class _DashboardState extends State<Dashboard> {
                 ],
               ),
             ),
-            // A fixed 4 in one row, spread evenly: no scrolling, the same on every phone.
+            // A fixed 5 in one row, spread evenly: no scrolling, the same on every phone.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -1321,13 +1321,13 @@ class _DashboardState extends State<Dashboard> {
                         ),
                     child: Container(
                       key: Key('top-creator-$creatorId'),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            width: 68,
-                            height: 68,
+                            width: 56,
+                            height: 56,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
@@ -1355,7 +1355,7 @@ class _DashboardState extends State<Dashboard> {
                                             : 'C',
                                         style: const TextStyle(
                                           color: Colors.white,
-                                          fontSize: 26,
+                                          fontSize: 22,
                                           fontWeight: FontWeight.w800,
                                         ),
                                       ),
@@ -1389,7 +1389,7 @@ class _DashboardState extends State<Dashboard> {
                     ),
                   );
                     })),
-                  // Fewer than 4 creators: keep each one the same width.
+                  // Fewer than 5 creators: keep each one the same width.
                   for (var i = docs.length; i < _topCreatorsCount; i++)
                     const Expanded(child: SizedBox.shrink()),
                 ],
