@@ -289,7 +289,7 @@ class _SpotlightCard extends StatelessWidget {
                             children: [
                               Text(
                                 [
-                                  if (status == 'ACTIVE' || status == 'SUBMITTED')
+                                  if (status == 'ACTIVE' || status == 'SUBMITTED' || status == 'WINNER')
                                     c.creditsPerCreator == null ? 'You\'re in' : '${c.creditsPerCreator} AI credits'
                                   else
                                     AiCampaignBits.seatsLabel(
@@ -344,7 +344,10 @@ class _PrimaryButton extends StatelessWidget {
         ),
       'INVITED' => ('See invite →', const Color(0xFF7B2CBF), Colors.white, null),
       'SUBMITTED' => ('View', Colors.white.withValues(alpha: 0.1), Colors.white, Colors.white24),
-      _ => ('Join →', const Color(0xFF7B2CBF), Colors.white, null),
+      'WINNER' => ('See your win →', AiCampaignBits.timeColor.withValues(alpha: 0.15), AiCampaignBits.timeColor, AiCampaignBits.timeColor.withValues(alpha: 0.5)),
+      // Only someone not in the campaign is offered Join; any other standing opens it.
+      null => ('Join →', const Color(0xFF7B2CBF), Colors.white, null),
+      _ => ('View', Colors.white.withValues(alpha: 0.1), Colors.white, Colors.white24),
     };
     return GestureDetector(
       onTap: onPressed,
