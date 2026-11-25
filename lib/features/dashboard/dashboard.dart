@@ -67,9 +67,57 @@ class _DashboardState extends State<Dashboard> {
   // disposes + recreates it → its initState re-fetches the admin-curated list.
   int _refreshTick = 0;
 
+  static const _challengesPageSize = 20;
+
   Future<List<Map<String, dynamic>>> _fetchChallenges() => ChallengesService()
-      .fetchChallenges(limit: 20)
-      .then((raw) => raw.map(normaliseChallenge).toList());
+      .fetchChallenges(limit: _challengesPageSize)
+      .then((raw) {
+        _moreHasMore = raw.length == _challengesPageSize;
+        return raw.map(normaliseChallenge).toList();
+      });
+
+  // "More Challenges" shows every challenge once, then ends (client, 25 Nov
+  // 2026). It used to repeat the first 20 up to 9000 tiles. Page 1 is
+  // _challengesFuture (shared with the sections above); later pages load here
+  // as the user nears the bottom.
+  final List<Map<String, dynamic>> _moreExtra = [];
+  int _morePage = 1;
+  bool _moreHasMore = true;
+  bool _moreLoading = false;
+
+  Future<void> _loadMoreChallenges() async {
+    if (_moreLoading || !_moreHasMore) return;
+    _moreLoading = true;
+    try {
+      final first = await _challengesFuture;
+      final next = _morePage + 1;
+      final raw = await ChallengesService()
+          .fetchChallenges(page: next, limit: _challengesPageSize);
+      if (!mounted) return;
+      // A challenge added while scrolling shifts the pages: never show one twice.
+      final seen = {for (final c in [...first, ..._moreExtra]) c['id']};
+      setState(() {
+        _morePage = next;
+        _moreExtra.addAll(
+            raw.map(normaliseChallenge).where((c) => seen.add(c['id'])));
+        _moreHasMore = raw.length == _challengesPageSize;
+      });
+    } catch (_) {
+      // Keep what's shown; the next scroll near the bottom tries again.
+    } finally {
+      _moreLoading = false;
+    }
+  }
+
+  bool _onHomeScroll(ScrollNotification n) {
+    // Only the page's own vertical scroll (not the horizontal shelves inside it).
+    if (n.depth == 0 &&
+        n.metrics.axis == Axis.vertical &&
+        n.metrics.extentAfter < 800) {
+      _loadMoreChallenges();
+    }
+    return false;
+  }
 
   // Pull-to-refresh on the home feed — re-fetches everything the screen shows
   // (the shared challenge list, trending creators, the profile header, and via
@@ -81,6 +129,9 @@ class _DashboardState extends State<Dashboard> {
     if (!mounted) return;
     setState(() {
       _challengesFuture = challenges;
+      _moreExtra.clear();
+      _morePage = 1;
+      _moreHasMore = true;
       _trendingCreatorsFuture = creators;
       _refreshTick++;
       final uid = _profileUserId;
@@ -429,7 +480,9 @@ class _DashboardState extends State<Dashboard> {
               onRefresh: _refresh,
               color: _accent,
               backgroundColor: const Color(0xFF12102A),
-              child: CustomScrollView(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: _onHomeScroll,
+                child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(
@@ -476,6 +529,7 @@ class _DashboardState extends State<Dashboard> {
                   _buildEndlessChallengesGrid(context),
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                 ],
+              ),
               ),
             ),
           ),
@@ -1128,11 +1182,13 @@ class _DashboardState extends State<Dashboard> {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _challengesFuture,
       builder: (context, snap) {
-        final docs = snap.data ?? [];
-        if (docs.isEmpty) {
+        final first = snap.data ?? [];
+        if (first.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
-        return SliverPadding(
+        final docs = [...first, ..._moreExtra];
+        return SliverMainAxisGroup(slivers: [
+          SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1142,18 +1198,36 @@ class _DashboardState extends State<Dashboard> {
               childAspectRatio: 0.75,
             ),
             delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final data = docs[i % docs.length];
-                return _EndlessChallengeCard(data: data);
-              },
-              // Far more than anyone will ever actually scroll through —
-              // not truly infinite (Sliver delegates need a concrete
-              // count), just large enough that the grid never visibly
-              // ends.
-              childCount: 9000,
+              (context, i) => _EndlessChallengeCard(data: docs[i]),
+              // Each challenge once (client, 25 Nov 2026): no repeating the list.
+              childCount: docs.length,
             ),
           ),
-        );
+        ),
+          SliverToBoxAdapter(
+            child: _moreHasMore
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: _accent),
+                      ),
+                    ),
+                  )
+                : const Padding(
+                    key: Key('home-challenges-end'),
+                    padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
+                    child: Text(
+                      "You've seen all the challenges",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+          ),
+        ]);
       },
     );
   }
