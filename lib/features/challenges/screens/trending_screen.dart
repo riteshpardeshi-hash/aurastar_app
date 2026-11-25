@@ -81,7 +81,7 @@ class _TrendingScreenState extends State<TrendingScreen> {
               size: 22,
             ),
             SizedBox(width: 8),
-            Text('Trending'),
+            Text('Trending Challenges'),
           ],
         ),
         centerTitle: false,

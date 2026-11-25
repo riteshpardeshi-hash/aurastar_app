@@ -32,7 +32,7 @@ void main() {
   });
 
   test('the old section names are gone from what users read', () {
-    final old = RegExp(r'''AI ad campaign|Brand Videos''', caseSensitive: false);
+    final old = RegExp(r'''AI ad campaign|Brand Videos|Trending videos''', caseSensitive: false);
     // The client spells it "Ai Ad Contests" (25 Nov), not "AI".
     final aiCaps = RegExp(r'''AI Ad Contest''');
     final offenders = [
