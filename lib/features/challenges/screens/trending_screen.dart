@@ -223,7 +223,7 @@ class _TrendingScreenState extends State<TrendingScreen> {
           ),
           SizedBox(height: 8),
           Text(
-            'Check back soon — the leaderboard heats up fast.',
+            'Check back soon — Aura Farmers heats up fast 🔥',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white24, fontSize: 13),
           ),

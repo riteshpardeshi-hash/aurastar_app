@@ -40,6 +40,10 @@ void main() {
         'responses': rows,
         'totalCount': rows.length,
         'me': {'rank': 2, 'score': 820, 'gapToFirst': 1225, 'gapToNext': 1225},
+        'region': {
+          'country': {'_id': 'in', 'name': 'India'},
+          'city': {'_id': 'amr', 'name': 'Amravati'},
+        },
       });
     };
     backend.routes['GET /leaderboard/challenges'] = (req) {
@@ -56,17 +60,25 @@ void main() {
       ].where((c) => search.isEmpty || (c['title'] as String).toLowerCase().contains(search)).toList();
       return FakeAiAdsBackend.ok({'responses': cards, 'totalCount': cards.length});
     };
-    backend.on('GET /challenges/ch1/submissions', {
-      'submissions': [
-        {'_id': 's1', 'userId': {'_id': 'u3', 'displayName': 'Shweta', 'username': 'shweta'}, 'aiScore': 92},
-      ],
-    });
+    backend.routes['GET /leaderboard/challenges/ch1/players'] = (req) {
+      final city = req.query['scope'] == 'city';
+      return FakeAiAdsBackend.ok({
+        'responses': [
+          {'_id': 'u3', 'displayName': 'Shweta', 'profileName': 'shweta', 'score': 92, 'rank': 1},
+          if (!city) {'_id': 'creator-1', 'displayName': 'Yash', 'profileName': 'yash', 'score': 88, 'rank': 2},
+          if (!city) {'_id': 'u4', 'displayName': 'Ritesh', 'profileName': 'ritesh', 'score': 75, 'rank': 3},
+          if (!city) {'_id': 'u5', 'displayName': 'Kabir', 'profileName': 'kabir', 'score': 60, 'rank': 4},
+        ],
+        'me': {'rank': 2, 'score': 88, 'gapToFirst': 4, 'gapToNext': 4},
+        'region': {'country': {'_id': 'in', 'name': 'India'}, 'city': {'_id': 'amr', 'name': 'Amravati'}},
+      });
+    };
   });
   tearDown(FakeAiAdsBackend.reset);
 
   Future<void> open(WidgetTester tester) => pumpAiScreen(tester, const LeaderboardScreen());
 
-  testWidgets('Global shows the top three on a podium, the rest as rows, and your rank pinned',
+  testWidgets('Aura Farmers: Region shows the top three on the sticker podium, rows, and your rank',
       (tester) async {
     await open(tester);
     expect(find.byKey(const Key('podium-1')), findsOneWidget);
@@ -77,9 +89,16 @@ void main() {
     expect(find.text('Ritesh'), findsOneWidget);
     expect(find.text('@ritesh'), findsOneWidget);
 
+    // Client, 26 Nov 2026: Gen Z stickers instead of a crown, "Aura Farmers".
+    expect(find.text('Aura Farmers'), findsOneWidget);
+    expect(find.text('#1 GOAT 🐐'), findsOneWidget);
+    expect(find.text('#2 SLAY'), findsOneWidget);
+    expect(find.text('#3 W'), findsOneWidget);
+    expect(find.text('👑'), findsNothing);
+
     final you = find.byKey(const Key('leaderboard-you-bar'));
     expect(you, findsOneWidget);
-    expect(find.descendant(of: you, matching: find.text('1,225 Aura behind #1')), findsOneWidget);
+    expect(find.descendant(of: you, matching: find.text('1,225 Aura to #1 — lock in')), findsOneWidget);
     expect(backend.calls('GET', '/leaderboard').single.query,
         containsPair('sort', 'aura_desc'));
   });
@@ -105,6 +124,21 @@ void main() {
     expect(find.byKey(const Key('podium-1')), findsOneWidget);
   });
 
+  testWidgets('region chips are named after your country and city and filter the board',
+      (tester) async {
+    await open(tester);
+    expect(find.text('🗺️ India'), findsOneWidget);
+    expect(find.text('📍 Amravati'), findsOneWidget);
+    expect(backend.calls('GET', '/leaderboard').last.query, containsPair('scope', 'global'));
+
+    await tester.tap(find.byKey(const Key('leaderboard-scope-city')));
+    await settle(tester);
+    expect(backend.calls('GET', '/leaderboard').last.query, containsPair('scope', 'city'));
+    await tester.tap(find.byKey(const Key('leaderboard-scope-country')));
+    await settle(tester);
+    expect(backend.calls('GET', '/leaderboard').last.query, containsPair('scope', 'country'));
+  });
+
   testWidgets('period and sort combine with the search in one request', (tester) async {
     await open(tester);
     await tester.enterText(find.byKey(const Key('leaderboard-search')), 'a');
@@ -126,18 +160,18 @@ void main() {
   testWidgets('Challenge tab shows cards with your rank, the leader and participants',
       (tester) async {
     await open(tester);
-    await tester.tap(find.text('Challenge'));
+    await tester.tap(find.text('Challenges'));
     await settle(tester);
 
     expect(find.text('FitNest Jump Rope'), findsOneWidget);
     expect(find.text('You #2'), findsOneWidget);
-    expect(find.text('👑 Shweta · 92 · 12 participants'), findsOneWidget);
+    expect(find.text('🐐 Shweta · 92 · 12 participants'), findsOneWidget);
     expect(find.text('No scores yet · be first'), findsOneWidget);
   });
 
   testWidgets('Challenge tab search, filter and sort go to the server together', (tester) async {
     await open(tester);
-    await tester.tap(find.text('Challenge'));
+    await tester.tap(find.text('Challenges'));
     await settle(tester);
     await tester.enterText(find.byKey(const Key('challenge-boards-search')), 'cross');
     await settle(tester);
@@ -160,18 +194,32 @@ void main() {
     expect(find.text('No challenges match "nothing"'), findsOneWidget);
   });
 
-  // Regression: GET /leaderboard/challenge/{id} returns an empty board for
-  // challenges with real scores, so a challenge's board must come from
-  // GET /challenges/{id}/submissions.
-  testWidgets('tapping a card opens its board from the submissions endpoint', (tester) async {
+  // Regression: GET /leaderboard/challenge/{id} (singular) returns an empty
+  // board for challenges with real scores — a challenge's board comes from
+  // GET /leaderboard/challenges/{id}/players (backend ADR 155).
+  testWidgets('tapping a card opens its board: sticker podium, region chips, your rank',
+      (tester) async {
     await open(tester);
-    await tester.tap(find.text('Challenge'));
+    await tester.tap(find.text('Challenges'));
     await settle(tester);
     await tester.tap(find.byKey(const Key('challenge-board-ch1')));
     await settle(tester);
 
     expect(find.byType(ChallengeLeaderboardScreen), findsOneWidget);
-    expect(find.text('@shweta'), findsOneWidget);
+    expect(find.text('#1 GOAT 🐐'), findsOneWidget);
+    expect(find.text('@kabir'), findsOneWidget);
+    expect(find.text('4 pts to #1 — lock in'), findsOneWidget);
     expect(backend.sent.where((r) => r.path.startsWith('/leaderboard/challenge/')), isEmpty);
+
+    await tester.tap(find.byKey(const Key('challenge-players-scope-city')));
+    await settle(tester);
+    expect(backend.calls('GET', '/leaderboard/challenges/ch1/players').last.query,
+        containsPair('scope', 'city'));
+    expect(find.text('@kabir'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('challenge-players-search')), 'shw');
+    await settle(tester);
+    expect(backend.calls('GET', '/leaderboard/challenges/ch1/players').last.query,
+        allOf(containsPair('search', 'shw'), containsPair('scope', 'city')));
   });
 }

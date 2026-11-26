@@ -314,7 +314,52 @@ String lbDisplayName(Map<String, dynamic> e) {
   return n.isEmpty ? 'User' : n;
 }
 
-/// The top three on a podium: 2nd on the left, 1st (crowned) in the middle, 3rd right.
+/// Gen Z rank sticker (client's pick P2, 26 Nov 2026): tilted "#1 GOAT 🐐",
+/// "#2 SLAY", "#3 W" instead of a crown.
+class LbSticker extends StatelessWidget {
+  final int place;
+
+  const LbSticker({super.key, required this.place});
+
+  static const _labels = {1: '#1 GOAT 🐐', 2: '#2 SLAY', 3: '#3 W'};
+  static const _colors = {1: lbGold, 2: lbSilver, 3: lbBronze};
+  static const _tilt = {1: -0.08, 2: -0.1, 3: 0.08};
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[place] ?? lbSilver;
+    return Transform.rotate(
+      angle: _tilt[place] ?? 0,
+      child: Container(
+        key: Key('podium-sticker-$place'),
+        padding: EdgeInsets.symmetric(
+          horizontal: place == 1 ? 10 : 8,
+          vertical: 4,
+        ),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 12),
+          ],
+        ),
+        child: Text(
+          _labels[place] ?? '#$place',
+          style: TextStyle(
+            fontFamily: 'ClashDisplay',
+            fontWeight: FontWeight.w600,
+            fontSize: place == 1 ? 13 : 11.5,
+            wordSpacing: 2.5,
+            color: const Color(0xFF15100A),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The top three on a podium: 2nd on the left, 1st in the middle, 3rd right,
+/// each with its sticker.
 class LbPodium extends StatelessWidget {
   final List<Map<String, dynamic>> top;
   final String? myId;
@@ -335,12 +380,13 @@ class LbPodium extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (index == 0) const Text('👑', style: TextStyle(fontSize: 18)),
+              LbSticker(place: index + 1),
+              const SizedBox(height: 6),
               LbAvatar(
                 name: lbDisplayName(e),
                 avatarUrl: e['avatar'] as String? ?? '',
                 size: index == 0 ? 56 : 46,
-                ring: index == 0 ? lbGold : null,
+                ring: [lbGold, lbSilver, lbBronze][index],
                 background:
                     index == 0
                         ? const Color(0xFF553A12)
@@ -420,12 +466,16 @@ class LbPlayerRow extends StatelessWidget {
   final bool isMe;
   final VoidCallback? onTap;
 
+  /// The unit under the number: "Aura" on region boards, "score" on a challenge's.
+  final String scoreLabel;
+
   const LbPlayerRow({
     super.key,
     required this.entry,
     required this.rank,
     required this.isMe,
     this.onTap,
+    this.scoreLabel = 'Aura',
   });
 
   @override
@@ -507,9 +557,12 @@ class LbPlayerRow extends StatelessWidget {
                   color: medal ?? Colors.white,
                 ),
               ),
-              const Text(
-                'Aura',
-                style: TextStyle(color: AppColors.textFaint, fontSize: 10),
+              Text(
+                scoreLabel,
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -527,6 +580,7 @@ class LbYouBar extends StatelessWidget {
   final String name;
   final String avatarUrl;
   final String periodLabel;
+  final String scoreLabel;
 
   const LbYouBar({
     super.key,
@@ -534,6 +588,7 @@ class LbYouBar extends StatelessWidget {
     required this.name,
     this.avatarUrl = '',
     required this.periodLabel,
+    this.scoreLabel = 'Aura',
   });
 
   @override
@@ -543,11 +598,14 @@ class LbYouBar extends StatelessWidget {
     final gapToFirst = (me['gapToFirst'] as num?)?.toInt() ?? 0;
     final String line;
     if (rank == null) {
-      line = 'Earn Aura $periodLabel to get ranked';
+      line = 'Farm some aura $periodLabel to get ranked ✦';
     } else if (rank == 1) {
-      line = "You're on top";
+      line = "#1 — you're the GOAT 🐐";
     } else {
-      line = '${lbThousands(gapToFirst)} Aura behind #1';
+      line =
+          scoreLabel == 'Aura'
+              ? '${lbThousands(gapToFirst)} Aura to #1 — lock in'
+              : '${lbThousands(gapToFirst)} pts to #1 — lock in';
     }
     return Container(
       key: const Key('leaderboard-you-bar'),
@@ -622,9 +680,9 @@ class LbYouBar extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-              const Text(
-                'Aura',
-                style: TextStyle(color: Color(0xFFD9CCF5), fontSize: 10),
+              Text(
+                scoreLabel,
+                style: const TextStyle(color: Color(0xFFD9CCF5), fontSize: 10),
               ),
             ],
           ),
@@ -657,7 +715,7 @@ class LbChallengeCard extends StatelessWidget {
     final line =
         leader == null
             ? (participants == 0 ? 'No scores yet · be first' : people)
-            : '👑 ${leaderName.isEmpty ? 'User' : leaderName} · ${leader['score']} · $people';
+            : '🐐 ${leaderName.isEmpty ? 'User' : leaderName} · ${leader['score']} · $people';
 
     return GestureDetector(
       key: Key('challenge-board-${challenge['_id']}'),

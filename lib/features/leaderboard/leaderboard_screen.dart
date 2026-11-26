@@ -86,7 +86,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             const Padding(
               padding: EdgeInsets.fromLTRB(18, 12, 18, 12),
               child: Text(
-                'Leaderboard',
+                'Aura Farmers',
                 style: TextStyle(
                   fontFamily: 'ClashDisplay',
                   fontSize: 26,
@@ -105,7 +105,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 border: Border.all(color: lbLine),
               ),
               child: Row(
-                children: [_segment('Global', 0), _segment('Challenge', 1)],
+                children: [_segment('Region', 0), _segment('Challenges', 1)],
               ),
             ),
             const SizedBox(height: 10),
@@ -157,6 +157,11 @@ class _GlobalBoardState extends State<_GlobalBoard>
   String _search = '';
   String _period = 'all';
   _GlobalSort _sort = _GlobalSort.auraDesc;
+  // Region filter (client, 26 Nov 2026): Global, the viewer's country, the
+  // viewer's city. Names come back with each page (backend ADR 155).
+  String _scope = 'global';
+  String? _countryName;
+  String? _cityName;
 
   final List<Map<String, dynamic>> _entries = [];
   Map<String, dynamic>? _me;
@@ -171,7 +176,10 @@ class _GlobalBoardState extends State<_GlobalBoard>
   String _myAvatar = '';
 
   bool get _isDefaultView =>
-      _search.isEmpty && _period == 'all' && _sort == _GlobalSort.auraDesc;
+      _search.isEmpty &&
+      _period == 'all' &&
+      _sort == _GlobalSort.auraDesc &&
+      _scope == 'global';
 
   @override
   bool get wantKeepAlive => true;
@@ -194,12 +202,15 @@ class _GlobalBoardState extends State<_GlobalBoard>
     if (cached != null) {
       _entries.addAll(cached.entries);
       _me = cached.me;
+      _countryName = cached.country?['name'] as String?;
+      _cityName = cached.city?['name'] as String?;
       _initialLoading = false;
     }
     _reload();
     _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300)
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
         _loadMore();
+      }
     });
     // Blocking / unblocking someone elsewhere reloads the board at once.
     _safetySub = SafetyService.changes.listen((_) => _reload());
@@ -224,6 +235,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
         search: _search,
         period: _period,
         sort: _sort.api,
+        scope: _scope,
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -231,6 +243,8 @@ class _GlobalBoardState extends State<_GlobalBoard>
           ..clear()
           ..addAll(page.entries);
         _me = page.me;
+        _countryName = page.country?['name'] as String? ?? _countryName;
+        _cityName = page.city?['name'] as String? ?? _cityName;
         _page = 2;
         _hasMore = page.entries.length == _pageSize;
         _loading = false;
@@ -259,6 +273,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
         search: _search,
         period: _period,
         sort: _sort.api,
+        scope: _scope,
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -330,6 +345,30 @@ class _GlobalBoardState extends State<_GlobalBoard>
             onClear: _clearSearch,
           ),
           const SizedBox(height: 10),
+          SizedBox(
+            height: 32,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final (value, label) in [
+                  ('global', '🌍 Global'),
+                  ('country', '🗺️ ${_countryName ?? 'Country'}'),
+                  ('city', '📍 ${_cityName ?? 'City'}'),
+                ])
+                  LbChip(
+                    key: Key('leaderboard-scope-$value'),
+                    label: label,
+                    selected: _scope == value,
+                    onTap: () {
+                      if (_scope == value) return;
+                      setState(() => _scope = value);
+                      _reload();
+                    },
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               for (final (value, label) in _periods)
@@ -383,14 +422,26 @@ class _GlobalBoardState extends State<_GlobalBoard>
                       'Try another name or @handle.',
                       icon: Icons.search_off_rounded,
                     )
+                    : _scope == 'city' && _cityName == null
+                    ? lbEmpty(
+                      'Add your city to see who runs it',
+                      'Set your city in your profile, then come back 📍',
+                      icon: Icons.location_on_outlined,
+                    )
+                    : _scope == 'country' && _countryName == null
+                    ? lbEmpty(
+                      'Add your country to see your national board',
+                      'Set it in your profile, then come back 🗺️',
+                      icon: Icons.public_rounded,
+                    )
                     : _period != 'all'
                     ? lbEmpty(
-                      'No one has earned Aura $_periodWord',
-                      'Take a challenge and be first.',
+                      'No one farmed aura $_periodWord yet',
+                      'Take a challenge and be the first W 🔥',
                     )
                     : lbEmpty(
-                      'No players yet',
-                      'Complete challenges to appear here',
+                      'No farmers here yet',
+                      'Take a challenge and claim #1 — no cap 🐐',
                     ),
           ),
         ],
@@ -406,8 +457,9 @@ class _GlobalBoardState extends State<_GlobalBoard>
             (_loading && !_initialLoading ? 1 : 0),
         itemBuilder: (_, i) {
           if (showPodium) {
-            if (i == 0)
+            if (i == 0) {
               return LbPodium(top: podium, myId: _myId, onTap: _openSafety);
+            }
             i -= 1;
           }
           if (i >= rows.length) {
@@ -522,8 +574,9 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     super.initState();
     _reload();
     _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300)
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
         _loadMore();
+      }
     });
   }
 
@@ -629,14 +682,17 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     }
     if (_filter == 'joined') {
       return lbEmpty(
-        "You haven't taken part yet",
-        'Take a challenge to see your rank here.',
+        "You haven't joined any yet 👀",
+        'Take a challenge and your rank shows up here.',
       );
     }
     if (_filter == 'brand') {
-      return lbEmpty('No brand challenges yet', 'Check back soon.');
+      return lbEmpty(
+        'No brand challenges yet',
+        'New drops soon — stay tuned ✦',
+      );
     }
-    return lbEmpty('No challenges yet', 'Check back soon.');
+    return lbEmpty('No challenges yet', 'New drops soon — stay tuned ✦');
   }
 
   @override

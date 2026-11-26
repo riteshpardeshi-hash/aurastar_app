@@ -40,10 +40,12 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Search'), findsOneWidget);
-    expect(find.text('Leaderboard'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
+    // Client, 26 Nov 2026: icons only — the names are tooltips, not labels.
+    for (final name in ['Home', 'Search', 'Aura Farmers', 'Profile']) {
+      expect(find.byTooltip(name), findsOneWidget);
+      expect(find.text(name), findsNothing);
+    }
+    expect(find.text('Leaderboard'), findsNothing);
     // "Challenges" and "Brand" were tabs before Home/Search replaced them.
     expect(find.text('Challenges'), findsNothing);
     expect(find.text('Brand'), findsNothing);
@@ -65,7 +67,7 @@ void main() {
     await tester.pump();
     observer.popCount = 0;
 
-    await tester.tap(find.text('Search'));
+    await tester.tap(find.byKey(const Key('nav-search')));
     await tester.pump();
 
     expect(selections, isEmpty,
@@ -87,15 +89,15 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Leaderboard'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
     await tester.pumpAndSettle();
     expect(selections, [AppNavTab.leaderboard.shellIndex]); // 2
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.byKey(const Key('nav-profile')));
     await tester.pumpAndSettle();
     expect(selections, [2, AppNavTab.profile.shellIndex]); // + 3
 
-    await tester.tap(find.text('Home'));
+    await tester.tap(find.byKey(const Key('nav-home')));
     await tester.pumpAndSettle();
     expect(selections, [2, 3, AppNavTab.home.shellIndex]); // + 0
   });
@@ -114,10 +116,7 @@ void main() {
 
     // The Leaderboard tab's tappable area — its GestureDetector, which is
     // larger than the glyph + text it wraps.
-    final item = find.ancestor(
-      of: find.text('Leaderboard'),
-      matching: find.byType(GestureDetector),
-    );
+    final item = find.byKey(const Key('nav-aura-farmers'));
     final rect = tester.getRect(item);
     // Just inside the top-left corner: inside the padding, well clear of the
     // icon and label. Only registers because the GestureDetector is opaque.
@@ -176,8 +175,8 @@ void main() {
 
     // Pre-fix these taps landed on clipped-out pixels and either did nothing
     // or threw because the widget centre was off-screen.
-    await tester.tap(find.text('Leaderboard'));
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
+    await tester.tap(find.byKey(const Key('nav-profile')));
     await tester.pump();
 
     expect(selections,
@@ -195,8 +194,8 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Leaderboard'));
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
+    await tester.tap(find.byKey(const Key('nav-profile')));
     await tester.pump();
 
     expect(selections,
@@ -222,10 +221,7 @@ void main() {
 
     // Tap the inner edge of the Search slot — the side nearest the FAB, where
     // the FAB's opaque square hit box used to overlap on tight layouts.
-    final search = find.ancestor(
-      of: find.text('Search'),
-      matching: find.byType(GestureDetector),
-    );
+    final search = find.byKey(const Key('nav-search'));
     final rect = tester.getRect(search);
     await tester.tapAt(Offset(rect.right - 2, rect.center.dy));
     await tester.pump();
@@ -281,7 +277,7 @@ void main() {
     await tester.tap(find.text('Go to Current'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Leaderboard'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
     await tester.pumpAndSettle();
 
     // Popped straight back to the root (Mid and Current gone)…

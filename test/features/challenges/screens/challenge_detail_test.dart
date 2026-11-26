@@ -661,19 +661,19 @@ void main() {
       }
 
       expect(
-        find.byTooltip('See Leaderboard'),
+        find.byTooltip('See Aura Farmers'),
         findsOneWidget,
         reason:
             'the button itself is unconditional — every challenge '
             'detail page shows it',
       );
 
-      await tester.tap(find.byTooltip('See Leaderboard'));
+      await tester.tap(find.byTooltip('See Aura Farmers'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(
-        find.text('Take this challenge at least once to see its leaderboard.'),
+        find.text('Take this challenge once to unlock its Aura Farmers 🔓'),
         findsOneWidget,
       );
       expect(
@@ -711,9 +711,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
 
-      expect(find.byTooltip('See Leaderboard'), findsOneWidget);
+      expect(find.byTooltip('See Aura Farmers'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('See Leaderboard'));
+      await tester.tap(find.byTooltip('See Aura Farmers'));
       await tester.pumpAndSettle();
 
       expect(

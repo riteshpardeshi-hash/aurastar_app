@@ -1016,7 +1016,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   Widget _buildLeaderboardButton() {
     final participated = _mySubmission != null;
     return Tooltip(
-      message: 'See Leaderboard',
+      message: 'See Aura Farmers',
       child: GestureDetector(
         key: const Key('challenge-leaderboard'),
         onTap:
@@ -1131,7 +1131,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Take this challenge at least once to see its leaderboard.',
+                  'Take this challenge once to unlock its Aura Farmers 🔓',
                   style: TextStyle(fontSize: 13),
                 ),
               ),

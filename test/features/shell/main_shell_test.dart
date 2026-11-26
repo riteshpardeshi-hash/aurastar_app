@@ -132,7 +132,7 @@ void main() {
     // Home is the visible tab; Profile is built but offstage.
     expect(find.byType(MyAccountScreen), findsNothing);
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.byKey(const Key('nav-profile')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -153,12 +153,12 @@ void main() {
     await pumpShell(tester);
     expect(leaderboardCalls, 1, reason: 'global board loads once on mount');
 
-    await tester.tap(find.text('Leaderboard'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.text('Home'));
+    await tester.tap(find.byKey(const Key('nav-home')));
     await tester.pump();
-    await tester.tap(find.text('Leaderboard'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -179,7 +179,7 @@ void main() {
     expect(find.byType(LeaderboardScreen), findsNothing,
         reason: 'Leaderboard starts offstage in the IndexedStack');
 
-    await tester.tap(find.text('Leaderboard'));
+    await tester.tap(find.byKey(const Key('nav-aura-farmers')));
     await tester.pump();
 
     // One frame later the tab is on screen — showing its own skeleton, not
@@ -213,7 +213,7 @@ void main() {
         'to exiting the app', (tester) async {
       await pumpShell(tester);
 
-      await tester.tap(find.text('Profile'));
+      await tester.tap(find.byKey(const Key('nav-profile')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.byType(MyAccountScreen), findsOneWidget);
@@ -233,7 +233,7 @@ void main() {
         'exiting', (tester) async {
       await pumpShell(tester);
 
-      await tester.tap(find.text('Leaderboard'));
+      await tester.tap(find.byKey(const Key('nav-aura-farmers')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.byType(LeaderboardScreen), findsOneWidget);
