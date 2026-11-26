@@ -93,8 +93,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   String _videoId = '';
   String? _myId;
 
-  bool get _isOwnChallenge =>
-      (_ownerId ?? '').isNotEmpty && _ownerId == _myId;
+  bool get _isOwnChallenge => (_ownerId ?? '').isNotEmpty && _ownerId == _myId;
 
   // Anchors the iOS/iPadOS share-sheet popover to the actual button instead
   // of an unset origin — see _share().
@@ -117,7 +116,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         ownerId: _ownerId,
       );
       // Same gate as the Take this Challenge button: only once the status is known and open.
-      if (widget.startTaking && mounted && _statusReady && !_statusCheckFailed && !_isPaused) {
+      if (widget.startTaking &&
+          mounted &&
+          _statusReady &&
+          !_statusCheckFailed &&
+          !_isPaused) {
         _showCameraRulesModal();
       }
     });
@@ -216,7 +219,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   Future<void> _fetchSubmissions() async {
     if (widget.challengeId.isEmpty) return;
     try {
-      final mine = await ChallengesService().fetchMySubmission(widget.challengeId);
+      final mine = await ChallengesService().fetchMySubmission(
+        widget.challengeId,
+      );
       if (!mounted) return;
       setState(() => _mySubmission = mine);
     } catch (_) {}
@@ -235,7 +240,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   Future<void> _share() async {
     ChallengeAnalyticsService().recordShare(widget.challengeId);
-    AnalyticsService().logShare(contentType: 'challenge', itemId: widget.challengeId);
+    AnalyticsService().logShare(
+      contentType: 'challenge',
+      itemId: widget.challengeId,
+    );
     final link = '$kChallengeBaseUrl/${widget.challengeId}';
     try {
       // sharePositionOrigin anchors the share-sheet popover on iPad/Mac and
@@ -245,10 +253,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       // always supply. Previously this call was unguarded fire-and-forget,
       // so any PlatformException from it (this is the only Share.share call
       // in the app not already wrapped) had nowhere to surface at all.
-      final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-      final origin = box == null
-          ? null
-          : box.localToGlobal(Offset.zero) & box.size;
+      final box =
+          _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
+      final origin =
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size;
       await Share.share(
         'Check out this challenge on Aura: "${widget.title}" 🌟\n\n'
         'Think you can complete it? 💪\n\n'
@@ -267,8 +275,14 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   /// Platform challenges have no blockable owner; your own challenge has nothing to block.
   void _showSafetyMenu() {
     final owner = _ownerId ?? '';
-    final canBlock = owner.isNotEmpty && owner != _myId && (_ownerType == 'Creator' || _ownerType == 'Brand');
-    final name = _ownerName.isNotEmpty ? _ownerName : (_ownerType == 'Brand' ? 'this brand' : 'this creator');
+    final canBlock =
+        owner.isNotEmpty &&
+        owner != _myId &&
+        (_ownerType == 'Creator' || _ownerType == 'Brand');
+    final name =
+        _ownerName.isNotEmpty
+            ? _ownerName
+            : (_ownerType == 'Brand' ? 'this brand' : 'this creator');
     showSafetyMenu(context, [
       SafetyMenuItem(
         key: const Key('safety-report-challenge'),
@@ -281,11 +295,17 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           key: const Key('safety-report-video'),
           icon: Icons.videocam_off_outlined,
           label: 'Report video',
-          onTap: () => showReportSheet(
-            context,
-            title: 'Report this video',
-            submit: (reason, details) => SafetyService().reportVideo(_videoId, reason, details: details),
-          ),
+          onTap:
+              () => showReportSheet(
+                context,
+                title: 'Report this video',
+                submit:
+                    (reason, details) => SafetyService().reportVideo(
+                      _videoId,
+                      reason,
+                      details: details,
+                    ),
+              ),
         ),
       if (canBlock)
         SafetyMenuItem(
@@ -293,15 +313,16 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           icon: Icons.block_rounded,
           label: 'Block $name',
           danger: true,
-          onTap: () => blockWithConfirm(
-            context,
-            userId: owner,
-            name: name,
-            isBrand: _ownerType == 'Brand',
-            onBlocked: () {
-              if (mounted) Navigator.pop(context);
-            },
-          ),
+          onTap:
+              () => blockWithConfirm(
+                context,
+                userId: owner,
+                name: name,
+                isBrand: _ownerType == 'Brand',
+                onBlocked: () {
+                  if (mounted) Navigator.pop(context);
+                },
+              ),
         ),
     ]);
   }
@@ -311,10 +332,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => _ReportSheet(
-        challengeId: widget.challengeId,
-        challengeTitle: widget.title,
-      ),
+      builder:
+          (ctx) => _ReportSheet(
+            challengeId: widget.challengeId,
+            challengeTitle: widget.title,
+          ),
     );
   }
 
@@ -340,11 +362,16 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     // for the user's attention, so letting it mix with (rather than duck/
     // interrupt) other audio is the right trade-off here.
     final options = VideoPlayerOptions(mixWithOthers: true);
-    final controller = cachedPath != null
-        ? VideoPlayerController.file(File(cachedPath),
-            videoPlayerOptions: options)
-        : VideoPlayerController.networkUrl(Uri.parse(url),
-            videoPlayerOptions: options);
+    final controller =
+        cachedPath != null
+            ? VideoPlayerController.file(
+              File(cachedPath),
+              videoPlayerOptions: options,
+            )
+            : VideoPlayerController.networkUrl(
+              Uri.parse(url),
+              videoPlayerOptions: options,
+            );
     try {
       await controller.initialize();
     } catch (e) {
@@ -424,8 +451,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         setState(() => _videoStarted = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text(
-                  "This video couldn't be played on your device. Please try again.")),
+            content: Text(
+              "This video couldn't be played on your device. Please try again.",
+            ),
+          ),
         );
         return;
       }
@@ -476,10 +505,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.75),
-          ],
+          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
         ),
       ),
       child: AnimatedBuilder(
@@ -538,21 +564,23 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _CameraRulesSheet(
-        onConfirm: () {
-          Navigator.of(ctx).pop();
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CameraScreen(
-                challengeTitle: widget.title,
-                challengeId: widget.challengeId,
-                referenceVideoUrl: _videoUrl,
-              ),
-            ),
-          );
-        },
-      ),
+      builder:
+          (ctx) => _CameraRulesSheet(
+            onConfirm: () {
+              Navigator.of(ctx).pop();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (_) => CameraScreen(
+                        challengeTitle: widget.title,
+                        challengeId: widget.challengeId,
+                        referenceVideoUrl: _videoUrl,
+                      ),
+                ),
+              );
+            },
+          ),
     );
   }
 
@@ -597,15 +625,15 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                       children: [
                         // Top safe area padding for back button
                         SizedBox(
-                            height: MediaQuery.of(context).padding.top + 52),
+                          height: MediaQuery.of(context).padding.top + 52,
+                        ),
 
                         // Video player
                         _buildVideoSection(),
 
                         // Title
                         Padding(
-                          padding:
-                              const EdgeInsets.fromLTRB(20, 16, 20, 6),
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
                           child: Text(
                             widget.title,
                             maxLines: 2,
@@ -637,8 +665,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 22),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.12),
                       shape: const CircleBorder(),
@@ -648,8 +679,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                   IconButton(
                     key: _shareButtonKey,
                     onPressed: _share,
-                    icon: const Icon(Icons.share_rounded,
-                        color: Colors.white, size: 20),
+                    icon: const Icon(
+                      Icons.share_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.12),
                       shape: const CircleBorder(),
@@ -662,8 +696,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     IconButton(
                       key: const Key('challenge-safety-menu'),
                       onPressed: _showSafetyMenu,
-                      icon: const Icon(Icons.flag_outlined,
-                          color: Colors.white, size: 20),
+                      icon: const Icon(
+                        Icons.flag_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                       style: IconButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.12),
                         shape: const CircleBorder(),
@@ -681,7 +718,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               right: 0,
               child: Container(
                 padding: EdgeInsets.fromLTRB(
-                    20, 12, 20, MediaQuery.of(context).padding.bottom + 16),
+                  20,
+                  12,
+                  20,
+                  MediaQuery.of(context).padding.bottom + 16,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -693,9 +734,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     ],
                   ),
                 ),
-                child: Row(
-                  children: [Expanded(child: _buildBottomButton())],
-                ),
+                child: Row(children: [Expanded(child: _buildBottomButton())]),
               ),
             ),
 
@@ -715,22 +754,28 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                           }
                         },
                         child: Center(
-                          child: _videoInitialized
-                              ? AspectRatio(
-                                  aspectRatio: correctedVideoAspectRatio(
-                                      _videoController!.value),
-                                  child: VideoPlayer(_videoController!),
-                                )
-                              : const CircularProgressIndicator(
-                                  color: _accent),
+                          child:
+                              _videoInitialized
+                                  ? AspectRatio(
+                                    aspectRatio: correctedVideoAspectRatio(
+                                      _videoController!.value,
+                                    ),
+                                    child: VideoPlayer(_videoController!),
+                                  )
+                                  : const CircularProgressIndicator(
+                                    color: _accent,
+                                  ),
                         ),
                       ),
                       SafeArea(
                         child: Align(
                           alignment: Alignment.topRight,
                           child: IconButton(
-                            icon: const Icon(Icons.close,
-                                color: Colors.white, size: 30),
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 30,
+                            ),
                             onPressed: _exitFullscreen,
                           ),
                         ),
@@ -751,7 +796,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                               return const Center(
                                 child: IgnorePointer(
                                   child: CircularProgressIndicator(
-                                      color: _accent),
+                                    color: _accent,
+                                  ),
                                 ),
                               );
                             }
@@ -767,8 +813,11 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                                     color: _accent.withValues(alpha: 0.85),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.play_arrow_rounded,
-                                      color: Colors.white, size: 36),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 36,
+                                  ),
                                 ),
                               ),
                             );
@@ -809,7 +858,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
             width: 20,
             height: 20,
             child: CircularProgressIndicator(
-                color: Colors.white54, strokeWidth: 2),
+              color: Colors.white54,
+              strokeWidth: 2,
+            ),
           ),
         ),
       );
@@ -832,11 +883,14 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
             border: Border.all(color: Colors.white.withValues(alpha: 0.20)),
           ),
           child: const Center(
-            child: Text("Couldn't check availability — Tap to retry",
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
+            child: Text(
+              "Couldn't check availability — Tap to retry",
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
       );
@@ -858,11 +912,14 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           children: [
             Icon(Icons.person_rounded, color: Colors.white70, size: 20),
             SizedBox(width: 8),
-            Text('Your challenge — you can\'t take part in it',
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              'Your challenge — you can\'t take part in it',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       );
@@ -879,14 +936,20 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.pause_circle_outline_rounded,
-                color: Colors.amber.withValues(alpha: 0.80), size: 20),
+            Icon(
+              Icons.pause_circle_outline_rounded,
+              color: Colors.amber.withValues(alpha: 0.80),
+              size: 20,
+            ),
             const SizedBox(width: 8),
-            Text('Submissions Paused',
-                style: TextStyle(
-                    color: Colors.amber.withValues(alpha: 0.80),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700)),
+            Text(
+              'Submissions Paused',
+              style: TextStyle(
+                color: Colors.amber.withValues(alpha: 0.80),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       );
@@ -952,24 +1015,27 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
       child: GestureDetector(
-        onTap: participated
-            ? () => Navigator.push(
+        onTap:
+            participated
+                ? () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ChallengeLeaderboardScreen(
-                      challengeId: widget.challengeId,
-                      challengeTitle: widget.title,
-                    ),
+                    builder:
+                        (_) => ChallengeLeaderboardScreen(
+                          challengeId: widget.challengeId,
+                          challengeTitle: widget.title,
+                        ),
                   ),
                 )
-            : _showLeaderboardLockedNotice,
+                : _showLeaderboardLockedNotice,
         child: Container(
           height: 50,
           decoration: BoxDecoration(
             color: _accent.withValues(alpha: participated ? 0.10 : 0.05),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-                color: _accent.withValues(alpha: participated ? 0.40 : 0.18)),
+              color: _accent.withValues(alpha: participated ? 0.40 : 0.18),
+            ),
           ),
           child: Center(
             child: Row(
@@ -1018,7 +1084,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           ),
           backgroundColor: const Color(0xFF1E1E2E),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -1042,9 +1110,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 // thumbnail (never the raw VideoPlayer, which would stretch
                 // to fill this 3:4 box instead of preserving aspect ratio).
                 VideoThumbnailWidget(
-                    videoUrl: _videoUrl,
-                    thumbnailUrl: _thumbnailUrl,
-                    fit: BoxFit.cover),
+                  videoUrl: _videoUrl,
+                  thumbnailUrl: _thumbnailUrl,
+                  fit: BoxFit.cover,
+                ),
 
                 // Dim overlay while loading
                 if (_videoStarted && !_videoInitialized)
@@ -1054,24 +1123,28 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 // play button (idle) — mutually exclusive so the spinner is
                 // never hidden underneath the play button.
                 Center(
-                  child: (_videoStarted && !_videoInitialized)
-                      ? const CircularProgressIndicator(color: _accent)
-                      : Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: _accent.withValues(alpha: 0.90),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: _accent.withValues(alpha: 0.55),
-                                blurRadius: 20,
-                              ),
-                            ],
+                  child:
+                      (_videoStarted && !_videoInitialized)
+                          ? const CircularProgressIndicator(color: _accent)
+                          : Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: _accent.withValues(alpha: 0.90),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _accent.withValues(alpha: 0.55),
+                                  blurRadius: 20,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 34,
+                            ),
                           ),
-                          child: const Icon(Icons.play_arrow_rounded,
-                              color: Colors.white, size: 34),
-                        ),
                 ),
               ],
             ),
@@ -1106,16 +1179,22 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                     // Numbered steps already carry their own "1. "/"2. "
                     // marker — don't also prepend a bullet.
                     if (!_isNumberedInstructions)
-                      const Text('• ',
-                          style: TextStyle(
-                              color: Colors.white, fontSize: 15, height: 1.5)),
+                      const Text(
+                        '• ',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
                     Expanded(
                       child: Text(
                         b,
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            height: 1.5),
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
                       ),
                     ),
                   ],
@@ -1128,16 +1207,21 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  color: Colors.white, fontSize: 15, height: 1.5),
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.5,
+              ),
             ),
           const SizedBox(height: 6),
           GestureDetector(
-            onTap: () =>
-                setState(() => _detailsExpanded = !_detailsExpanded),
+            onTap: () => setState(() => _detailsExpanded = !_detailsExpanded),
             child: Text(
               _detailsExpanded ? 'Read less' : 'Read more',
               style: const TextStyle(
-                  color: _accent, fontSize: 13, fontWeight: FontWeight.w700),
+                color: _accent,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -1154,12 +1238,13 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
   // case rips the first step out of the list, and prefixing the rest with
   // "• " on top of their own "2. "/"3. " produces "• 2. Execute cleanly.".
   bool get _isNumberedInstructions {
-    final lines = _instructions
-        .trim()
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
+    final lines =
+        _instructions
+            .trim()
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty)
+            .toList();
     return lines.isNotEmpty && lines.every(_numberedLineRegExp.hasMatch);
   }
 
@@ -1177,12 +1262,13 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     }
 
     // Single paragraph — split into sentences
-    final sentences = text
-        .split('. ')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .map((s) => s.endsWith('.') ? s : '$s.')
-        .toList();
+    final sentences =
+        text
+            .split('. ')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .map((s) => s.endsWith('.') ? s : '$s.')
+            .toList();
     return sentences.length > 1 ? sentences : [text];
   }
 }
@@ -1230,7 +1316,11 @@ class _CameraRulesSheet extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(
-          24, 16, 24, MediaQuery.of(context).padding.bottom + 28),
+        24,
+        16,
+        24,
+        MediaQuery.of(context).padding.bottom + 28,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1254,8 +1344,11 @@ class _CameraRulesSheet extends StatelessWidget {
                   color: _accent.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.videocam_rounded,
-                    color: _accent, size: 20),
+                child: const Icon(
+                  Icons.videocam_rounded,
+                  color: _accent,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               const Column(
@@ -1368,10 +1461,7 @@ class _CameraRulesSheet extends StatelessWidget {
             onTap: () => Navigator.pop(context),
             child: Text(
               'Not now',
-              style: TextStyle(
-                color: AppColors.textFaint,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: AppColors.textFaint, fontSize: 14),
             ),
           ),
         ],
@@ -1423,7 +1513,9 @@ class _ReportSheetState extends State<_ReportSheet> {
           content: const Text('Report submitted. Thank you for your feedback.'),
           backgroundColor: Colors.green.shade700,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     } catch (_) {
@@ -1443,7 +1535,11 @@ class _ReportSheetState extends State<_ReportSheet> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(
-          24, 16, 24, MediaQuery.of(context).padding.bottom + 28),
+        24,
+        16,
+        24,
+        MediaQuery.of(context).padding.bottom + 28,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1454,8 +1550,9 @@ class _ReportSheetState extends State<_ReportSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2)),
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -1469,8 +1566,11 @@ class _ReportSheetState extends State<_ReportSheet> {
                   color: Colors.redAccent.withValues(alpha: 0.14),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.flag_rounded,
-                    color: Colors.redAccent, size: 18),
+                child: const Icon(
+                  Icons.flag_rounded,
+                  color: Colors.redAccent,
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 12),
               const Column(
@@ -1479,14 +1579,14 @@ class _ReportSheetState extends State<_ReportSheet> {
                   Text(
                     'Report challenge',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800),
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   Text(
                     'Select a reason',
-                    style:
-                        TextStyle(color: AppColors.textFaint, fontSize: 12),
+                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
                   ),
                 ],
               ),
@@ -1504,16 +1604,20 @@ class _ReportSheetState extends State<_ReportSheet> {
                 duration: const Duration(milliseconds: 180),
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 13),
+                  horizontal: 16,
+                  vertical: 13,
+                ),
                 decoration: BoxDecoration(
-                  color: selected
-                      ? _accent.withValues(alpha: 0.15)
-                      : Colors.white.withValues(alpha: 0.05),
+                  color:
+                      selected
+                          ? _accent.withValues(alpha: 0.15)
+                          : Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: selected
-                        ? _accent.withValues(alpha: 0.65)
-                        : Colors.white.withValues(alpha: 0.10),
+                    color:
+                        selected
+                            ? _accent.withValues(alpha: 0.65)
+                            : Colors.white.withValues(alpha: 0.10),
                     width: selected ? 1.5 : 1,
                   ),
                 ),
@@ -1525,15 +1629,17 @@ class _ReportSheetState extends State<_ReportSheet> {
                         style: TextStyle(
                           color: selected ? Colors.white : AppColors.textMuted,
                           fontSize: 14,
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
                         ),
                       ),
                     ),
                     if (selected)
-                      const Icon(Icons.check_circle_rounded,
-                          color: _accent, size: 18),
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: _accent,
+                        size: 18,
+                      ),
                   ],
                 ),
               ),
@@ -1550,33 +1656,40 @@ class _ReportSheetState extends State<_ReportSheet> {
               width: double.infinity,
               height: 52,
               decoration: BoxDecoration(
-                gradient: _selected == null
-                    ? null
-                    : const LinearGradient(
-                        colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)]),
-                color: _selected == null
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : null,
+                gradient:
+                    _selected == null
+                        ? null
+                        : const LinearGradient(
+                          colors: [Color(0xFF9B4DCA), Color(0xFF5A189A)],
+                        ),
+                color:
+                    _selected == null
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : null,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Center(
-                child: _submitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.2),
-                      )
-                    : Text(
-                        'Submit Report',
-                        style: TextStyle(
-                          color: _selected == null
-                              ? AppColors.textFaint
-                              : Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                child:
+                    _submitting
+                        ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.2,
+                          ),
+                        )
+                        : Text(
+                          'Submit Report',
+                          style: TextStyle(
+                            color:
+                                _selected == null
+                                    ? AppColors.textFaint
+                                    : Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
               ),
             ),
           ),
@@ -1585,4 +1698,3 @@ class _ReportSheetState extends State<_ReportSheet> {
     );
   }
 }
-
