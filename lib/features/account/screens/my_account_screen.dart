@@ -38,10 +38,7 @@ import 'package:aura_app/shared/widgets/see_all_link.dart';
 class _AchievementCardsSection extends StatelessWidget {
   final List<Map<String, dynamic>> cards;
   final String username;
-  const _AchievementCardsSection({
-    required this.cards,
-    required this.username,
-  });
+  const _AchievementCardsSection({required this.cards, required this.username});
 
   @override
   Widget build(BuildContext context) {
@@ -62,10 +59,11 @@ class _AchievementCardsSection extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             itemCount: cards.length,
             separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, i) => _AchievementMiniCard(
-              cardData: cards[i],
-              username: username,
-            ),
+            itemBuilder:
+                (context, i) => _AchievementMiniCard(
+                  cardData: cards[i],
+                  username: username,
+                ),
           ),
         ),
         const SizedBox(height: 24),
@@ -81,10 +79,7 @@ class _AchievementMiniCard extends StatelessWidget {
   final Map<String, dynamic> cardData;
   final String username;
 
-  const _AchievementMiniCard({
-    required this.cardData,
-    required this.username,
-  });
+  const _AchievementMiniCard({required this.cardData, required this.username});
 
   // AchievementCardView lays itself out at a fixed 268 width, so it's
   // scaled down to this width via FittedBox rather than resized directly.
@@ -97,12 +92,13 @@ class _AchievementMiniCard extends StatelessWidget {
     final auraPoints = (cardData['auraPoints'] as num?)?.toInt() ?? 0;
 
     return GestureDetector(
-      onTap: () => _showAchievementPreview(
-        context,
-        challengeTitle: challengeTitle,
-        challengeId: challengeId,
-        auraPoints: auraPoints,
-      ),
+      onTap:
+          () => _showAchievementPreview(
+            context,
+            challengeTitle: challengeTitle,
+            challengeId: challengeId,
+            auraPoints: auraPoints,
+          ),
       child: SizedBox(
         width: width,
         child: FittedBox(
@@ -128,12 +124,13 @@ class _AchievementMiniCard extends StatelessWidget {
     showDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.85),
-      builder: (_) => _AchievementCardPreviewDialog(
-        challengeTitle: challengeTitle,
-        challengeId: challengeId,
-        auraPoints: auraPoints,
-        username: username,
-      ),
+      builder:
+          (_) => _AchievementCardPreviewDialog(
+            challengeTitle: challengeTitle,
+            challengeId: challengeId,
+            auraPoints: auraPoints,
+            username: username,
+          ),
     );
   }
 }
@@ -152,10 +149,12 @@ class _AchievementCardPreviewDialog extends StatefulWidget {
   });
 
   @override
-  State<_AchievementCardPreviewDialog> createState() => _AchievementCardPreviewDialogState();
+  State<_AchievementCardPreviewDialog> createState() =>
+      _AchievementCardPreviewDialogState();
 }
 
-class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDialog> {
+class _AchievementCardPreviewDialogState
+    extends State<_AchievementCardPreviewDialog> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
 
@@ -165,7 +164,8 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
     setState(() => _sharing = true);
     try {
       Uint8List? bytes;
-      final boundary = _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          _cardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary != null) {
         final image = await boundary.toImage(pixelRatio: 3.0);
         final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -178,11 +178,19 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
           'Think you can beat me? Now it\'s your turn! 💪\n\n'
           '👉 $link';
 
-      AnalyticsService()
-          .logShare(contentType: 'challenge_result', itemId: widget.challengeId);
+      AnalyticsService().logShare(
+        contentType: 'challenge_result',
+        itemId: widget.challengeId,
+      );
       if (bytes != null) {
         await Share.shareXFiles(
-          [XFile.fromData(bytes, mimeType: 'image/png', name: 'aura_achievement.png')],
+          [
+            XFile.fromData(
+              bytes,
+              mimeType: 'image/png',
+              name: 'aura_achievement.png',
+            ),
+          ],
           text: message,
           sharePositionOrigin: origin,
         );
@@ -220,28 +228,52 @@ class _AchievementCardPreviewDialogState extends State<_AchievementCardPreviewDi
               GestureDetector(
                 onTap: _sharing ? null : _shareCard,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)]),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7B2CBF), Color(0xFF4B6EF6)],
+                    ),
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
-                      BoxShadow(color: const Color(0xFF7B2CBF).withValues(alpha: 0.45), blurRadius: 12, spreadRadius: 1),
+                      BoxShadow(
+                        color: const Color(0xFF7B2CBF).withValues(alpha: 0.45),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
                     ],
                   ),
-                  child: _sharing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.share_rounded, color: Colors.white, size: 16),
-                            SizedBox(width: 8),
-                            Text('Share Card', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-                          ],
-                        ),
+                  child:
+                      _sharing
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.share_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Share Card',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
                 ),
               ),
             ],
@@ -260,10 +292,7 @@ class MyAccountScreen extends StatefulWidget {
   /// AppBar back button is dropped.
   final bool embeddedInShell;
 
-  const MyAccountScreen({
-    super.key,
-    this.embeddedInShell = false,
-  });
+  const MyAccountScreen({super.key, this.embeddedInShell = false});
 
   @override
   State<MyAccountScreen> createState() => _MyAccountScreenState();
@@ -302,8 +331,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     if (cached != null) {
       _uid = cached['uid'] as String?;
       _profile = (cached['profile'] as Map<String, dynamic>?) ?? {};
-      _videos =
-          (cached['videos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      _videos = (cached['videos'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _savedChallenges =
           (cached['saved'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       _referral = cached['referral'] as Map<String, dynamic>?;
@@ -325,12 +353,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       if (mounted && v != _isCreator) setState(() => _isCreator = v);
       if (v) return;
       // Not a creator yet: where is their application? (Drives the banner's subtitle.)
-      CreatorPageService().fetchSetupStatus().then((s) {
-        final step = s['currentStep'] as String?;
-        if (mounted && step != null && step != _creatorStep) {
-          setState(() => _creatorStep = step);
-        }
-      }).catchError((_) {});
+      CreatorPageService()
+          .fetchSetupStatus()
+          .then((s) {
+            final step = s['currentStep'] as String?;
+            if (mounted && step != null && step != _creatorStep) {
+              setState(() => _creatorStep = step);
+            }
+          })
+          .catchError((_) {});
     });
   }
 
@@ -377,18 +408,20 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       ]);
       if (!mounted) return;
       // Keeps Settings' leaderboard toggle in sync without another /profile call.
-      LeaderboardConsentService.instance
-          .updateFromProfile(results[0] as Map<String, dynamic>?);
+      LeaderboardConsentService.instance.updateFromProfile(
+        results[0] as Map<String, dynamic>?,
+      );
       setState(() {
         _uid = uid;
         _profile = results[0] as Map<String, dynamic>? ?? {};
         // /profile/videos excludes soft-deleted videos at the source now
         // (backend fix — see docs/backend-issues/002-*, resolved).
         _videos = (results[1] as List).cast<Map<String, dynamic>>();
-        _savedChallenges = (results[2] as List)
-            .cast<Map<String, dynamic>>()
-            .map(normaliseChallenge)
-            .toList();
+        _savedChallenges =
+            (results[2] as List)
+                .cast<Map<String, dynamic>>()
+                .map(normaliseChallenge)
+                .toList();
         _referral = results[3] as Map<String, dynamic>?;
         _streak = results[4] as Map<String, dynamic>?;
         _referralStatsDetail = results[5] as Map<String, dynamic>?;
@@ -405,8 +438,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         });
       } else {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(humanizeError(e))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(humanizeError(e))));
       }
     }
   }
@@ -460,19 +494,23 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       // outright (confirmed live 2026-08-05) — per openapi.yaml, auraPoints
       // is defined as "Raw aiScore stored on the submission record", so
       // aiScore is the correct fallback, not an approximation.
-      'auraPoints': (submission['auraPoints'] as num?)?.toInt() ??
+      'auraPoints':
+          (submission['auraPoints'] as num?)?.toInt() ??
           (submission['aiScore'] as num?)?.toInt() ??
           0,
       'aiScore': submission['aiScore'],
-      'aiReason': submission['feedback'] as String? ??
+      'aiReason':
+          submission['feedback'] as String? ??
           submission['improvementTip'] as String? ??
           submission['aiReason'] as String? ??
           '',
       'reviewedByAI': submission['reviewedByAI'] as bool? ?? true,
-      'challengeId': challengeMap?['_id'] as String? ??
+      'challengeId':
+          challengeMap?['_id'] as String? ??
           (challenge is String ? challenge : null) ??
           '',
-      'challengeTitle': challengeMap?['title'] as String? ??
+      'challengeTitle':
+          challengeMap?['title'] as String? ??
           s['challengeTitle'] as String? ??
           '',
     };
@@ -480,29 +518,34 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   // ── Profile card ─────────────────────────────────────────────────────────────
   Widget _buildProfileCard(BuildContext context) {
-    final rawName = (_profile['displayName'] as String? ?? '').isNotEmpty
-        ? _profile['displayName'] as String
-        : _profile['name'] as String? ?? '';
+    final rawName =
+        (_profile['displayName'] as String? ?? '').isNotEmpty
+            ? _profile['displayName'] as String
+            : _profile['name'] as String? ?? '';
     final name = rawName.isNotEmpty ? rawName : 'User';
-    final username = _profile['profileName'] as String? ??
-        _profile['username'] as String? ?? '';
+    final username =
+        _profile['profileName'] as String? ??
+        _profile['username'] as String? ??
+        '';
     final gender = (_profile['gender'] as String? ?? '').trim();
     final city =
         (_profile['city'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-    final photoUrl = (_profile['avatar'] as String? ?? '').isNotEmpty
-        ? _profile['avatar'] as String
-        : _profile['profileImageUrl'] as String? ?? '';
+    final photoUrl =
+        (_profile['avatar'] as String? ?? '').isNotEmpty
+            ? _profile['avatar'] as String
+            : _profile['profileImageUrl'] as String? ?? '';
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-      ).then((result) {
-        if (result is Map<String, dynamic>) {
-          setState(() => _profile = {..._profile, ...result});
-        }
-        _loadAll();
-      }),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+          ).then((result) {
+            if (result is Map<String, dynamic>) {
+              setState(() => _profile = {..._profile, ...result});
+            }
+            _loadAll();
+          }),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -536,7 +579,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(color: _card, width: 2),
                     ),
-                    child: const Icon(Icons.edit, color: Colors.white, size: 11),
+                    child: const Icon(
+                      Icons.edit,
+                      color: Colors.white,
+                      size: 11,
+                    ),
                   ),
                 ),
               ],
@@ -556,18 +603,30 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text('@$username',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  Text(
+                    '@$username',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
+                    ),
+                  ),
                   if (city.isNotEmpty) ...[
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined,
-                            color: Colors.white38, size: 14),
+                        const Icon(
+                          Icons.location_on_outlined,
+                          color: Colors.white38,
+                          size: 14,
+                        ),
                         const SizedBox(width: 4),
-                        Text(city,
-                            style: const TextStyle(
-                                color: AppColors.textFaint, fontSize: 12)),
+                        Text(
+                          city,
+                          style: const TextStyle(
+                            color: AppColors.textFaint,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -575,12 +634,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        const Icon(Icons.person_outline_rounded,
-                            color: Colors.white38, size: 14),
+                        const Icon(
+                          Icons.person_outline_rounded,
+                          color: Colors.white38,
+                          size: 14,
+                        ),
                         const SizedBox(width: 4),
-                        Text(gender,
-                            style: const TextStyle(
-                                color: AppColors.textFaint, fontSize: 12)),
+                        Text(
+                          gender,
+                          style: const TextStyle(
+                            color: AppColors.textFaint,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -594,7 +660,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 color: _accent.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
                 border: Border.all(
-                    color: _accent.withValues(alpha: 0.55), width: 2),
+                  color: _accent.withValues(alpha: 0.55),
+                  width: 2,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: _accent.withValues(alpha: 0.25),
@@ -621,10 +689,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // insights, settings).
   Widget _buildCreatorToolsCard(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const CreatorActivityScreen()),
-      ),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CreatorActivityScreen()),
+          ),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -641,8 +710,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 color: _accent.withValues(alpha: 0.16),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.dashboard_customize_rounded,
-                  color: _accent, size: 22),
+              child: const Icon(
+                Icons.dashboard_customize_rounded,
+                color: _accent,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 14),
             const Expanded(
@@ -665,8 +737,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: Colors.white24, size: 22),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white24,
+              size: 22,
+            ),
           ],
         ),
       ),
@@ -676,32 +751,36 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // ── Become Creator banner (regular users only) ─────────────────────────────
   Widget _buildBecomeCreatorBanner(BuildContext context) {
     // No Aura threshold any more — anyone can apply; the subtitle follows the application.
-    final (String title, String subtitle, Color subtitleColor, IconData trailing) =
-        switch (_creatorStep) {
+    final (
+      String title,
+      String subtitle,
+      Color subtitleColor,
+      IconData trailing,
+    ) = switch (_creatorStep) {
       'PENDING_REVIEW' => (
-          'Creator request pending',
-          'Our team is reviewing it — we\'ll let you know',
-          const Color(0xFFFACC15),
-          Icons.hourglass_top_rounded,
-        ),
+        'Creator request pending',
+        'Our team is reviewing it — we\'ll let you know',
+        const Color(0xFFFACC15),
+        Icons.hourglass_top_rounded,
+      ),
       'CHANGES_REQUESTED' => (
-          'Creator request needs updates',
-          'Tap to see what to change and resubmit',
-          const Color(0xFFFB923C),
-          Icons.arrow_forward_ios_rounded,
-        ),
+        'Creator request needs updates',
+        'Tap to see what to change and resubmit',
+        const Color(0xFFFB923C),
+        Icons.arrow_forward_ios_rounded,
+      ),
       'REJECTED' => (
-          'Creator request not approved',
-          'Tap to see why and apply again',
-          const Color(0xFFF87171),
-          Icons.arrow_forward_ios_rounded,
-        ),
+        'Creator request not approved',
+        'Tap to see why and apply again',
+        const Color(0xFFF87171),
+        Icons.arrow_forward_ios_rounded,
+      ),
       _ => (
-          'Become a Creator',
-          'Apply to launch challenges & grow your brand',
-          const Color(0xFFD4A8FF),
-          Icons.arrow_forward_ios_rounded,
-        ),
+        'Become a Creator',
+        'Apply to launch challenges & grow your brand',
+        const Color(0xFFD4A8FF),
+        Icons.arrow_forward_ios_rounded,
+      ),
     };
     return GestureDetector(
       onTap: () async {
@@ -782,16 +861,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     // hardcoded step locally, the level.aura_step App Setting is admin-tunable.
     // Falls back to an empty ring (not a guess) if an older cached profile
     // response predates this field.
-    final pct = ((levelProgressData?['pct'] as num?) ?? 0).toDouble().clamp(0.0, 1.0);
-    final auraToNextLevel = (levelProgressData?['auraToNextLevel'] as num?)?.toInt();
+    final pct = ((levelProgressData?['pct'] as num?) ?? 0).toDouble().clamp(
+      0.0,
+      1.0,
+    );
+    final auraToNextLevel =
+        (levelProgressData?['auraToNextLevel'] as num?)?.toInt();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: _accent.withValues(alpha: 0.35), width: 1),
+        border: Border.all(color: _accent.withValues(alpha: 0.35), width: 1),
       ),
       child: Stack(
         children: [
@@ -816,16 +898,20 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                           const Text(
                             'YOUR AURA POINTS',
                             style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 11,
-                                letterSpacing: 0.5),
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const Icon(Icons.diamond,
-                                  color: Color(0xFFD4A8FF), size: 28),
+                              const Icon(
+                                Icons.diamond,
+                                color: Color(0xFFD4A8FF),
+                                size: 28,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 _fmt(points),
@@ -864,7 +950,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                               value: pct,
                               strokeWidth: 4.5,
                               backgroundColor: _accent.withValues(alpha: 0.20),
-                              valueColor: const AlwaysStoppedAnimation<Color>(_accent),
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                _accent,
+                              ),
                             ),
                           ),
                           Container(
@@ -889,8 +977,12 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('LEVEL',
-                                    style: AppTextStyles.eyebrow.copyWith(color: AppColors.textMuted)),
+                                Text(
+                                  'LEVEL',
+                                  style: AppTextStyles.eyebrow.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
                                 Text(
                                   '$level',
                                   style: const TextStyle(
@@ -923,7 +1015,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     auraToNextLevel > 0
                         ? '$auraToNextLevel Aura to Level ${level + 1}'
                         : 'Ready to level up!',
-                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ],
@@ -955,7 +1050,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFF6B35).withValues(alpha: 0.40)),
+        border: Border.all(
+          color: const Color(0xFFFF6B35).withValues(alpha: 0.40),
+        ),
       ),
       child: Row(
         children: [
@@ -978,7 +1075,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 const Text(
                   'DAILY STREAK',
                   style: TextStyle(
-                      color: AppColors.textMuted, fontSize: 10, letterSpacing: 1),
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -998,13 +1098,17 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               Text(
                 'Best: $longest',
                 style: const TextStyle(
-                    color: AppColors.textMuted, fontSize: 12),
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 'Completed: $completed',
                 style: const TextStyle(
-                    color: AppColors.textFaint, fontSize: 11),
+                  color: AppColors.textFaint,
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -1018,10 +1122,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // leaderboard vouchers from /profile/offer-vouchers). The badge counts only
   // coupon_code rewards still `active` — the ones a tap can actually claim.
   Widget _buildRewardsRow(BuildContext context) {
-    final claimable = _rewards
-        .where((r) =>
-            r['rewardType'] == 'coupon_code' && r['status'] == 'active')
-        .length;
+    final claimable =
+        _rewards
+            .where(
+              (r) =>
+                  r['rewardType'] == 'coupon_code' && r['status'] == 'active',
+            )
+            .length;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -1052,46 +1159,63 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     color: _accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.card_giftcard_rounded,
-                      color: _accent, size: 22),
+                  child: const Icon(
+                    Icons.card_giftcard_rounded,
+                    color: _accent,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Rewards & Vouchers',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700)),
+                      Text(
+                        'Rewards & Vouchers',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       SizedBox(height: 2),
-                      Text('Coupons, bonuses & leaderboard prizes',
-                          style: TextStyle(
-                              color: AppColors.textMuted, fontSize: 12)),
+                      Text(
+                        'Coupons, bonuses & leaderboard prizes',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 if (claimable > 0) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _accent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
-                      border:
-                          Border.all(color: _accent.withValues(alpha: 0.4)),
+                      border: Border.all(color: _accent.withValues(alpha: 0.4)),
                     ),
-                    child: Text('$claimable to claim',
-                        style: const TextStyle(
-                            color: AppColors.accentLight,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700)),
+                    child: Text(
+                      '$claimable to claim',
+                      style: const TextStyle(
+                        color: AppColors.accentLight,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 6),
                 ],
-                const Icon(Icons.chevron_right_rounded,
-                    color: AppColors.textFaint, size: 22),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textFaint,
+                  size: 22,
+                ),
               ],
             ),
           ),
@@ -1106,7 +1230,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     // `referralCode` the OpenAPI spec documents (confirmed against the
     // running backend) — read both so a future spec-alignment fix on either
     // side doesn't silently re-break this.
-    final referralCode = _referral?['code'] as String? ??
+    final referralCode =
+        _referral?['code'] as String? ??
         _referral?['referralCode'] as String? ??
         '';
     if (referralCode.isEmpty) return const SizedBox.shrink();
@@ -1144,7 +1269,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     Text(
                       'Share your code. When your friend completes a challenge, you earn 50 Auras!',
                       style: TextStyle(
-                          color: AppColors.textMuted, fontSize: 11, height: 1.4),
+                        color: AppColors.textMuted,
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
                     ),
                   ],
                 ),
@@ -1170,7 +1298,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: _accent,
                         borderRadius: BorderRadius.circular(10),
@@ -1220,11 +1350,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             onTap: () {
               AnalyticsService().logShare(contentType: 'referral');
               Share.share(
-              '🎯 Join Aura Arena — copy viral challenges and earn real rewards!\n\n'
-              'Use my referral code: $referralCode\n\n'
-              '👉 $link\n\n'
-              'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
-              sharePositionOrigin: shareOrigin(context),
+                '🎯 Join Aura Arena — copy viral challenges and earn real rewards!\n\n'
+                'Use my referral code: $referralCode\n\n'
+                '👉 $link\n\n'
+                'Complete any challenge after signing up and I earn 50 bonus Auras! 🏆',
+                sharePositionOrigin: shareOrigin(context),
               );
             },
             child: Container(
@@ -1265,15 +1395,17 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               decoration: BoxDecoration(
                 color: _accent.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border:
-                    Border.all(color: _accent.withValues(alpha: 0.25)),
+                border: Border.all(color: _accent.withValues(alpha: 0.25)),
               ),
               child: const Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.people_outline_rounded,
-                        color: Color(0xFFD4A8FF), size: 16),
+                    Icon(
+                      Icons.people_outline_rounded,
+                      color: Color(0xFFD4A8FF),
+                      size: 16,
+                    ),
                     SizedBox(width: 8),
                     Text(
                       'VIEW REFERRED USERS',
@@ -1311,14 +1443,21 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(value,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800)),
-                Text(label,
-                    style: const TextStyle(
-                        color: AppColors.textFaint, fontSize: 10)),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 10,
+                  ),
+                ),
               ],
             ),
           ],
@@ -1333,7 +1472,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       isScrollControlled: true,
       backgroundColor: const Color(0xFF100A20),
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => const _ReferralsSheet(),
     );
   }
@@ -1352,10 +1492,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             const Spacer(),
             if (_videos.length > 4)
               SeeAllLink(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AllVideosScreen()),
-                ),
+                onTap:
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AllVideosScreen(),
+                      ),
+                    ),
               ),
           ],
         ),
@@ -1368,8 +1511,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: const Center(
-              child: Text('No videos yet',
-                  style: TextStyle(color: AppColors.textFaint, fontSize: 13)),
+              child: Text(
+                'No videos yet',
+                style: TextStyle(color: AppColors.textFaint, fontSize: 13),
+              ),
             ),
           )
         else
@@ -1401,19 +1546,20 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => UserVideoDetailScreen(
-                        videoNumber: i + 1,
-                        challengeTitle:
-                            (data['challengeTitle'] as String?) ?? '',
-                        auraPoints: auraPoints,
-                        videoUrl: videoUrl,
-                        status: status,
-                        aiScore: aiScore,
-                        aiReason: aiReason,
-                        reviewedByAI: reviewedByAI,
-                        videoId: videoId,
-                        mirrored: mirrored,
-                      ),
+                      builder:
+                          (_) => UserVideoDetailScreen(
+                            videoNumber: i + 1,
+                            challengeTitle:
+                                (data['challengeTitle'] as String?) ?? '',
+                            auraPoints: auraPoints,
+                            videoUrl: videoUrl,
+                            status: status,
+                            aiScore: aiScore,
+                            aiReason: aiReason,
+                            reviewedByAI: reviewedByAI,
+                            videoId: videoId,
+                            mirrored: mirrored,
+                          ),
                     ),
                   );
                   if (result == 'deleted') _loadAll();
@@ -1424,17 +1570,20 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     fit: StackFit.expand,
                     children: [
                       VideoThumbnailWidget(
-                          videoUrl: videoUrl,
-                          thumbnailUrl: thumbnailUrl,
-                          processingStatus: processingStatus,
-                          fit: BoxFit.cover,
-                          mirrored: mirrored),
+                        videoUrl: videoUrl,
+                        thumbnailUrl: thumbnailUrl,
+                        processingStatus: processingStatus,
+                        fit: BoxFit.cover,
+                        mirrored: mirrored,
+                      ),
                       Positioned(
                         top: 6,
                         right: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 3),
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: statusColor.withValues(alpha: 0.90),
                             borderRadius: BorderRadius.circular(6),
@@ -1442,9 +1591,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                           child: Text(
                             statusLabel,
                             style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700),
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
@@ -1454,7 +1604,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                           left: 6,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 3),
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.black.withValues(alpha: 0.65),
                               borderRadius: BorderRadius.circular(6),
@@ -1462,15 +1614,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.diamond,
-                                    color: Color(0xFFD4A8FF), size: 10),
+                                const Icon(
+                                  Icons.diamond,
+                                  color: Color(0xFFD4A8FF),
+                                  size: 10,
+                                ),
                                 const SizedBox(width: 3),
                                 Text(
                                   '+$auraPoints',
                                   style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700),
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ],
                             ),
@@ -1489,19 +1645,27 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'approved':  return Colors.green;
-      case 'rejected':  return Colors.red;
-      case 'ai_error':  return Colors.orange;
-      default:          return _accent;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      case 'ai_error':
+        return Colors.orange;
+      default:
+        return _accent;
     }
   }
 
   String _statusLabel(String status) {
     switch (status) {
-      case 'approved':  return 'Approved';
-      case 'rejected':  return 'Rejected';
-      case 'ai_error':  return 'Review';
-      default:          return 'Scoring...';
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      case 'ai_error':
+        return 'Review';
+      default:
+        return 'Scoring...';
     }
   }
 
@@ -1516,12 +1680,19 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.wifi_off_rounded, color: Colors.white38, size: 40),
+                const Icon(
+                  Icons.wifi_off_rounded,
+                  color: Colors.white38,
+                  size: 40,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 15),
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 15,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
@@ -1536,13 +1707,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       );
     }
     if (_loading || _uid == null) {
-      return const Scaffold(
-        backgroundColor: _bg,
-        body: ScreenSkeleton(),
-      );
+      return const Scaffold(backgroundColor: _bg, body: ScreenSkeleton());
     }
 
-    final serverRewards = (_profile['auraPoints'] as num?)?.toInt() ??
+    final serverRewards =
+        (_profile['auraPoints'] as num?)?.toInt() ??
         (_profile['totalRewards'] as num?)?.toInt() ??
         0;
     // Server-authoritative — the backend now debits Aura on video delete
@@ -1551,26 +1720,32 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     // Server-computed and authoritative — do not recompute locally.
     final level = (_profile['level'] as num?)?.toInt() ?? 1;
     final tierName = _profile['tier'] as String?;
-    final levelProgressData = _profile['levelProgress'] as Map<String, dynamic>?;
+    final levelProgressData =
+        _profile['levelProgress'] as Map<String, dynamic>?;
 
     return Scaffold(
       backgroundColor: _bg,
       // Inside MainShell the shell owns the one shared bottom nav, and there
       // is no route underneath this screen to pop back to.
-      bottomNavigationBar: widget.embeddedInShell
-          ? null
-          : const AppBottomNav(activeTab: AppNavTab.profile),
+      bottomNavigationBar:
+          widget.embeddedInShell
+              ? null
+              : const AppBottomNav(activeTab: AppNavTab.profile),
       appBar: AppBar(
         backgroundColor: _bg,
         elevation: 0,
         automaticallyImplyLeading: false,
-        leading: widget.embeddedInShell
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
+        leading:
+            widget.embeddedInShell
+                ? null
+                : IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
         title: SizedBox(
           height: 22,
           child: Image.asset(
@@ -1581,12 +1756,16 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined,
-                color: Colors.white, size: 22),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: Colors.white,
+              size: 22,
             ),
+            onPressed:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
           ),
         ],
       ),
@@ -1611,12 +1790,21 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ] else ...[
                 _buildBecomeCreatorBanner(context),
               ],
-              _buildAuraPointsCard(totalRewards, level, tierName, levelProgressData),
+              _buildAuraPointsCard(
+                totalRewards,
+                level,
+                tierName,
+                levelProgressData,
+              ),
               // Streak card disabled for now — see _buildStreakCard.
               // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
               ValueListenableBuilder<bool>(
                 valueListenable: AppConfigService.instance.couponsEnabled,
-                builder: (context, on, _) => on ? _buildRewardsRow(context) : const SizedBox.shrink(),
+                builder:
+                    (context, on, _) =>
+                        on
+                            ? _buildRewardsRow(context)
+                            : const SizedBox.shrink(),
               ),
               const SizedBox(height: 8),
               _buildReferralCard(context),
@@ -1625,12 +1813,15 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 // account-wide unlock badges from /profile/achievements
                 // (that endpoint's shape — type/title/auraEarned — doesn't
                 // even carry a challenge to share).
-                cards: _videos
-                    .map(_normaliseSubmission)
-                    .where((v) => v['status'] == 'approved')
-                    .toList(),
-                username: _profile['profileName'] as String? ??
-                    _profile['username'] as String? ?? '',
+                cards:
+                    _videos
+                        .map(_normaliseSubmission)
+                        .where((v) => v['status'] == 'approved')
+                        .toList(),
+                username:
+                    _profile['profileName'] as String? ??
+                    _profile['username'] as String? ??
+                    '',
               ),
               _buildMyVideosSection(context),
               _SavedChallengesGrid(challenges: _savedChallenges),
@@ -1668,11 +1859,13 @@ class _SavedChallengesGrid extends StatelessWidget {
             ),
             const Spacer(),
             SeeAllLink(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const SavedChallengesScreen()),
-              ),
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SavedChallengesScreen(),
+                    ),
+                  ),
             ),
           ],
         ),
@@ -1684,53 +1877,55 @@ class _SavedChallengesGrid extends StatelessWidget {
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
           childAspectRatio: 0.85,
-          children: challenges.map((c) {
-            final videoUrl = c['videoUrl'] as String? ?? '';
-            final thumbnailUrl = c['thumbnailUrl'] as String?;
-            final processingStatus = c['processingStatus'] as String?;
-            final title    = c['title']    as String? ?? '';
-            return ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  VideoThumbnailWidget(
-                      videoUrl: videoUrl,
-                      thumbnailUrl: thumbnailUrl,
-                      processingStatus: processingStatus,
-                      fit: BoxFit.cover),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            Colors.black.withValues(alpha: 0.78),
-                            Colors.transparent,
-                          ],
+          children:
+              challenges.map((c) {
+                final videoUrl = c['videoUrl'] as String? ?? '';
+                final thumbnailUrl = c['thumbnailUrl'] as String?;
+                final processingStatus = c['processingStatus'] as String?;
+                final title = c['title'] as String? ?? '';
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      VideoThumbnailWidget(
+                        videoUrl: videoUrl,
+                        thumbnailUrl: thumbnailUrl,
+                        processingStatus: processingStatus,
+                        fit: BoxFit.cover,
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                Colors.black.withValues(alpha: 0.78),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }).toList(),
+                );
+              }).toList(),
         ),
         const SizedBox(height: 24),
       ],
@@ -1772,145 +1967,182 @@ class _ReferralsSheetState extends State<_ReferralsSheet> {
       expand: false,
       initialChildSize: 0.55,
       maxChildSize: 0.90,
-      builder: (_, ctrl) => Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2)),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text('Referred Users',
-                style: TextStyle(
+      builder:
+          (_, ctrl) => Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  'Referred Users',
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 17,
-                    fontWeight: FontWeight.w800)),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                        color: Color(0xFF7B2CBF)))
-                : _referrals.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.people_outline_rounded,
-                                color: Colors.white24, size: 44),
-                            SizedBox(height: 10),
-                            Text('No referrals yet',
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Expanded(
+                child:
+                    _loading
+                        ? const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF7B2CBF),
+                          ),
+                        )
+                        : _referrals.isEmpty
+                        ? const Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.people_outline_rounded,
+                                color: Colors.white24,
+                                size: 44,
+                              ),
+                              SizedBox(height: 10),
+                              Text(
+                                'No referrals yet',
                                 style: TextStyle(
-                                    color: AppColors.textFaint, fontSize: 14)),
-                            SizedBox(height: 4),
-                            Text('Share your code to invite friends',
+                                  color: AppColors.textFaint,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Share your code to invite friends',
                                 style: TextStyle(
-                                    color: Colors.white24, fontSize: 12)),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: ctrl,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                        itemCount: _referrals.length,
-                        itemBuilder: (context, i) {
-                          final r = _referrals[i];
-                          final name = r['displayName'] as String? ??
-                              r['name'] as String? ??
-                              'User';
-                          final username = r['username'] as String? ?? '';
-                          final avatar = r['avatar'] as String? ?? '';
-                          final aura = (r['auraAwarded'] as num? ??
-                                  r['auraPoints'] as num?)
-                              ?.toInt();
-                          final joinedRaw = r['joinDate'] as String? ??
-                              r['createdAt'] as String?;
-                          String joined = '';
-                          if (joinedRaw != null) {
-                            try {
-                              final dt =
-                                  DateTime.parse(joinedRaw).toLocal();
-                              joined =
-                                  '${dt.day}/${dt.month}/${dt.year}';
-                            } catch (_) {}
-                          }
+                                  color: Colors.white24,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        : ListView.builder(
+                          controller: ctrl,
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                          itemCount: _referrals.length,
+                          itemBuilder: (context, i) {
+                            final r = _referrals[i];
+                            final name =
+                                r['displayName'] as String? ??
+                                r['name'] as String? ??
+                                'User';
+                            final username = r['username'] as String? ?? '';
+                            final avatar = r['avatar'] as String? ?? '';
+                            final aura =
+                                (r['auraAwarded'] as num? ??
+                                        r['auraPoints'] as num?)
+                                    ?.toInt();
+                            final joinedRaw =
+                                r['joinDate'] as String? ??
+                                r['createdAt'] as String?;
+                            String joined = '';
+                            if (joinedRaw != null) {
+                              try {
+                                final dt = DateTime.parse(joinedRaw).toLocal();
+                                joined = '${dt.day}/${dt.month}/${dt.year}';
+                              } catch (_) {}
+                            }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0D0D1A),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: Colors.white
-                                      .withValues(alpha: 0.08)),
-                            ),
-                            child: Row(
-                              children: [
-                                AvatarWidget(
-                                  photoUrl: avatar,
-                                  fallbackText: name.isNotEmpty
-                                      ? name[0].toUpperCase()
-                                      : 'U',
-                                  radius: 20,
-                                  backgroundColor:
-                                      const Color(0xFF7B2CBF).withValues(alpha: 0.20),
-                                  textStyle: const TextStyle(
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0D0D1A),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  AvatarWidget(
+                                    photoUrl: avatar,
+                                    fallbackText:
+                                        name.isNotEmpty
+                                            ? name[0].toUpperCase()
+                                            : 'U',
+                                    radius: 20,
+                                    backgroundColor: const Color(
+                                      0xFF7B2CBF,
+                                    ).withValues(alpha: 0.20),
+                                    textStyle: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 14,
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(name,
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600)),
-                                      if (username.isNotEmpty)
-                                        Text('@$username',
-                                            style: const TextStyle(
-                                                color: AppColors.textFaint,
-                                                fontSize: 11)),
-                                      if (joined.isNotEmpty)
-                                        Text('Joined $joined',
-                                            style: const TextStyle(
-                                                color: Colors.white24,
-                                                fontSize: 10)),
-                                    ],
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                                if (aura != null)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.diamond,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (username.isNotEmpty)
+                                          Text(
+                                            '@$username',
+                                            style: const TextStyle(
+                                              color: AppColors.textFaint,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        if (joined.isNotEmpty)
+                                          Text(
+                                            'Joined $joined',
+                                            style: const TextStyle(
+                                              color: Colors.white24,
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (aura != null)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.diamond,
                                           color: Color(0xFFD4A8FF),
-                                          size: 12),
-                                      const SizedBox(width: 3),
-                                      Text('+$aura',
+                                          size: 12,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '+$aura',
                                           style: const TextStyle(
-                                              color: Color(0xFFD4A8FF),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700)),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                                            color: Color(0xFFD4A8FF),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }
