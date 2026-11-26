@@ -50,7 +50,7 @@ void main() {
     final log = <String>[];
     serveLostThenAlreadyClaimed(log);
     final flow = flowWith((id) => CreatorChallengesService()
-        .createDraft(title: 'talk', category: 'cat1', difficulty: 'Medium', videoId: id));
+        .createDraft(title: 'talk', category: 'cat1', videoId: id));
     final video = File('/tmp/talk.mp4');
 
     await expectLater(flow.run(video), throwsA(anything));
@@ -62,7 +62,7 @@ void main() {
     final log = <String>[];
     serveLostThenAlreadyClaimed(log);
     final flow = flowWith((id) => ChallengesService()
-        .createChallenge(title: 'rec', description: 'd', categoryId: 'cat1', difficulty: 'Medium', videoId: id));
+        .createChallenge(title: 'rec', description: 'd', categoryId: 'cat1', videoId: id));
     final video = File('/tmp/rec.mp4');
 
     await expectLater(flow.run(video), throwsA(anything));
@@ -77,11 +77,11 @@ void main() {
         ));
     await expectLater(
       ChallengesService()
-          .createChallenge(title: 't', description: 'd', categoryId: 'x', difficulty: 'Medium', videoId: 'v'),
+          .createChallenge(title: 't', description: 'd', categoryId: 'x', videoId: 'v'),
       throwsA(predicate((e) => e.toString().contains('Category not found.'))),
     );
     await expectLater(
-      CreatorChallengesService().createDraft(title: 't', category: 'x', difficulty: 'Medium', videoId: 'v'),
+      CreatorChallengesService().createDraft(title: 't', category: 'x', videoId: 'v'),
       throwsA(predicate((e) => e.toString().contains('Category not found.'))),
     );
   });

@@ -80,7 +80,6 @@ class CreatorChallengesService {
   Future<Map<String, dynamic>> createDraft({
     required String title,
     required String category,
-    required String difficulty,
     required String videoId,
     String? description,
     String? thumbnailKey,
@@ -91,7 +90,6 @@ class CreatorChallengesService {
       {
         'title': title,
         'category': category,
-        'difficulty': difficulty,
         'videoId': videoId,
         if (description != null && description.isNotEmpty)
           'description': description,
@@ -125,7 +123,6 @@ class CreatorChallengesService {
     String id, {
     String? title,
     String? category,
-    String? difficulty,
     String? description,
     String? thumbnailKey,
     Map<String, dynamic>? challengeInstructions,
@@ -133,7 +130,6 @@ class CreatorChallengesService {
     final res = await _client.put('/creator/challenges/$id', {
       if (title != null) 'title': title,
       if (category != null) 'category': category,
-      if (difficulty != null) 'difficulty': difficulty,
       if (description != null) 'description': description,
       if (thumbnailKey != null) 'thumbnailKey': thumbnailKey,
       if (challengeInstructions != null)
@@ -621,7 +617,6 @@ Map<String, dynamic> normaliseCreatorChallenge(Map<String, dynamic> c) {
     'description': c['description'] as String? ?? '',
     'categoryId': categoryId,
     'categoryName': categoryName,
-    'difficulty': c['difficulty'] as String? ?? '',
     'videoUrl': c['videoUrl'] as String? ?? '',
     'submissionStatus': c['submissionStatus'] as String? ?? 'DRAFT',
     'auraScore': (c['auraScore'] as num?)?.toInt(),

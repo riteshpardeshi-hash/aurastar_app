@@ -181,12 +181,11 @@ class _CreatorRequestTab extends StatelessWidget {
             itemCount: docs.length,
             itemBuilder: (context, i) {
               final d = docs[i].data() as Map<String, dynamic>;
-              final difficulty = d['difficulty'] as String? ?? 'Medium';
               return _AdminCard(
                 title: d['title'] as String? ?? 'Challenge',
                 subtitle: 'Creator: ${d['creatorId']?.toString().substring(0, 8) ?? '—'}…',
-                badge: difficulty.toUpperCase(),
-                badgeColor: _difficultyColor(difficulty),
+                badge: 'PENDING',
+                badgeColor: Colors.amber,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -234,7 +233,6 @@ class _LiveChallengesTab extends StatelessWidget {
             itemBuilder: (context, i) {
               final d              = docs[i].data() as Map<String, dynamic>;
               final title          = d['title']         as String? ?? 'Challenge';
-              final difficulty     = d['difficulty']    as String? ?? 'Medium';
               final auraPoints     = (d['auraPoints']   as num?)?.toInt() ?? 100;
               final category       = d['category']      as String? ?? '';
               final creatorId      = d['creatorId']     as String? ?? '';
@@ -244,7 +242,6 @@ class _LiveChallengesTab extends StatelessWidget {
               return _LiveChallengeCard(
                 challengeId:    challengeId,
                 title:          title,
-                difficulty:     difficulty,
                 auraPoints:     auraPoints,
                 category:       category,
                 creatorId:      creatorId,
@@ -263,7 +260,6 @@ class _LiveChallengesTab extends StatelessWidget {
 class _LiveChallengeCard extends StatelessWidget {
   final String                  challengeId;
   final String                  title;
-  final String                  difficulty;
   final int                     auraPoints;
   final String                  category;
   final String                  creatorId;
@@ -272,7 +268,6 @@ class _LiveChallengeCard extends StatelessWidget {
   const _LiveChallengeCard({
     required this.challengeId,
     required this.title,
-    required this.difficulty,
     required this.auraPoints,
     required this.category,
     required this.creatorId,
@@ -281,8 +276,6 @@ class _LiveChallengeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final diffColor = _difficultyColor(difficulty);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -304,23 +297,6 @@ class _LiveChallengeCard extends StatelessWidget {
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
-                        fontWeight: FontWeight.w700)),
-              ),
-              const SizedBox(width: 8),
-              // Difficulty badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: diffColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: diffColor.withValues(alpha: 0.45)),
-                ),
-                child: Text(difficulty,
-                    style: TextStyle(
-                        color: diffColor,
-                        fontSize: 10,
                         fontWeight: FontWeight.w700)),
               ),
             ],
@@ -443,7 +419,6 @@ class _LiveChallengeCard extends StatelessWidget {
         challengeId:  challengeId,
         title:        title,
         currentAura:  auraPoints,
-        difficulty:   difficulty,
         creatorId:    creatorId,
       ),
     );
@@ -456,14 +431,12 @@ class _AuraEditSheet extends StatefulWidget {
   final String challengeId;
   final String title;
   final int    currentAura;
-  final String difficulty;
   final String creatorId;
 
   const _AuraEditSheet({
     required this.challengeId,
     required this.title,
     required this.currentAura,
-    required this.difficulty,
     required this.creatorId,
   });
 
@@ -474,24 +447,15 @@ class _AuraEditSheet extends StatefulWidget {
 class _AuraEditSheetState extends State<_AuraEditSheet> {
   static const _accent = Color(0xFF7B2CBF);
 
-  static const _difficulties = [
-    ('Easy',   Color(0xFF22C55E)),
-    ('Medium', Color(0xFFF59E0B)),
-    ('Hard',   Color(0xFFEF4444)),
-    ('Expert', Color(0xFF9333EA)),
-  ];
-
   static const _quickAura = [50, 75, 100, 125, 150, 175, 200];
 
   late final TextEditingController _auraCtrl;
-  late String _difficulty;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
     _auraCtrl   = TextEditingController(text: '${widget.currentAura}');
-    _difficulty = widget.difficulty;
   }
 
   @override
@@ -501,8 +465,7 @@ class _AuraEditSheetState extends State<_AuraEditSheet> {
   }
 
   bool get _changed =>
-      int.tryParse(_auraCtrl.text.trim()) != widget.currentAura ||
-      _difficulty != widget.difficulty;
+      int.tryParse(_auraCtrl.text.trim()) != widget.currentAura;
 
   Future<void> _save() async {
     final newAura = int.tryParse(_auraCtrl.text.trim());
@@ -529,7 +492,6 @@ class _AuraEditSheetState extends State<_AuraEditSheet> {
       // Update challenge
       batch.update(db.collection('challenges').doc(widget.challengeId), {
         'auraPoints': newAura,
-        'difficulty': _difficulty,
         'auraUpdatedAt': Timestamp.now(),
         'auraUpdatedBy': uid,
       });
@@ -693,47 +655,6 @@ class _AuraEditSheetState extends State<_AuraEditSheet> {
             ),
 
             const SizedBox(height: 22),
-
-            // Difficulty
-            const _Label('Difficulty'),
-            const SizedBox(height: 10),
-            Row(
-              children: _difficulties.map((pair) {
-                final name  = pair.$1;
-                final color = pair.$2;
-                final sel   = _difficulty == name;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _difficulty = name),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: sel
-                            ? color.withValues(alpha: 0.18)
-                            : Colors.white.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: sel
-                              ? color.withValues(alpha: 0.65)
-                              : Colors.white.withValues(alpha: 0.08),
-                          width: sel ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Text(name,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: sel ? color : Colors.white24,
-                              fontSize: 11,
-                              fontWeight: sel
-                                  ? FontWeight.w700
-                                  : FontWeight.w400)),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
 
             const SizedBox(height: 30),
 
@@ -899,13 +820,6 @@ class _InfoBadge extends StatelessWidget {
         ],
       );
 }
-
-Color _difficultyColor(String d) => switch (d) {
-      'Easy'   => const Color(0xFF22C55E),
-      'Hard'   => const Color(0xFFEF4444),
-      'Expert' => const Color(0xFF9333EA),
-      _        => const Color(0xFFF59E0B),
-    };
 
 Widget _empty(String msg, IconData icon) => Center(
       child: Column(

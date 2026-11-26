@@ -26,28 +26,12 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
 
   bool _submitting = false;
 
-  // Difficulty → default Aura
-  static const _difficultyAura = {
-    'Easy':   50,
-    'Medium': 100,
-    'Hard':   150,
-    'Expert': 200,
-  };
-
-  static const _difficultyColor = {
-    'Easy':   Color(0xFF22C55E),
-    'Medium': Color(0xFFF59E0B),
-    'Hard':   Color(0xFFEF4444),
-    'Expert': Color(0xFF9333EA),
-  };
-
   @override
   void initState() {
     super.initState();
     final data       = widget.request.data() as Map<String, dynamic>;
-    final difficulty = data['difficulty'] as String? ?? 'Medium';
     final category   = data['category'] as String? ?? '';
-    _auraCtrl.text     = '${_difficultyAura[difficulty] ?? 100}';
+    _auraCtrl.text     = '100';
     _categoryCtrl.text = category;
   }
 
@@ -135,7 +119,6 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
         'creatorId':    data['creatorId'] ?? '',
         'status':       'approved',
         'auraPoints':   auraPoints,
-        'difficulty':   data['difficulty'] ?? 'Medium',
         'category':     _categoryCtrl.text.trim().isEmpty
                           ? (data['category'] ?? '')
                           : _categoryCtrl.text.trim(),
@@ -212,11 +195,9 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
   Widget build(BuildContext context) {
     final data        = widget.request.data() as Map<String, dynamic>;
     final title       = data['title'] as String? ?? '';
-    final difficulty  = data['difficulty'] as String? ?? '';
     final videoUrl    = data['videoUrl'] as String? ?? '';
     final steps       = (data['instructionSteps'] as List?)?.cast<String>() ?? [];
     final checklist   = (data['scoringChecklist']  as List?)?.cast<String>() ?? [];
-    final diffColor   = _difficultyColor[difficulty] ?? Colors.white38;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -248,7 +229,7 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
             ),
             const SizedBox(height: 18),
 
-            // ── Title + difficulty ─────────────────────────────────────
+            // ── Title ─────────────────────────────────────
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -264,26 +245,6 @@ class _CreatorReviewScreenState extends State<CreatorReviewScreen> {
                     ),
                   ),
                 ),
-                if (difficulty.isNotEmpty) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: diffColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: diffColor.withValues(alpha: 0.50)),
-                    ),
-                    child: Text(
-                      difficulty,
-                      style: TextStyle(
-                          color: diffColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ],
               ],
             ),
             const SizedBox(height: 16),

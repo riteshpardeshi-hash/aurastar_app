@@ -39,7 +39,7 @@ void main() {
     Map<String, dynamic>? created;
     Object? error;
     CreatorChallengesService()
-        .createDraft(title: 'test create', category: 'cat1', difficulty: 'Medium', videoId: 'v1')
+        .createDraft(title: 'test create', category: 'cat1', videoId: 'v1')
         .then((c) => created = c)
         .catchError((Object e) {
       error = e;
@@ -65,7 +65,7 @@ void main() {
     Map<String, dynamic>? created;
     Object? error;
     ChallengesService()
-        .createChallenge(title: 'recorded', description: 'd', categoryId: 'cat1', difficulty: 'Medium', videoId: 'v2')
+        .createChallenge(title: 'recorded', description: 'd', categoryId: 'cat1', videoId: 'v2')
         .then((c) => created = c)
         .catchError((Object e) {
       error = e;

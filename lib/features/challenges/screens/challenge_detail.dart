@@ -97,7 +97,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
 
   // For the stats strip and owner chip under the video (client, 26 Nov 2026:
   // the "immersive" redesign, option A).
-  String _difficulty = '';
   String _ownerAvatar = '';
   int _takenCount = 0;
   DateTime? _endDate;
@@ -169,7 +168,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       _ownerId = c['creatorId'] as String?;
       _ownerName = c['creatorName'] as String? ?? '';
       _videoId = c['videoId'] as String? ?? '';
-      _difficulty = c['difficulty'] as String? ?? '';
       _ownerAvatar = c['creatorAvatar'] as String? ?? '';
       _takenCount = c['submissionsCount'] as int? ?? 0;
       _endDate = DateTime.tryParse('${c['endDate'] ?? ''}')?.toLocal();
@@ -649,20 +647,35 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
             // Client, 26 Nov 2026 (option A, "immersive"): the video runs edge
             // to edge under the status bar and fades into the page, with the
             // title on it; a stats strip and the instructions follow.
+            // Client, 26 Nov 2026: with short instructions the page left a big
+            // empty gap above the bottom bar. The video now grows into any
+            // spare height, so the stats and text sit just above the bar; long
+            // text still scrolls (the video then keeps its normal height).
             Positioned.fill(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildVideoSection(),
-                    _buildStatsStrip(),
-                    _buildDetailsSection(),
-                    // Space for the sticky bar
-                    SizedBox(
-                      height: MediaQuery.of(context).padding.bottom + 110,
+              child: LayoutBuilder(
+                builder:
+                    (context, viewport) => SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: viewport.maxHeight,
+                        ),
+                        child: IntrinsicHeight(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _buildVideoSection()),
+                              _buildStatsStrip(),
+                              _buildDetailsSection(),
+                              // Space for the sticky bar
+                              SizedBox(
+                                height:
+                                    MediaQuery.of(context).padding.bottom + 104,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
               ),
             ),
 
@@ -1139,8 +1152,9 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     final size = MediaQuery.of(context).size;
     final height =
         (size.width * 1.22).clamp(320.0, size.height * 0.62).roundToDouble();
-    return SizedBox(
-      height: height,
+    // At least this tall; taller when the page has spare height (see build).
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height),
       child: GestureDetector(
         onTap: _initAndPlayVideo,
         child: Stack(
@@ -1221,7 +1235,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                       ),
             ),
 
-            // Owner + difficulty chips and the title, on the fade.
+            // Owner chip and the title, on the fade.
             Positioned(
               left: 20,
               right: 20,
@@ -1230,15 +1244,8 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _ownerChip(),
-                      if (_difficulty.isNotEmpty)
-                        _chip(child: Text(_difficulty)),
-                    ],
-                  ),
+                  // Client, 26 Nov 2026: no difficulty chip, just who posted it.
+                  _ownerChip(),
                   const SizedBox(height: 10),
                   Text(
                     widget.title,

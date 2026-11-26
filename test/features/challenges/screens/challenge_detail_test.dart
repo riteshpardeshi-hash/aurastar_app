@@ -70,7 +70,8 @@ void main() {
           200,
         );
       }
-      if (request.method == 'GET' && request.url.path.endsWith('/brands/brand-2')) {
+      if (request.method == 'GET' &&
+          request.url.path.endsWith('/brands/brand-2')) {
         return http.Response(
           jsonEncode({
             'status': 'success',
@@ -99,10 +100,11 @@ void main() {
                 'sourceType': 'Brand',
                 'creatorId': {'_id': 'brand-1', 'displayName': 'FitNest'},
                 'status': 'approved',
-                'endDate': DateTime.now()
-                    .add(const Duration(days: 5, hours: 2))
-                    .toUtc()
-                    .toIso8601String(),
+                'endDate':
+                    DateTime.now()
+                        .add(const Duration(days: 5, hours: 2))
+                        .toUtc()
+                        .toIso8601String(),
               },
             },
           }),
@@ -189,8 +191,9 @@ void main() {
         );
       }
       if (request.method == 'GET' &&
-          request.url.path
-              .endsWith('/challenges/challenge-participated/submissions/me')) {
+          request.url.path.endsWith(
+            '/challenges/challenge-participated/submissions/me',
+          )) {
         return http.Response(
           jsonEncode({
             'status': 'success',
@@ -245,44 +248,48 @@ void main() {
   });
 
   testWidgets(
-      'a freshly-fetched videoUrl replaces a stale one the caller already had',
-      (tester) async {
-    // This screen's Stack/Positioned layout is tuned for a phone aspect
-    // ratio; the default 800x600 test surface makes an unrelated overlay
-    // cover the video thumbnail's hit-test area.
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'a freshly-fetched videoUrl replaces a stale one the caller already had',
+    (tester) async {
+      // This screen's Stack/Positioned layout is tuned for a phone aspect
+      // ratio; the default 800x600 test surface makes an unrelated overlay
+      // cover the video thumbnail's hit-test area.
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: staleVideoUrl,
-        challengeId: 'challenge-1',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Test Challenge',
+            instructions: '',
+            videoUrl: staleVideoUrl,
+            challengeId: 'challenge-1',
+          ),
+        ),
+      );
 
-    // Let _fetchChallengeData's GET resolve and setState apply.
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      // Let _fetchChallengeData's GET resolve and setState apply.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-    for (var i = 0; i < 4; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(
-      fakeVideoPlayer.lastUri,
-      freshVideoUrl,
-      reason: 'the on-screen preview (and, identically, the videoUrl handed '
-          'to CameraScreen\'s ghost overlay) must use the freshly-fetched '
-          'videoUrl, not the possibly-expired one the calling list screen '
-          'already had',
-    );
-  });
+      expect(
+        fakeVideoPlayer.lastUri,
+        freshVideoUrl,
+        reason:
+            'the on-screen preview (and, identically, the videoUrl handed '
+            'to CameraScreen\'s ghost overlay) must use the freshly-fetched '
+            'videoUrl, not the possibly-expired one the calling list screen '
+            'already had',
+      );
+    },
+  );
 
   // Regression coverage: _isPaused used to be hardcoded to `false`, so a
   // challenge whose backend `status` isn't `approved` (POST
@@ -292,73 +299,87 @@ void main() {
   // uploading it, when PreviewScreen surfaced the server's 400. This screen
   // must know up front instead.
   testWidgets(
-      'a non-approved challenge shows "Submissions Paused" instead of the '
-      'take-challenge CTA', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'a non-approved challenge shows "Submissions Paused" instead of the '
+    'take-challenge CTA',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Pending Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-pending',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Pending Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-pending',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(find.text('Submissions Paused'), findsOneWidget);
-    expect(find.text('Take this Challenge'), findsNothing);
-  });
+      expect(find.text('Submissions Paused'), findsOneWidget);
+      expect(find.text('Take this Challenge'), findsNothing);
+    },
+  );
 
   // A creator can't take part in their own challenge — the backend 403s the
   // submission — so the owner must not be offered the take-challenge CTA.
-  testWidgets('the owner sees "Your challenge" instead of the take-challenge CTA',
-      (tester) async {
+  testWidgets(
+    'the owner sees "Your challenge" instead of the take-challenge CTA',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'My Own Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-own',
+          ),
+        ),
+      );
+
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(find.byKey(const Key('own-challenge-cta')), findsOneWidget);
+      expect(find.text('Take this Challenge'), findsNothing);
+      expect(
+        find.byKey(const Key('challenge-safety-menu')),
+        findsNothing,
+        reason: 'no report/block menu on your own challenge',
+      );
+    },
+  );
+
+  testWidgets("someone else's challenge keeps the report/block menu", (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'My Own Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-own',
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ChallengeDetail(
+          title: 'Test Challenge',
+          instructions: '',
+          videoUrl: freshVideoUrl,
+          challengeId: 'challenge-1',
+        ),
       ),
-    ));
-
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
-
-    expect(find.byKey(const Key('own-challenge-cta')), findsOneWidget);
-    expect(find.text('Take this Challenge'), findsNothing);
-    expect(find.byKey(const Key('challenge-safety-menu')), findsNothing,
-        reason: 'no report/block menu on your own challenge');
-  });
-
-  testWidgets("someone else's challenge keeps the report/block menu",
-      (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-1',
-      ),
-    ));
+    );
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
@@ -375,55 +396,61 @@ void main() {
   // was ever known client-side. The CTA must not appear until the status
   // check has actually resolved.
   testWidgets(
-      'the take-challenge CTA is not shown before the status check resolves',
-      (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'the take-challenge CTA is not shown before the status check resolves',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Pending Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-pending',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Pending Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-pending',
+          ),
+        ),
+      );
 
-    // Single frame, before the mocked GET has resolved.
-    await tester.pump();
+      // Single frame, before the mocked GET has resolved.
+      await tester.pump();
 
-    expect(find.text('Take this Challenge'), findsNothing);
-  });
+      expect(find.text('Take this Challenge'), findsNothing);
+    },
+  );
 
   // Regression coverage: fetchChallenge() swallows its own errors and
   // returns null (see ChallengesService), so a transient network failure
   // used to leave _isPaused at its `false` default forever — silently
   // failing open instead of blocking the CTA.
   testWidgets(
-      'a failed status check does not fall back to the take-challenge CTA',
-      (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'a failed status check does not fall back to the take-challenge CTA',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Unreachable Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-unreachable',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Unreachable Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-unreachable',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(find.text('Take this Challenge'), findsNothing);
-  });
+      expect(find.text('Take this Challenge'), findsNothing);
+    },
+  );
 
   // Regression coverage: without `mixWithOthers: true`, ExoPlayer/
   // AVAudioSession request *exclusive* audio focus, and their default
@@ -436,36 +463,44 @@ void main() {
   // not long-form content, so mixing with (rather than interrupting) other
   // audio is the right trade-off.
   testWidgets(
-      'the reference video player opts in to mixWithOthers so a transient '
-      'system sound cannot auto-pause it', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'the reference video player opts in to mixWithOthers so a transient '
+    'system sound cannot auto-pause it',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-1',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Test Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-1',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-    for (var i = 0; i < 4; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(fakeVideoPlayer.lastMixWithOthers, isTrue,
-        reason: 'without this, the OS is free to auto-pause the reference '
+      expect(
+        fakeVideoPlayer.lastMixWithOthers,
+        isTrue,
+        reason:
+            'without this, the OS is free to auto-pause the reference '
             'video for any transient system sound, with no way for the app '
-            'to auto-resume it afterward');
-  });
+            'to auto-resume it afterward',
+      );
+    },
+  );
 
   // Regression coverage for "video playback gets stuck with a loading
   // spinner and does not play smoothly": the reference clip streams over the
@@ -474,81 +509,102 @@ void main() {
   // its own — it just silently holds the last decoded frame, which reads as
   // frozen/broken rather than "buffering, will resume."
   testWidgets(
-      'shows a buffering indicator over the fullscreen player while its '
-      'stream stalls, and hides it once buffering ends', (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'shows a buffering indicator over the fullscreen player while its '
+    'stream stalls, and hides it once buffering ends',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-1',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Test Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-1',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded));
-    for (var i = 0; i < 4; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      await tester.tap(find.byIcon(Icons.play_arrow_rounded));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(find.byType(CircularProgressIndicator), findsNothing,
-        reason: 'playback just started cleanly, nothing should be buffering '
-            'yet');
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason:
+            'playback just started cleanly, nothing should be buffering '
+            'yet',
+      );
 
-    fakeVideoPlayer.setBuffering(true);
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pump(const Duration(milliseconds: 10));
+      fakeVideoPlayer.setBuffering(true);
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pump(const Duration(milliseconds: 10));
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget,
-        reason: 'a mid-playback stall must show a buffering indicator, not '
-            'silently hold the last frame with no explanation');
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsOneWidget,
+        reason:
+            'a mid-playback stall must show a buffering indicator, not '
+            'silently hold the last frame with no explanation',
+      );
 
-    fakeVideoPlayer.setBuffering(false);
-    await tester.pump(const Duration(milliseconds: 10));
-    await tester.pump(const Duration(milliseconds: 10));
+      fakeVideoPlayer.setBuffering(false);
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.pump(const Duration(milliseconds: 10));
 
-    expect(find.byType(CircularProgressIndicator), findsNothing,
-        reason: 'the indicator must disappear again once buffering ends');
-  });
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason: 'the indicator must disappear again once buffering ends',
+      );
+    },
+  );
 
   // Coverage for prefetching: the reference video's player should be built
   // and initialized in the background as soon as the screen loads, not
   // deferred until the user taps the play button — otherwise tapping play
   // still has to wait on the same load the prefetch was supposed to avoid.
-  testWidgets(
-      'the reference video player is created before the user ever taps '
-      'play, and tapping play reuses it instead of creating a second one',
-      (tester) async {
+  testWidgets('the reference video player is created before the user ever taps '
+      'play, and tapping play reuses it instead of creating a second one', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1080, 2340);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-1',
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ChallengeDetail(
+          title: 'Test Challenge',
+          instructions: '',
+          videoUrl: freshVideoUrl,
+          challengeId: 'challenge-1',
+        ),
       ),
-    ));
+    );
 
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(fakeVideoPlayer.createCount, 1,
-        reason: 'the player should already be built and initializing in '
-            'the background before the user does anything — this is the '
-            'whole point of prefetching');
+    expect(
+      fakeVideoPlayer.createCount,
+      1,
+      reason:
+          'the player should already be built and initializing in '
+          'the background before the user does anything — this is the '
+          'whole point of prefetching',
+    );
     expect(fakeVideoPlayer.lastUri, freshVideoUrl);
 
     await tester.tap(find.byIcon(Icons.play_arrow_rounded));
@@ -556,12 +612,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(fakeVideoPlayer.createCount, 1,
-        reason: 'tapping play should reuse the prefetched player, not '
-            'build a second one from scratch');
-    expect(find.byIcon(Icons.close), findsOneWidget,
-        reason: 'fullscreen playback should have opened using the '
-            'prefetched, already-initialized player');
+    expect(
+      fakeVideoPlayer.createCount,
+      1,
+      reason:
+          'tapping play should reuse the prefetched player, not '
+          'build a second one from scratch',
+    );
+    expect(
+      find.byIcon(Icons.close),
+      findsOneWidget,
+      reason:
+          'fullscreen playback should have opened using the '
+          'prefetched, already-initialized player',
+    );
   });
 
   // Regression coverage: "See Leaderboard" is always visible on every
@@ -572,86 +636,105 @@ void main() {
   // through to the shared 500 catch-all, which fetchMySubmission swallows
   // into null, i.e. "not participated."
   testWidgets(
-      'the See Leaderboard button is always visible, but tapping it before '
-      'participating shows a locked notice instead of navigating',
-      (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'the See Leaderboard button is always visible, but tapping it before '
+    'participating shows a locked notice instead of navigating',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Test Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-1',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Test Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-1',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(
+        find.byTooltip('See Leaderboard'),
+        findsOneWidget,
+        reason:
+            'the button itself is unconditional — every challenge '
+            'detail page shows it',
+      );
+
+      await tester.tap(find.byTooltip('See Leaderboard'));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-    }
 
-    expect(find.byTooltip('See Leaderboard'), findsOneWidget,
-        reason: 'the button itself is unconditional — every challenge '
-            'detail page shows it');
-
-    await tester.tap(find.byTooltip('See Leaderboard'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(
-      find.text('Take this challenge at least once to see its leaderboard.'),
-      findsOneWidget,
-    );
-    expect(find.byType(AppBar), findsNothing,
-        reason: 'ChallengeDetail has no AppBar of its own — one appearing '
+      expect(
+        find.text('Take this challenge at least once to see its leaderboard.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byType(AppBar),
+        findsNothing,
+        reason:
+            'ChallengeDetail has no AppBar of its own — one appearing '
             'here would mean it wrongly navigated to the leaderboard screen '
-            'despite no participation');
-  });
+            'despite no participation',
+      );
+    },
+  );
 
   testWidgets(
-      'the See Leaderboard button appears once the viewer has taken the '
-      'challenge, and opens the per-challenge leaderboard on tap',
-      (tester) async {
-    tester.view.physicalSize = const Size(1080, 2340);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+    'the See Leaderboard button appears once the viewer has taken the '
+    'challenge, and opens the per-challenge leaderboard on tap',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(
-      home: ChallengeDetail(
-        title: 'Participated Challenge',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: 'challenge-participated',
-      ),
-    ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ChallengeDetail(
+            title: 'Participated Challenge',
+            instructions: '',
+            videoUrl: freshVideoUrl,
+            challengeId: 'challenge-participated',
+          ),
+        ),
+      );
 
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
-    expect(find.byTooltip('See Leaderboard'), findsOneWidget);
+      expect(find.byTooltip('See Leaderboard'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('See Leaderboard'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('See Leaderboard'));
+      await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Participated Challenge'),
-      ),
-      findsOneWidget,
-      reason: 'the leaderboard screen shows the challenge title in its '
-          'app bar (ChallengeDetail itself has no AppBar, so this can only '
-          'match the pushed ChallengeLeaderboardScreen)',
-    );
-    expect(find.text('No scores yet'), findsOneWidget,
-        reason: 'the submissions list is unmocked (500, swallowed to []) '
-            'for this challenge, so the board renders its empty state');
-  });
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Participated Challenge'),
+        ),
+        findsOneWidget,
+        reason:
+            'the leaderboard screen shows the challenge title in its '
+            'app bar (ChallengeDetail itself has no AppBar, so this can only '
+            'match the pushed ChallengeLeaderboardScreen)',
+      );
+      expect(
+        find.text('No scores yet'),
+        findsOneWidget,
+        reason:
+            'the submissions list is unmocked (500, swallowed to []) '
+            'for this challenge, so the board renders its empty state',
+      );
+    },
+  );
 
   // Client, 26 Nov 2026 (redesign option A): under the video, who posted it,
   // its difficulty, and a strip with the reward, how many took it and the
@@ -661,69 +744,105 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
-      home: ChallengeDetail(
-        title: 'T',
-        instructions: '',
-        videoUrl: freshVideoUrl,
-        challengeId: id,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChallengeDetail(
+          title: 'T',
+          instructions: '',
+          videoUrl: freshVideoUrl,
+          challengeId: id,
+        ),
       ),
-    ));
+    );
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
   }
 
   Finder inStats(String text) => find.descendant(
-      of: find.byKey(const Key('challenge-stats')), matching: find.text(text));
+    of: find.byKey(const Key('challenge-stats')),
+    matching: find.text(text),
+  );
 
-  testWidgets('an Aura Original with no deadline: owner chip, difficulty, stats',
-      (tester) async {
-    await openDetail(tester, 'challenge-1');
-    expect(
+  testWidgets(
+    'an Aura Original with no deadline: owner chip and stats, no difficulty',
+    (tester) async {
+      await openDetail(tester, 'challenge-1');
+      expect(
         find.descendant(
-            of: find.byKey(const Key('challenge-owner-chip')),
-            matching: find.text('Aura Original')),
-        findsOneWidget);
-    expect(find.text('Easy'), findsOneWidget);
-    expect(inStats('100'), findsOneWidget);
-    expect(inStats('Aura to win'), findsOneWidget);
-    expect(inStats('0'), findsOneWidget);
-    expect(inStats('Open'), findsOneWidget);
-    expect(inStats('No deadline'), findsOneWidget);
-  });
+          of: find.byKey(const Key('challenge-owner-chip')),
+          matching: find.text('Aura Original'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Easy'),
+        findsNothing,
+        reason: 'no difficulty chip (client, 26 Nov)',
+      );
+      expect(inStats('100'), findsOneWidget);
+      expect(inStats('Aura to win'), findsOneWidget);
+      expect(inStats('0'), findsOneWidget);
+      expect(inStats('Open'), findsOneWidget);
+      expect(inStats('No deadline'), findsOneWidget);
+    },
+  );
 
-  testWidgets("a brand's challenge shows the brand, the count and the days left",
-      (tester) async {
-    await openDetail(tester, 'challenge-brand');
-    expect(
+  testWidgets(
+    "a brand's challenge shows the brand, the count and the days left",
+    (tester) async {
+      await openDetail(tester, 'challenge-brand');
+      expect(
         find.descendant(
-            of: find.byKey(const Key('challenge-owner-chip')),
-            matching: find.text('FitNest · Brand')),
-        findsOneWidget);
-    expect(find.text('Hard'), findsOneWidget);
-    expect(inStats('1.2K'), findsOneWidget);
-    expect(inStats('5d'), findsOneWidget);
-    expect(inStats('Left'), findsOneWidget);
-  });
+          of: find.byKey(const Key('challenge-owner-chip')),
+          matching: find.text('FitNest · Brand'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Hard'),
+        findsNothing,
+        reason: 'no difficulty chip (client, 26 Nov)',
+      );
+      expect(inStats('1.2K'), findsOneWidget);
+      expect(inStats('5d'), findsOneWidget);
+      expect(inStats('Left'), findsOneWidget);
+    },
+  );
 
-  testWidgets("a brand's challenge that only has the brand's id looks up its name",
-      (tester) async {
-    await openDetail(tester, 'challenge-brand-id');
-    expect(
+  testWidgets(
+    "a brand's challenge that only has the brand's id looks up its name",
+    (tester) async {
+      await openDetail(tester, 'challenge-brand-id');
+      expect(
         find.descendant(
-            of: find.byKey(const Key('challenge-owner-chip')),
-            matching: find.text('Crunchy Bay · Brand')),
-        findsOneWidget);
-  });
+          of: find.byKey(const Key('challenge-owner-chip')),
+          matching: find.text('Crunchy Bay · Brand'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   // Seen on the phone: with a short page the bar floated mid-screen, because
   // the page's stack shrank to its content.
-  testWidgets('the take-challenge bar sits at the bottom of the screen',
-      (tester) async {
+  testWidgets('the take-challenge bar sits at the bottom of the screen', (
+    tester,
+  ) async {
     await openDetail(tester, 'challenge-1');
     final bottom = tester.getBottomLeft(find.text('Take this Challenge')).dy;
     expect(bottom, greaterThan(2340 - 120));
+  });
+
+  // Client, 26 Nov 2026: short instructions left a big empty gap above the
+  // bar; the video now grows so the text sits just above it.
+  testWidgets('short instructions sit just above the take-challenge bar', (
+    tester,
+  ) async {
+    await openDetail(tester, 'challenge-brand');
+    final textBottom = tester.getBottomLeft(find.text('Read more')).dy;
+    final buttonTop = tester.getTopLeft(find.text('Take this Challenge')).dy;
+    expect(buttonTop - textBottom, lessThan(90));
   });
 }
 
@@ -754,11 +873,13 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
     final id = _nextPlayerId++;
     final controller = StreamController<VideoEvent>();
     _eventControllers[id] = controller;
-    controller.add(VideoEvent(
-      eventType: VideoEventType.initialized,
-      duration: const Duration(seconds: 5),
-      size: const Size(1080, 1920),
-    ));
+    controller.add(
+      VideoEvent(
+        eventType: VideoEventType.initialized,
+        duration: const Duration(seconds: 5),
+        size: const Size(1080, 1920),
+      ),
+    );
     return id;
   }
 
@@ -771,11 +892,14 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
   /// for the most recently created player.
   void setBuffering(bool buffering) {
     final id = _nextPlayerId - 1;
-    _eventControllers[id]?.add(VideoEvent(
-      eventType: buffering
-          ? VideoEventType.bufferingStart
-          : VideoEventType.bufferingEnd,
-    ));
+    _eventControllers[id]?.add(
+      VideoEvent(
+        eventType:
+            buffering
+                ? VideoEventType.bufferingStart
+                : VideoEventType.bufferingEnd,
+      ),
+    );
   }
 
   @override

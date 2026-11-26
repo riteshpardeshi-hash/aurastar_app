@@ -21,17 +21,9 @@ class _CreateChallengeState extends State<CreateChallenge> {
 
   final _stepFocus  = FocusNode();
 
-  String             _difficulty   = 'Medium';
   String?            _categoryId;
   final List<String> _steps        = [];
   List<Map<String, dynamic>> _categories = [];
-
-  static const _difficulties = [
-    ('Easy',   Color(0xFF22C55E)),
-    ('Medium', Color(0xFFF59E0B)),
-    ('Hard',   Color(0xFFEF4444)),
-    ('Expert', Color(0xFF9333EA)),
-  ];
 
   @override
   void initState() {
@@ -96,7 +88,6 @@ class _CreateChallengeState extends State<CreateChallenge> {
           challengeTitle:   _titleCtrl.text.trim(),
           description:      _descCtrl.text.trim(),
           instructions:     instructions,
-          difficulty:       _difficulty,
           categoryId:       _categoryId!,
           instructionSteps: List.unmodifiable(_steps),
         ),
@@ -209,51 +200,6 @@ class _CreateChallengeState extends State<CreateChallenge> {
                   ),
 
             const SizedBox(height: 22),
-
-            // ── Difficulty ─────────────────────────────────────────────
-            _SectionLabel('Difficulty'),
-            const SizedBox(height: 10),
-            Row(
-              children: _difficulties.map((pair) {
-                final name  = pair.$1;
-                final color = pair.$2;
-                final sel   = _difficulty == name;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _difficulty = name),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        color: sel
-                            ? color.withValues(alpha: 0.20)
-                            : Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: sel
-                              ? color.withValues(alpha: 0.75)
-                              : Colors.white.withValues(alpha: 0.10),
-                          width: sel ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Text(
-                        name,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: sel ? color : AppColors.textFaint,
-                          fontSize: 12,
-                          fontWeight:
-                              sel ? FontWeight.w700 : FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-
-            const SizedBox(height: 24),
 
             // ── Instruction builder ────────────────────────────────────
             Row(

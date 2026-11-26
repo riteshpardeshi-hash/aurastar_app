@@ -141,6 +141,8 @@ void main() {
         reason: 'the system/brand source tag was removed');
     expect(find.text('Medium'), findsNothing,
         reason: 'the difficulty tag was removed');
+    expect(find.text('Easy'), findsNothing,
+        reason: 'no Easy filter tab: difficulty is gone (client, 26 Nov 2026)');
     // The thumbnail stats badge is what's left on a card — proves it still
     // rendered at all rather than everything silently disappearing.
     expect(find.byIcon(Icons.groups_rounded), findsOneWidget);
