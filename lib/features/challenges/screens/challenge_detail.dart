@@ -118,7 +118,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       );
       // Same gate as the Take this Challenge button: only once the status is known and open.
       if (widget.startTaking && mounted && _statusReady && !_statusCheckFailed && !_isPaused) {
-        _showTakeChallengeSheet();
+        _showCameraRulesModal();
       }
     });
     _fetchSubmissions();
@@ -556,94 +556,6 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     );
   }
 
-  void _showTakeChallengeSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF12102A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: EdgeInsets.fromLTRB(
-            20, 16, 20, MediaQuery.of(context).padding.bottom + 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _sheetOption(
-              icon: Icons.videocam_rounded,
-              label: 'Record Now',
-              subtitle: 'Use your camera to record',
-              onTap: () {
-                Navigator.pop(context);
-                _showCameraRulesModal();
-              },
-            ),
-            const SizedBox(height: 4),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sheetOption({
-    required IconData icon,
-    required String label,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _accent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15)),
-                Text(subtitle,
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 12)),
-              ],
-            ),
-            const Spacer(),
-            const Icon(Icons.chevron_right_rounded,
-                color: Colors.white38, size: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -983,8 +895,10 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
     // Deliberately no special-case here for _mySubmission != null — the CTA
     // stays "Take this Challenge" even after a submission exists, so users
     // can keep retaking the challenge without the button changing style.
+    // Client, 26 Nov 2026: straight to the rules, no "Record Now" sheet first
+    // (recording was its only option).
     return GestureDetector(
-      onTap: _showTakeChallengeSheet,
+      onTap: _showCameraRulesModal,
       child: Container(
         height: 58,
         decoration: BoxDecoration(

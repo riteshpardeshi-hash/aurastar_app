@@ -111,6 +111,20 @@ void main() {
     }
   }
 
+  // Client, 26 Nov 2026: no "Record Now" sheet anywhere: taking a challenge
+  // goes straight to the rules, then the camera.
+  testWidgets('Take this Challenge on the detail page opens the rules directly', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: ChallengeDetail(challengeId: 'c0', title: 'Challenge 0', instructions: '', videoUrl: 'https://cdn.test/v0.mp4')));
+    await settle(tester);
+    await tester.tap(find.text('Take this Challenge'));
+    await settle(tester);
+    expect(find.text('Record Now'), findsNothing);
+    expect(find.text('AuraSense is the judge'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(minutes: 2));
+  });
+
   // Client, 25 Nov 2026: tapping a reel plays / pauses it (it used to open the
   // challenge); the glowing Aura logo at the bottom right takes the challenge.
   testWidgets('tapping the video pauses it and tapping again plays it', (tester) async {
@@ -134,7 +148,7 @@ void main() {
     await tester.pump(const Duration(minutes: 2));
   });
 
-  testWidgets('the Aura logo opens the challenge with its take sheet up', (tester) async {
+  testWidgets('the Aura logo opens the challenge straight at its rules (no Record Now sheet)', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: ChallengeReelsScreen()));
     await settle(tester);
     expect(find.byKey(const Key('reels-take-challenge')), findsOneWidget);
@@ -144,7 +158,8 @@ void main() {
     final detail = tester.widget<ChallengeDetail>(find.byType(ChallengeDetail));
     expect(detail.challengeId, 'c0');
     expect(detail.startTaking, isTrue);
-    expect(find.text('Record Now'), findsOneWidget);
+    expect(find.text('AuraSense is the judge'), findsOneWidget);
+    expect(find.text('Record Now'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 2));
@@ -157,7 +172,7 @@ void main() {
     await tester.tap(find.byKey(const Key('reels-take-challenge')));
     await settle(tester);
     expect(find.byType(ChallengeDetail), findsOneWidget);
-    expect(find.text('Record Now'), findsNothing);
+    expect(find.text('AuraSense is the judge'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(minutes: 2));
