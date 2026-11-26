@@ -49,6 +49,67 @@ void main() {
 
     ApiClient.httpClient = MockClient((request) async {
       if (request.method == 'GET' &&
+          request.url.path.endsWith('/challenges/challenge-brand-id')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenge': {
+                '_id': 'challenge-brand-id',
+                'title': 'Brand Challenge',
+                'instructions': 'Do the move.',
+                'videoUrl': freshVideoUrl,
+                'thumbnailUrl': '',
+                'submissionsCount': 3,
+                'sourceType': 'Brand',
+                'creatorId': 'brand-2', // just the id, like the live API
+                'status': 'approved',
+              },
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' && request.url.path.endsWith('/brands/brand-2')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'brand': {'_id': 'brand-2', 'displayName': 'Crunchy Bay'},
+              'isFollowing': false,
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path.endsWith('/challenges/challenge-brand')) {
+        return http.Response(
+          jsonEncode({
+            'status': 'success',
+            'data': {
+              'challenge': {
+                '_id': 'challenge-brand',
+                'title': 'Brand Challenge',
+                'instructions': 'Do the move.',
+                'videoUrl': freshVideoUrl,
+                'thumbnailUrl': '',
+                'submissionsCount': 1234,
+                'difficulty': 'Hard',
+                'sourceType': 'Brand',
+                'creatorId': {'_id': 'brand-1', 'displayName': 'FitNest'},
+                'status': 'approved',
+                'endDate': DateTime.now()
+                    .add(const Duration(days: 5, hours: 2))
+                    .toUtc()
+                    .toIso8601String(),
+              },
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
           request.url.path.endsWith('/challenges/challenge-1')) {
         return http.Response(
           jsonEncode({
@@ -532,11 +593,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(find.text('See Leaderboard'), findsOneWidget,
+    expect(find.byTooltip('See Leaderboard'), findsOneWidget,
         reason: 'the button itself is unconditional — every challenge '
             'detail page shows it');
 
-    await tester.tap(find.text('See Leaderboard'));
+    await tester.tap(find.byTooltip('See Leaderboard'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -572,9 +633,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(find.text('See Leaderboard'), findsOneWidget);
+    expect(find.byTooltip('See Leaderboard'), findsOneWidget);
 
-    await tester.tap(find.text('See Leaderboard'));
+    await tester.tap(find.byTooltip('See Leaderboard'));
     await tester.pumpAndSettle();
 
     expect(
@@ -590,6 +651,79 @@ void main() {
     expect(find.text('No scores yet'), findsOneWidget,
         reason: 'the submissions list is unmocked (500, swallowed to []) '
             'for this challenge, so the board renders its empty state');
+  });
+
+  // Client, 26 Nov 2026 (redesign option A): under the video, who posted it,
+  // its difficulty, and a strip with the reward, how many took it and the
+  // time left.
+  Future<void> openDetail(WidgetTester tester, String id) async {
+    tester.view.physicalSize = const Size(1080, 2340);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: ChallengeDetail(
+        title: 'T',
+        instructions: '',
+        videoUrl: freshVideoUrl,
+        challengeId: id,
+      ),
+    ));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
+  Finder inStats(String text) => find.descendant(
+      of: find.byKey(const Key('challenge-stats')), matching: find.text(text));
+
+  testWidgets('an Aura Original with no deadline: owner chip, difficulty, stats',
+      (tester) async {
+    await openDetail(tester, 'challenge-1');
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('challenge-owner-chip')),
+            matching: find.text('Aura Original')),
+        findsOneWidget);
+    expect(find.text('Easy'), findsOneWidget);
+    expect(inStats('100'), findsOneWidget);
+    expect(inStats('Aura to win'), findsOneWidget);
+    expect(inStats('0'), findsOneWidget);
+    expect(inStats('Open'), findsOneWidget);
+    expect(inStats('No deadline'), findsOneWidget);
+  });
+
+  testWidgets("a brand's challenge shows the brand, the count and the days left",
+      (tester) async {
+    await openDetail(tester, 'challenge-brand');
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('challenge-owner-chip')),
+            matching: find.text('FitNest · Brand')),
+        findsOneWidget);
+    expect(find.text('Hard'), findsOneWidget);
+    expect(inStats('1.2K'), findsOneWidget);
+    expect(inStats('5d'), findsOneWidget);
+    expect(inStats('Left'), findsOneWidget);
+  });
+
+  testWidgets("a brand's challenge that only has the brand's id looks up its name",
+      (tester) async {
+    await openDetail(tester, 'challenge-brand-id');
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('challenge-owner-chip')),
+            matching: find.text('Crunchy Bay · Brand')),
+        findsOneWidget);
+  });
+
+  // Seen on the phone: with a short page the bar floated mid-screen, because
+  // the page's stack shrank to its content.
+  testWidgets('the take-challenge bar sits at the bottom of the screen',
+      (tester) async {
+    await openDetail(tester, 'challenge-1');
+    final bottom = tester.getBottomLeft(find.text('Take this Challenge')).dy;
+    expect(bottom, greaterThan(2340 - 120));
   });
 }
 

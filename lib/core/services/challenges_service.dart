@@ -380,5 +380,7 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'isActive': c['isActive'] as bool? ?? true,
     'status': c['status'] as String? ?? 'approved',
     'createdAt': c['createdAt'],
+    // When it stops taking entries (null = no deadline); the detail page's stats.
+    'endDate': c['endDate'],
   };
 }
