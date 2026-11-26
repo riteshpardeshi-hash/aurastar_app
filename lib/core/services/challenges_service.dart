@@ -147,7 +147,6 @@ class ChallengesService {
     required String description,
     String? instructions,
     required String categoryId,
-    required String difficulty,
     required String videoId,
   }) async {
     // POST /challenges runs the AI safety gate + rubric generation on the reference video
@@ -159,7 +158,6 @@ class ChallengesService {
       if (instructions != null && instructions.isNotEmpty)
         'instructions': instructions,
       'category': categoryId,
-      'difficulty': difficulty,
       'videoId': videoId,
     }, auth: true, timeout: CreatorChallengesService.createTimeout);
     // The backend's message (e.g. 409 "This video has already been claimed.") — never a
@@ -367,7 +365,6 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'videoUrl': c['videoUrl'] as String? ?? '',
     'thumbnailUrl': c['thumbnailUrl'] as String? ?? '',
     'category': _extractRefId(c['category']),
-    'difficulty': c['difficulty'] as String? ?? '',
     'sourceType': c['sourceType'] as String? ?? '',
     'creatorId': _extractRefId(c['creatorId']),
     // Who posted it and its reference video — for the report / block menu (ADR 117).

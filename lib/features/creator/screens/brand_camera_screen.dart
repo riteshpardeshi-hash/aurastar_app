@@ -10,7 +10,6 @@ class BrandCameraScreen extends StatefulWidget {
   final String       challengeTitle;
   final String       description;
   final String       instructions;
-  final String       difficulty;
   final String       categoryId;
   final List<String> instructionSteps;
 
@@ -20,7 +19,6 @@ class BrandCameraScreen extends StatefulWidget {
     required this.description,
     required this.instructions,
     required this.categoryId,
-    this.difficulty       = 'Medium',
     this.instructionSteps = const [],
   });
 
@@ -214,7 +212,6 @@ class _BrandCameraScreenState extends State<BrandCameraScreen>
                                   challengeTitle:   widget.challengeTitle,
                                   description:      widget.description,
                                   instructions:     widget.instructions,
-                                  difficulty:       widget.difficulty,
                                   categoryId:       widget.categoryId,
                                   instructionSteps: widget.instructionSteps,
                                   mirrored: Platform.isAndroid &&

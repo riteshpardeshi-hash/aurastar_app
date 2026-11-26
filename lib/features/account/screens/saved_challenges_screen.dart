@@ -75,7 +75,6 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
     final thumbnailUrl = c['thumbnailUrl'] as String? ?? '';
     final instructions = c['instructions'] as String? ?? '';
     final category     = c['category']     as String? ?? '';
-    final difficulty   = c['difficulty']   as String? ?? '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -156,8 +155,6 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
                     runSpacing: 4,
                     children: [
                       if (category.isNotEmpty) _chip(category, _accent),
-                      if (difficulty.isNotEmpty)
-                        _chip(difficulty, _difficultyColor(difficulty)),
                     ],
                   ),
                 ],
@@ -246,14 +243,5 @@ class _SavedChallengesScreenState extends State<SavedChallengesScreen> {
           style: TextStyle(
               color: color, fontSize: 10, fontWeight: FontWeight.w600)),
     );
-  }
-
-  Color _difficultyColor(String d) {
-    switch (d.toLowerCase()) {
-      case 'easy':   return Colors.green;
-      case 'medium': return Colors.orange;
-      case 'hard':   return Colors.deepOrange;
-      default:       return Colors.white54;
-    }
   }
 }

@@ -65,7 +65,6 @@ class _CreatorChallengePreviewScreenState
   Widget _buildBody(Map<String, dynamic> preview) {
     final title = preview['title'] as String? ?? '';
     final description = preview['description'] as String? ?? '';
-    final difficulty = preview['difficulty'] as String? ?? '';
     final videoUrl = preview['videoUrl'] as String? ?? '';
     final thumbnailUrl = preview['thumbnailUrl'] as String?;
     final status = preview['submissionStatus'] as String?;
@@ -107,8 +106,6 @@ class _CreatorChallengePreviewScreenState
         Row(
           children: [
             if (categoryName.isNotEmpty) _tag(Icons.category_outlined, categoryName),
-            if (categoryName.isNotEmpty && difficulty.isNotEmpty) const SizedBox(width: 8),
-            if (difficulty.isNotEmpty) _tag(Icons.speed_rounded, difficulty),
           ],
         ),
         if (description.isNotEmpty) ...[

@@ -29,7 +29,8 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   static const _card = Color(0xFF12102A);
   static const _accent = Color(0xFF7B2CBF);
 
-  static const _filters = ['Trending', 'New', 'Easy', 'High Aura'];
+  // No "Easy" tab: difficulty was removed from the app (client, 26 Nov 2026).
+  static const _filters = ['Trending', 'New', 'High Aura'];
   int _activeFilter = 0;
 
   List<Map<String, dynamic>> _challenges = [];
@@ -88,21 +89,7 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
           if (ta == null || tb == null) return 0;
           return tb.compareTo(ta);
         });
-      case 2: // Easy — filter then sort by submissionsCount
-        list =
-            list
-                .where(
-                  (c) =>
-                      (c['difficulty'] as String? ?? '').toLowerCase() ==
-                      'easy',
-                )
-                .toList();
-        list.sort(
-          (a, b) => ((b['submissionsCount'] as int?) ?? 0).compareTo(
-            (a['submissionsCount'] as int?) ?? 0,
-          ),
-        );
-      case 3: // High Aura — sort by starsCount desc
+      case 2: // High Aura — sort by starsCount desc
         list.sort(
           (a, b) => ((b['starsCount'] as int?) ?? 0).compareTo(
             (a['starsCount'] as int?) ?? 0,
@@ -341,14 +328,8 @@ class _CategoryChallengesScreenState extends State<CategoryChallengesScreen> {
   // ── Empty state ───────────────────────────────────────────────────────────
 
   Widget _buildEmpty() {
-    final label =
-        _activeFilter == 2
-            ? 'No Easy challenges yet'
-            : 'No ${widget.categoryName} challenges yet';
-    final sub =
-        _activeFilter == 2
-            ? 'Try a different filter to see more.'
-            : 'Check back soon — more are being added!';
+    final label = 'No ${widget.categoryName} challenges yet';
+    const sub = 'Check back soon — more are being added!';
 
     return Center(
       child: Padding(

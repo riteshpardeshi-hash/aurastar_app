@@ -41,7 +41,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
   final _whatToCopyCtrl = TextEditingController();
   final _timeLimitCtrl  = TextEditingController();
 
-  String _difficulty = 'Medium';
   String? _categoryId;
   List<Map<String, dynamic>> _categories = [];
 
@@ -73,7 +72,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       final created = await CreatorChallengesService().createDraft(
         title: _titleCtrl.text.trim(),
         category: _categoryId!,
-        difficulty: _difficulty,
         videoId: videoId,
         description: _descCtrl.text.trim(),
         challengeInstructions: _instructionsPayload(),
@@ -81,8 +79,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
       _createdId = created['_id'] as String?;
     },
   );
-
-  static const _difficulties = ['Easy', 'Medium', 'Hard'];
 
   bool get _isEdit => widget.existingDraft != null;
   bool get _isResubmit => _status == 'CHANGES_REQUESTED' || _status == 'REJECTED';
@@ -95,7 +91,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
     if (d != null) {
       _titleCtrl.text = d['title'] as String? ?? '';
       _descCtrl.text = d['description'] as String? ?? '';
-      _difficulty = (d['difficulty'] as String?)?.isNotEmpty == true ? d['difficulty'] as String : 'Medium';
       _categoryId = (d['categoryId'] as String?)?.isNotEmpty == true ? d['categoryId'] as String : null;
       _challengeId = (d['id'] as String?)?.isNotEmpty == true ? d['id'] as String : null;
       _status = d['submissionStatus'] as String? ?? 'DRAFT';
@@ -272,7 +267,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
           _challengeId!,
           title: _titleCtrl.text.trim(),
           category: _categoryId,
-          difficulty: _difficulty,
           description: _descCtrl.text.trim(),
           challengeInstructions: _instructionsPayload(),
         );
@@ -497,36 +491,6 @@ class _CreatorChallengeDraftScreenState extends State<CreatorChallengeDraftScree
                       );
                     }).toList(),
                   ),
-            const SizedBox(height: 22),
-
-            _label('Difficulty'),
-            const SizedBox(height: 10),
-            Row(
-              children: _difficulties.map((d) {
-                final sel = _difficulty == d;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _difficulty = d),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      decoration: BoxDecoration(
-                        color: sel ? _accent.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: sel ? _accent.withValues(alpha: 0.75) : Colors.white.withValues(alpha: 0.10)),
-                      ),
-                      child: Text(d,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: sel ? const Color(0xFFD4A8FF) : AppColors.textFaint,
-                              fontSize: 12,
-                              fontWeight: sel ? FontWeight.w700 : FontWeight.w400)),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
             const SizedBox(height: 22),
 
             _label('Reference Video'),

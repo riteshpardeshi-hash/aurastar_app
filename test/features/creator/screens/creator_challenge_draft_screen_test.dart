@@ -113,6 +113,9 @@ void main() {
     expect(find.text('Save as draft and finish later'), findsOneWidget);
     expect(find.text('e.g. Sync to beat'), findsNothing);
     expect(find.text('Generate scoring criteria'), findsOneWidget);
+    // Client, 26 Nov 2026: no difficulty picker any more.
+    expect(find.text('Difficulty'), findsNothing);
+    expect(find.text('Medium'), findsNothing);
   });
 
   testWidgets('generating without a video asks for the video instead of calling the AI',

@@ -14,7 +14,6 @@ class BrandPreviewScreen extends StatefulWidget {
   final String challengeTitle;
   final String description;
   final String instructions;
-  final String difficulty;
   final String categoryId;
   final List<String> instructionSteps;
 
@@ -30,7 +29,6 @@ class BrandPreviewScreen extends StatefulWidget {
     required this.description,
     required this.instructions,
     required this.categoryId,
-    this.difficulty = 'Medium',
     this.instructionSteps = const [],
     this.mirrored = false,
   });
@@ -77,7 +75,6 @@ class _BrandPreviewScreenState extends State<BrandPreviewScreen> {
           ? widget.instructionSteps.asMap().entries.map((e) => '${e.key + 1}. ${e.value}').join('\n')
           : widget.instructions,
       categoryId: widget.categoryId,
-      difficulty: widget.difficulty,
       videoId: videoId,
     ),
   );

@@ -348,7 +348,6 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
     final title = c['title'] as String;
     final description = c['description'] as String;
     final categoryName = c['categoryName'] as String;
-    final difficulty = c['difficulty'] as String;
     final status = c['submissionStatus'] as String;
     final auraScore = c['auraScore'] as int?;
     final adminFeedback = c['adminFeedback'] as String?;
@@ -388,7 +387,6 @@ class _CreatorChallengeStatusScreenState extends State<CreatorChallengeStatusScr
           Row(
             children: [
               if (categoryName.isNotEmpty) _pill(categoryName),
-              if (difficulty.isNotEmpty) ...[const SizedBox(width: 8), _pill(difficulty)],
             ],
           ),
           if (description.isNotEmpty) ...[
