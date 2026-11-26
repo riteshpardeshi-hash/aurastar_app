@@ -41,9 +41,10 @@ class _ChallengeLeaderboardScreenState
       final name = (profile['displayName'] as String?)?.trim();
       final username = (profile['username'] as String?)?.trim();
       final profileName = (profile['profileName'] as String?)?.trim();
-      final resolved = (username?.isNotEmpty ?? false)
-          ? username
-          : (name?.isNotEmpty ?? false)
+      final resolved =
+          (username?.isNotEmpty ?? false)
+              ? username
+              : (name?.isNotEmpty ?? false)
               ? name
               : profileName;
       if (resolved?.isNotEmpty ?? false) {
@@ -54,8 +55,10 @@ class _ChallengeLeaderboardScreenState
   }
 
   Future<void> _load() async {
-    final raw =
-        await ChallengesService().fetchSubmissions(widget.challengeId, limit: 50);
+    final raw = await ChallengesService().fetchSubmissions(
+      widget.challengeId,
+      limit: 50,
+    );
     if (!mounted) return;
     setState(() {
       _entries = leaderboardFromSubmissions(raw);
@@ -73,62 +76,65 @@ class _ChallengeLeaderboardScreenState
         elevation: 0,
         title: Text(widget.challengeTitle),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: _accent))
-          : _entries.isEmpty
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator(color: _accent))
+              : _entries.isEmpty
               ? RefreshIndicator(
-                  color: _accent,
-                  onRefresh: _load,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: [
-                      SizedBox(
-                        height: MediaQuery.of(context).size.height * 0.6,
-                        child: leaderboardEmptyState(
-                          'No scores yet',
-                          'Be the first to top this challenge!',
-                        ),
+                color: _accent,
+                onRefresh: _load,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.6,
+                      child: leaderboardEmptyState(
+                        'No scores yet',
+                        'Be the first to top this challenge!',
                       ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  color: _accent,
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    itemCount: _entries.length,
-                    itemBuilder: (_, i) {
-                      final e = _entries[i];
-                      final isMe = e['id'] == _myId;
-                      final rawUsername = e['username'] as String;
-                      final rawName = e['name'] as String;
-                      final username = (isMe && (_myUsername?.isNotEmpty ?? false))
-                          ? _myUsername!
-                          : rawUsername.isNotEmpty
-                              ? rawUsername
-                              : rawName.isNotEmpty
-                                  ? rawName
-                                  : 'Player ${i + 1}';
-                      return ChallengeLeaderboardRow(
-                        rank: i + 1,
-                        username: username,
-                        score: e['score'] as int,
-                        stars: e['stars'] as int,
-                        isCurrentUser: isMe,
-                        onTap: isMe
-                            ? null
-                            : () => showPlayerSafetyMenu(
-                                  context,
-                                  userId: e['id'] as String,
-                                  name: username,
-                                  onBlocked: _load,
-                                ),
-                      );
-                    },
-                  ),
+                    ),
+                  ],
                 ),
+              )
+              : RefreshIndicator(
+                color: _accent,
+                onRefresh: _load,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                  itemCount: _entries.length,
+                  itemBuilder: (_, i) {
+                    final e = _entries[i];
+                    final isMe = e['id'] == _myId;
+                    final rawUsername = e['username'] as String;
+                    final rawName = e['name'] as String;
+                    final username =
+                        (isMe && (_myUsername?.isNotEmpty ?? false))
+                            ? _myUsername!
+                            : rawUsername.isNotEmpty
+                            ? rawUsername
+                            : rawName.isNotEmpty
+                            ? rawName
+                            : 'Player ${i + 1}';
+                    return ChallengeLeaderboardRow(
+                      rank: i + 1,
+                      username: username,
+                      score: e['score'] as int,
+                      stars: e['stars'] as int,
+                      isCurrentUser: isMe,
+                      onTap:
+                          isMe
+                              ? null
+                              : () => showPlayerSafetyMenu(
+                                context,
+                                userId: e['id'] as String,
+                                name: username,
+                                onBlocked: _load,
+                              ),
+                    );
+                  },
+                ),
+              ),
     );
   }
 }

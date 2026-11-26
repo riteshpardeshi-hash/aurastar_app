@@ -169,7 +169,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
       _ownerName = c['creatorName'] as String? ?? '';
       _videoId = c['videoId'] as String? ?? '';
       _ownerAvatar = c['creatorAvatar'] as String? ?? '';
-      _takenCount = c['submissionsCount'] as int? ?? 0;
+      _takenCount = c['participants'] as int? ?? c['submissionsCount'] as int? ?? 0;
       _endDate = DateTime.tryParse('${c['endDate'] ?? ''}')?.toLocal();
       // The challenge carries only the brand's id: look up its name and logo
       // for the owner chip (best effort; the chip says "Brand" until then).
@@ -1397,7 +1397,7 @@ class _ChallengeDetailState extends State<ChallengeDetail> {
           divider(),
           cell(
             Text(_statusReady ? _compactCount(_takenCount) : '–'),
-            'Taken it',
+            'Participants',
           ),
           divider(),
           cell(Text(deadlineValue), deadlineLabel),

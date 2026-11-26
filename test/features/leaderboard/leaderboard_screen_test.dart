@@ -1,160 +1,177 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 
-import 'package:aura_app/core/services/api_client.dart';
 import 'package:aura_app/features/leaderboard/leaderboard_screen.dart';
+import 'package:aura_app/features/leaderboard/screens/challenge_leaderboard_screen.dart';
 
-// Regression coverage: the Challenge tab used to fetch
-// GET /leaderboard/challenge/{id} — confirmed against the live backend to
-// always return an empty `responses` array even for challenges with real,
-// scored public submissions (verified against two separate challenges with
-// genuine submission activity). Every challenge board silently showed
-// "No scores yet" regardless of real activity. Fixed by switching to
-// GET /challenges/{id}/submissions (the endpoint the backend's own docs call
-// "the public leaderboard"), which is confirmed to actually return data.
+import '../ai_ads/ai_ads_fake_backend.dart';
+
+// Client, 26 Nov 2026: the Leaderboard gets search and sort like every other
+// list. Global: a podium, All time / Month / Week, a sort menu and the
+// viewer's own rank pinned at the bottom. Challenge: searchable, sortable
+// cards that open each challenge's board. Both search and sort on the
+// server (backend ADR 154).
+
+Map<String, dynamic> player(String id, String name, int score, int rank) =>
+    {'_id': id, 'displayName': name, 'profileName': name.toLowerCase(), 'score': score, 'rank': rank};
+
+final _board = [
+  player('u1', 'Ada', 2045, 1),
+  player('creator-1', 'Yash', 820, 2),
+  player('u3', 'Shweta', 764, 3),
+  player('u4', 'Ritesh', 10, 4),
+  player('u5', 'Narem', 5, 5),
+];
+
 void main() {
+  late FakeAiAdsBackend backend;
+
   setUp(() {
-    FlutterSecureStorage.setMockInitialValues({
-      'api_access_token': 'test-access-token',
-      'api_refresh_token': 'test-refresh-token',
-      'api_user_id': 'my-id',
+    backend = FakeAiAdsBackend();
+    backend.on('GET /profile', {
+      'user': {'_id': 'creator-1', 'displayName': 'Yash'}
+    });
+    backend.routes['GET /leaderboard'] = (req) {
+      final search = (req.query['search'] ?? '').toLowerCase();
+      final rows = _board
+          .where((p) => search.isEmpty || (p['displayName'] as String).toLowerCase().contains(search))
+          .toList();
+      return FakeAiAdsBackend.ok({
+        'responses': rows,
+        'totalCount': rows.length,
+        'me': {'rank': 2, 'score': 820, 'gapToFirst': 1225, 'gapToNext': 1225},
+      });
+    };
+    backend.routes['GET /leaderboard/challenges'] = (req) {
+      final search = (req.query['search'] ?? '').toLowerCase();
+      final cards = [
+        {
+          '_id': 'ch1',
+          'title': 'FitNest Jump Rope',
+          'participants': 12,
+          'leader': {'displayName': 'Shweta', 'score': 92},
+          'myRank': 2,
+        },
+        {'_id': 'ch2', 'title': 'Cross-Eyed Focus', 'participants': 0, 'leader': null, 'myRank': null},
+      ].where((c) => search.isEmpty || (c['title'] as String).toLowerCase().contains(search)).toList();
+      return FakeAiAdsBackend.ok({'responses': cards, 'totalCount': cards.length});
+    };
+    backend.on('GET /challenges/ch1/submissions', {
+      'submissions': [
+        {'_id': 's1', 'userId': {'_id': 'u3', 'displayName': 'Shweta', 'username': 'shweta'}, 'aiScore': 92},
+      ],
     });
   });
+  tearDown(FakeAiAdsBackend.reset);
 
-  tearDown(() {
-    ApiClient.httpClient = http.Client();
+  Future<void> open(WidgetTester tester) => pumpAiScreen(tester, const LeaderboardScreen());
+
+  testWidgets('Global shows the top three on a podium, the rest as rows, and your rank pinned',
+      (tester) async {
+    await open(tester);
+    expect(find.byKey(const Key('podium-1')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('podium-1')), matching: find.text('2K')),
+        findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('podium-2')), matching: find.text('You')),
+        findsOneWidget);
+    expect(find.text('Ritesh'), findsOneWidget);
+    expect(find.text('@ritesh'), findsOneWidget);
+
+    final you = find.byKey(const Key('leaderboard-you-bar'));
+    expect(you, findsOneWidget);
+    expect(find.descendant(of: you, matching: find.text('1,225 Aura behind #1')), findsOneWidget);
+    expect(backend.calls('GET', '/leaderboard').single.query,
+        containsPair('sort', 'aura_desc'));
   });
 
-  testWidgets(
-      'Challenge tab uses GET /challenges/{id}/submissions, never the '
-      'broken GET /leaderboard/challenge/{id}', (tester) async {
-    var hitBrokenLeaderboardEndpoint = false;
+  testWidgets('searching players asks the server, drops the podium and keeps real ranks',
+      (tester) async {
+    await open(tester);
+    await tester.enterText(find.byKey(const Key('leaderboard-search')), 'Ritesh');
+    await settle(tester);
 
-    ApiClient.httpClient = MockClient((request) async {
-      final path = request.url.path;
-      if (path.contains('/leaderboard/challenge/')) {
-        hitBrokenLeaderboardEndpoint = true;
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'data': {'page': 1, 'totalCount': 0, 'totalPages': 0, 'responses': []},
-          }),
-          200,
-        );
-      }
-      if (path.endsWith('/challenges')) {
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'data': {
-              'challenges': [
-                {'_id': 'challenge-1', 'title': 'Knuckle Pushup Challenge'},
-              ],
-            },
-          }),
-          200,
-        );
-      }
-      if (path.endsWith('/submissions') && path.contains('/challenges/')) {
-        // Mirrors the real, live response shape confirmed via manual curl
-        // against the backend: userId is populated with only `_id`, and
-        // starsCount is a real (undocumented-in-Swagger) field.
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'data': {
-              'submissions': [
-                {
-                  '_id': 'sub-1',
-                  'userId': {'_id': 'player-1'},
-                  'aiScore': 67,
-                  'starsCount': 3,
-                  'isPublic': true,
-                },
-              ],
-              'pagination': {'total': 1, 'limit': 50, 'hasNextPage': false},
-            },
-          }),
-          200,
-        );
-      }
-      if (path.endsWith('/leaderboard') || path.endsWith('/leaderboard/friends')) {
-        return http.Response(
-          jsonEncode({'status': 'success', 'data': {'responses': []}}), 200);
-      }
-      return http.Response(jsonEncode({'status': 'fail'}), 404);
-    });
+    expect(backend.calls('GET', '/leaderboard').last.query, containsPair('search', 'Ritesh'));
+    expect(find.byKey(const Key('podium-1')), findsNothing);
+    expect(find.text('@ritesh'), findsOneWidget);
+    expect(find.text('4'), findsOneWidget, reason: 'Ritesh keeps rank 4 in the results');
 
-    await tester.pumpWidget(const MaterialApp(home: LeaderboardScreen()));
-    await tester.pump();
+    await tester.enterText(find.byKey(const Key('leaderboard-search')), 'zzz');
+    await settle(tester);
+    expect(find.text('No players match "zzz"'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Clear search'));
+    await settle(tester);
+    expect(backend.calls('GET', '/leaderboard').last.query.containsKey('search'), isFalse);
+    expect(find.byKey(const Key('podium-1')), findsOneWidget);
+  });
+
+  testWidgets('period and sort combine with the search in one request', (tester) async {
+    await open(tester);
+    await tester.enterText(find.byKey(const Key('leaderboard-search')), 'a');
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('leaderboard-period-week')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('leaderboard-sort')));
+    await settle(tester);
+    await tester.tap(find.text('Name A–Z'));
+    await settle(tester);
+
+    final q = backend.calls('GET', '/leaderboard').last.query;
+    expect(q, containsPair('search', 'a'));
+    expect(q, containsPair('period', 'week'));
+    expect(q, containsPair('sort', 'name_asc'));
+    expect(find.text('Name A–Z'), findsOneWidget, reason: 'the current sort stays visible');
+  });
+
+  testWidgets('Challenge tab shows cards with your rank, the leader and participants',
+      (tester) async {
+    await open(tester);
     await tester.tap(find.text('Challenge'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
-    expect(hitBrokenLeaderboardEndpoint, isFalse,
-        reason: 'must not call the confirmed-broken /leaderboard/challenge '
-            'endpoint');
-    expect(find.text('67'), findsOneWidget,
-        reason: 'the real aiScore from /challenges/{id}/submissions must '
-            'render');
-    expect(find.text('@Player 1'), findsOneWidget,
-        reason: 'with no name available from the API, the row must show an '
-            'honest rank-based label, not a blank or fabricated one');
-    expect(find.text('No scores yet'), findsNothing);
+    expect(find.text('FitNest Jump Rope'), findsOneWidget);
+    expect(find.text('You #2'), findsOneWidget);
+    expect(find.text('👑 Shweta · 92 · 12 participants'), findsOneWidget);
+    expect(find.text('No scores yet · be first'), findsOneWidget);
   });
 
-  testWidgets(
-      'pulling to refresh on the Global tab re-fetches page 1 and replaces '
-      'the list', (tester) async {
-    var globalCallCount = 0;
+  testWidgets('Challenge tab search, filter and sort go to the server together', (tester) async {
+    await open(tester);
+    await tester.tap(find.text('Challenge'));
+    await settle(tester);
+    await tester.enterText(find.byKey(const Key('challenge-boards-search')), 'cross');
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('challenge-boards-filter-brand')));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('challenge-boards-sort')));
+    await settle(tester);
+    await tester.tap(find.text('Ending soon'));
+    await settle(tester);
 
-    ApiClient.httpClient = MockClient((request) async {
-      final path = request.url.path;
-      if (path.endsWith('/leaderboard')) {
-        globalCallCount++;
-        final name = globalCallCount == 1 ? 'Original Player' : 'Refreshed Player';
-        return http.Response(
-          jsonEncode({
-            'status': 'success',
-            'data': {
-              'responses': [
-                {'_id': 'p1', 'displayName': name, 'auraPoints': 100},
-              ],
-            },
-          }),
-          200,
-        );
-      }
-      if (path.endsWith('/leaderboard/friends')) {
-        return http.Response(
-          jsonEncode({'status': 'success', 'data': {'responses': []}}), 200);
-      }
-      if (path.endsWith('/challenges')) {
-        return http.Response(
-          jsonEncode({'status': 'success', 'data': {'challenges': []}}), 200);
-      }
-      return http.Response(jsonEncode({'status': 'fail'}), 404);
-    });
+    final q = backend.calls('GET', '/leaderboard/challenges').last.query;
+    expect(q, containsPair('search', 'cross'));
+    expect(q, containsPair('filter', 'brand'));
+    expect(q, containsPair('sort', 'ending_soon'));
+    expect(find.text('Cross-Eyed Focus'), findsOneWidget);
+    expect(find.text('FitNest Jump Rope'), findsNothing);
 
-    await tester.pumpWidget(const MaterialApp(home: LeaderboardScreen()));
-    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('challenge-boards-search')), 'nothing');
+    await settle(tester);
+    expect(find.text('No challenges match "nothing"'), findsOneWidget);
+  });
 
-    expect(find.text('Original Player'), findsOneWidget);
+  // Regression: GET /leaderboard/challenge/{id} returns an empty board for
+  // challenges with real scores, so a challenge's board must come from
+  // GET /challenges/{id}/submissions.
+  testWidgets('tapping a card opens its board from the submissions endpoint', (tester) async {
+    await open(tester);
+    await tester.tap(find.text('Challenge'));
+    await settle(tester);
+    await tester.tap(find.byKey(const Key('challenge-board-ch1')));
+    await settle(tester);
 
-    // Pull down to refresh.
-    await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pumpAndSettle();
-
-    expect(globalCallCount, greaterThanOrEqualTo(2),
-        reason: 'pull-to-refresh must re-fetch page 1');
-    expect(find.text('Refreshed Player'), findsOneWidget,
-        reason: 'the refreshed data must replace the old list');
-    expect(find.text('Original Player'), findsNothing);
+    expect(find.byType(ChallengeLeaderboardScreen), findsOneWidget);
+    expect(find.text('@shweta'), findsOneWidget);
+    expect(backend.sent.where((r) => r.path.startsWith('/leaderboard/challenge/')), isEmpty);
   });
 }
