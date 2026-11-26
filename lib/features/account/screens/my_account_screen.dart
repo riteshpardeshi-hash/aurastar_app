@@ -8,6 +8,7 @@ import '../../../core/services/auth_api_service.dart';
 import '../../../core/services/leaderboard_consent_service.dart';
 import '../../../core/services/challenges_service.dart';
 import '../../../core/services/creator_page_service.dart';
+import '../../../core/services/ranks_service.dart';
 import '../../../core/services/rewards_service.dart';
 import '../../../core/services/screen_cache.dart';
 import '../../../core/services/videos_service.dart';
@@ -23,6 +24,8 @@ import '../../../shared/widgets/screen_skeleton.dart';
 import '../../challenges/widgets/achievement_card.dart';
 import '../../creator/screens/creator_activity_screen.dart';
 import '../../creator/screens/create_creator_profile_screen.dart';
+import '../../leaderboard/leaderboard_screen.dart';
+import '../../leaderboard/screens/challenge_leaderboard_screen.dart';
 import 'user_video_detail_screen.dart';
 import 'all_videos_screen.dart';
 import 'settings_screen.dart';
@@ -302,8 +305,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   static const _accent = Color(0xFF7B2CBF);
   static const _bg = Color(0xFF080810);
   static const _card = Color(0xFF0E0C1E);
+  static const _gold = Color(0xFFF5C451);
 
   bool _loading = true;
+  // Videos | Ranks | Cards.
+  int _tab = 0;
+  MyRanks? _ranks;
+  bool _ranksLoading = true;
   String? _error;
   String? _uid;
   Map<String, dynamic> _profile = {};
@@ -395,6 +403,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         _error = null;
       });
     }
+    _loadRanks();
     try {
       final uid = await ApiClient().userId;
       final results = await Future.wait<dynamic>([
@@ -443,6 +452,17 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         ).showSnackBar(SnackBar(content: Text(humanizeError(e))));
       }
     }
+  }
+
+  // Separate from the bundle: an older backend without GET /leaderboard/me/ranks
+  // must not take the whole profile down.
+  Future<void> _loadRanks() async {
+    final ranks = await RanksService().fetchMyRanks();
+    if (!mounted) return;
+    setState(() {
+      if (ranks != null) _ranks = ranks;
+      _ranksLoading = false;
+    });
   }
 
   Future<void> _reloadRewards() async {
@@ -516,165 +536,87 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     };
   }
 
-  // ── Profile card ─────────────────────────────────────────────────────────────
-  Widget _buildProfileCard(BuildContext context) {
-    final rawName =
+  // ── Header (option B "social style", client's pick 26 Nov 2026) ─────────────
+  String get _displayName {
+    final raw =
         (_profile['displayName'] as String? ?? '').isNotEmpty
             ? _profile['displayName'] as String
             : _profile['name'] as String? ?? '';
-    final name = rawName.isNotEmpty ? rawName : 'User';
-    final username =
-        _profile['profileName'] as String? ??
-        _profile['username'] as String? ??
-        '';
-    final gender = (_profile['gender'] as String? ?? '').trim();
-    final city =
-        (_profile['city'] as Map<String, dynamic>?)?['name'] as String? ?? '';
-    final photoUrl =
-        (_profile['avatar'] as String? ?? '').isNotEmpty
-            ? _profile['avatar'] as String
-            : _profile['profileImageUrl'] as String? ?? '';
+    return raw.isNotEmpty ? raw : 'User';
+  }
 
+  String get _handle =>
+      _profile['profileName'] as String? ??
+      _profile['username'] as String? ??
+      '';
+
+  String get _referralCode =>
+      // GET /referrals's live response names this field `code`, not the
+      // `referralCode` the OpenAPI spec documents — read both.
+      _referral?['code'] as String? ??
+      _referral?['referralCode'] as String? ??
+      '';
+
+  Future<void> _openEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+    );
+    if (!mounted) return;
+    if (result is Map<String, dynamic>) {
+      setState(() => _profile = {..._profile, ...result});
+    }
+    _loadAll();
+  }
+
+  void _shareProfile() {
+    final code = _referralCode;
+    AnalyticsService().logShare(
+      contentType: code.isEmpty ? 'profile' : 'referral',
+    );
+    final link =
+        code.isEmpty
+            ? 'https://aura-app-efae1.web.app'
+            : 'https://aura-app-efae1.web.app/ref/$code';
+    final handle = _handle.isEmpty ? '' : ' (@$_handle)';
+    Share.share(
+      '✦ Come farm aura with me$handle on Aura Arena — copy viral challenges, get scored by AI, win real rewards.\n\n'
+      '${code.isEmpty ? '' : 'Use my code: $code\n\n'}'
+      '👉 $link',
+      sharePositionOrigin: shareOrigin(context),
+    );
+  }
+
+  Widget _countCell({
+    Key? key,
+    required String value,
+    required String label,
+    Color valueColor = Colors.white,
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
-      onTap:
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-          ).then((result) {
-            if (result is Map<String, dynamic>) {
-              setState(() => _profile = {..._profile, ...result});
-            }
-            _loadAll();
-          }),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _accent.withValues(alpha: 0.30)),
-        ),
-        child: Row(
+      key: key,
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Stack(
-              children: [
-                AvatarWidget(
-                  photoUrl: photoUrl,
-                  fallbackText: name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                  radius: 38,
-                  backgroundColor: _accent.withValues(alpha: 0.20),
-                  textStyle: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      color: _accent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: _card, width: 2),
-                    ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.white,
-                      size: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '@$username',
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (city.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on_outlined,
-                          color: Colors.white38,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          city,
-                          style: const TextStyle(
-                            color: AppColors.textFaint,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  if (gender.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.person_outline_rounded,
-                          color: Colors.white38,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          gender,
-                          style: const TextStyle(
-                            color: AppColors.textFaint,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+            Text(
+              value,
+              style: TextStyle(
+                fontFamily: 'ClashDisplay',
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                wordSpacing: 4,
+                color: valueColor,
               ),
             ),
-            Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _accent.withValues(alpha: 0.55),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: _accent.withValues(alpha: 0.25),
-                    blurRadius: 14,
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.workspace_premium_rounded,
-                color: Color(0xFFD4A8FF),
-                size: 32,
-              ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
             ),
           ],
         ),
@@ -682,57 +624,628 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  // ── Creator tools ─────────────────────────────────────────────────────────────
-  // Since the center-FAB now always opens the video reels feed (for every
-  // role, players included), this is a creator/brand/admin account's only
-  // remaining path to CreatorActivityScreen (create/manage challenges,
-  // insights, settings).
-  Widget _buildCreatorToolsCard(BuildContext context) {
-    return GestureDetector(
-      onTap:
-          () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CreatorActivityScreen()),
+  Widget _buildHeader(BuildContext context, int totalRewards, AuraTier tier) {
+    final photoUrl =
+        (_profile['avatar'] as String? ?? '').isNotEmpty
+            ? _profile['avatar'] as String
+            : _profile['profileImageUrl'] as String? ?? '';
+    final city =
+        (_profile['city'] as Map<String, dynamic>?)?['name'] as String? ?? '';
+    final gender = (_profile['gender'] as String? ?? '').trim();
+    final place = [city, gender].where((s) => s.isNotEmpty).join(' · ');
+    final globalRank = _ranks?.global?.rank;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            GestureDetector(
+              key: const Key('profile-avatar'),
+              onTap: _openEditProfile,
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: [
+                          Color(0xFFB62FD6),
+                          Color(0xFF2F7BFF),
+                          Color(0xFFB62FD6),
+                        ],
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: _bg,
+                        shape: BoxShape.circle,
+                      ),
+                      child: AvatarWidget(
+                        photoUrl: photoUrl,
+                        fallbackText: _displayName[0].toUpperCase(),
+                        radius: 36,
+                        backgroundColor: _accent.withValues(alpha: 0.20),
+                        textStyle: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: _accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _bg, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _countCell(
+                    key: const Key('profile-count-videos'),
+                    value: _fmt(_videos.length),
+                    label: 'Videos',
+                    onTap: () => setState(() => _tab = 0),
+                  ),
+                  _countCell(
+                    key: const Key('profile-count-aura'),
+                    value: _fmt(totalRewards),
+                    label: 'Aura',
+                  ),
+                  _countCell(
+                    key: const Key('profile-count-rank'),
+                    value: globalRank == null ? '–' : '#$globalRank',
+                    label: 'Global ›',
+                    valueColor: globalRank == null ? Colors.white : _gold,
+                    onTap: () => setState(() => _tab = 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                _displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              key: const Key('profile-tier-chip'),
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: tier.color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: tier.color.withValues(alpha: 0.45)),
+              ),
+              child: Text(
+                tier.name,
+                style: TextStyle(
+                  color: tier.color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (place.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(
+                Icons.location_on_outlined,
+                color: Colors.white38,
+                size: 14,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  place,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+            ],
           ),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _pillButton(
+                key: const Key('profile-edit'),
+                label: 'Edit profile',
+                onTap: _openEditProfile,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _pillButton(
+                key: const Key('profile-share'),
+                label: 'Share profile',
+                onTap: _shareProfile,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _pillButton({
+    Key? key,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Highlights (round bubbles) ───────────────────────────────────────────────
+  Widget _highlight({
+    required Key key,
+    required String label,
+    required Color ring,
+    required Widget child,
+    required VoidCallback onTap,
+    String? badge,
+  }) {
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _card,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: ring, width: 2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: ring.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+                if (badge != null)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _accent,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: _bg, width: 1.5),
+                      ),
+                      child: Text(
+                        badge,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 10.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSheet(Widget Function(BuildContext) builder) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF100A20),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder:
+          (ctx) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  builder(ctx),
+                ],
+              ),
+            ),
+          ),
+    );
+  }
+
+  Widget _buildHighlights(
+    BuildContext context,
+    int totalRewards,
+    int level,
+    String? tierName,
+    Map<String, dynamic>? levelProgressData,
+    AuraTier tier,
+  ) {
+    final (String creatorLabel, VoidCallback creatorTap) =
+        _isCreator
+            ? (
+              'Creator',
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CreatorActivityScreen(),
+                ),
+              ),
+            )
+            : (
+              switch (_creatorStep) {
+                'PENDING_REVIEW' => 'In review',
+                'CHANGES_REQUESTED' => 'Fix & resend',
+                'REJECTED' => 'Re-apply',
+                _ => 'Go creator',
+              },
+              () async {
+                AnalyticsService().logAuraCreatorJoinClick('profile_banner');
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CreateCreatorProfileScreen(),
+                  ),
+                );
+                // This tab stays mounted in the shell, so it won't re-init on return.
+                _refreshCreatorStatus();
+              },
+            );
+    final claimable =
+        _rewards
+            .where(
+              (r) =>
+                  r['rewardType'] == 'coupon_code' && r['status'] == 'active',
+            )
+            .length;
+
+    return SizedBox(
+      height: 76,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _highlight(
+            key: const Key('highlight-level'),
+            label: 'Level $level',
+            ring: tier.color == Colors.transparent ? _accent : tier.color,
+            child: Text(
+              'L$level',
+              style: const TextStyle(
+                fontFamily: 'ClashDisplay',
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                wordSpacing: 3.3,
+                color: Colors.white,
+              ),
+            ),
+            onTap:
+                () => _showSheet(
+                  (_) => _buildAuraPointsCard(
+                    totalRewards,
+                    level,
+                    tierName,
+                    levelProgressData,
+                  ),
+                ),
+          ),
+          // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
+          ValueListenableBuilder<bool>(
+            valueListenable: AppConfigService.instance.couponsEnabled,
+            builder:
+                (context, on, _) =>
+                    !on
+                        ? const SizedBox.shrink()
+                        : _highlight(
+                          key: const Key('highlight-rewards'),
+                          label: 'Rewards',
+                          ring: _gold,
+                          badge: claimable > 0 ? '$claimable' : null,
+                          child: const Text(
+                            '🎁',
+                            style: TextStyle(fontSize: 20),
+                          ),
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RewardsScreen(),
+                              ),
+                            );
+                            await _reloadRewards();
+                          },
+                        ),
+          ),
+          if (_referralCode.isNotEmpty)
+            _highlight(
+              key: const Key('highlight-invite'),
+              label: 'Invite',
+              ring: const Color(0xFF4FA3FF),
+              child: const Text('🤝', style: TextStyle(fontSize: 20)),
+              onTap: () => _showSheet((ctx) => _buildReferralCard(ctx)),
+            ),
+          _highlight(
+            key: const Key('highlight-creator'),
+            label: creatorLabel,
+            ring: _isCreator ? _accent : Colors.white.withValues(alpha: 0.25),
+            child: const Text('🎬', style: TextStyle(fontSize: 20)),
+            onTap: creatorTap,
+          ),
+          _highlight(
+            key: const Key('highlight-saved'),
+            label: 'Saved',
+            ring: const Color(0xFFFF5EA8),
+            child: const Icon(
+              Icons.bookmark_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SavedChallengesScreen(),
+                  ),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tabs: Videos | Ranks | Cards ────────────────────────────────────────────
+  Widget _buildTabBar() {
+    Widget tab(int i, IconData icon, String label) {
+      final on = _tab == i;
+      return Expanded(
+        child: GestureDetector(
+          key: Key('profile-tab-${label.toLowerCase()}'),
+          onTap: () => setState(() => _tab = i),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color:
+                      on
+                          ? const Color(0xFFB77CF0)
+                          : Colors.white.withValues(alpha: 0.08),
+                  width: on ? 2 : 1,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: on ? Colors.white : AppColors.textMuted,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: on ? Colors.white : AppColors.textMuted,
+                    fontSize: 13,
+                    fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        tab(0, Icons.grid_view_rounded, 'Videos'),
+        tab(1, Icons.emoji_events_rounded, 'Ranks'),
+        tab(2, Icons.style_rounded, 'Cards'),
+      ],
+    );
+  }
+
+  Widget _emptyNote(String title, String subtitle) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Ranks tab (B3) ───────────────────────────────────────────────────────────
+  Widget _sectionLabel(String text) => Padding(
+    padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.textMuted,
+        fontSize: 11,
+        letterSpacing: 1.6,
+      ),
+    ),
+  );
+
+  Widget _rankRow({
+    required Key key,
+    required int? rank,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    final color = switch (rank) {
+      1 => const Color(0xFF4ADE80),
+      2 || 3 => _gold,
+      _ => Colors.white,
+    };
+    return GestureDetector(
+      key: key,
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _accent.withValues(alpha: 0.30)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
         ),
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.dashboard_customize_rounded,
-                color: _accent,
-                size: 22,
+            SizedBox(
+              width: 58,
+              child: Text(
+                rank == null ? '–' : '#$rank',
+                style: TextStyle(
+                  fontFamily: 'ClashDisplay',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                  wordSpacing: 4.4,
+                  color: color,
+                ),
               ),
             ),
-            const SizedBox(width: 14),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Creator Tools',
-                    style: TextStyle(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    'Create challenges, manage submissions, insights',
-                    style: TextStyle(color: AppColors.textFaint, fontSize: 12),
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11.5,
+                    ),
                   ),
                 ],
               ),
@@ -748,104 +1261,97 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  // ── Become Creator banner (regular users only) ─────────────────────────────
-  Widget _buildBecomeCreatorBanner(BuildContext context) {
-    // No Aura threshold any more — anyone can apply; the subtitle follows the application.
-    final (
-      String title,
-      String subtitle,
-      Color subtitleColor,
-      IconData trailing,
-    ) = switch (_creatorStep) {
-      'PENDING_REVIEW' => (
-        'Creator request pending',
-        'Our team is reviewing it — we\'ll let you know',
-        const Color(0xFFFACC15),
-        Icons.hourglass_top_rounded,
-      ),
-      'CHANGES_REQUESTED' => (
-        'Creator request needs updates',
-        'Tap to see what to change and resubmit',
-        const Color(0xFFFB923C),
-        Icons.arrow_forward_ios_rounded,
-      ),
-      'REJECTED' => (
-        'Creator request not approved',
-        'Tap to see why and apply again',
-        const Color(0xFFF87171),
-        Icons.arrow_forward_ios_rounded,
-      ),
-      _ => (
-        'Become a Creator',
-        'Apply to launch challenges & grow your brand',
-        const Color(0xFFD4A8FF),
-        Icons.arrow_forward_ios_rounded,
-      ),
-    };
-    return GestureDetector(
-      onTap: () async {
-        AnalyticsService().logAuraCreatorJoinClick('profile_banner');
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CreateCreatorProfileScreen()),
-        );
-        // This tab stays mounted in the shell, so it won't re-init on return.
-        _refreshCreatorStatus();
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1A0A30), Color(0xFF0A1630)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+  static String _regionLine(RankEntry r) {
+    final rank = r.rank;
+    final total = r.total;
+    final of = total == null ? '' : ' · of ${_fmtStatic(total)} farmers';
+    if (rank == null) return 'not ranked yet — go farm some aura ✦';
+    if (rank == 1) return "you're the GOAT here 🐐$of";
+    if (rank <= 3) return 'on the podium, no cap 🔥$of';
+    return 'lock in — climb the board$of';
+  }
+
+  static String _fmtStatic(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
+
+  void _openAuraFarmers() => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+  );
+
+  Widget _buildRanksTab(BuildContext context) {
+    final ranks = _ranks;
+    if (ranks == null && _ranksLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(color: _accent, strokeWidth: 2),
           ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _accent.withValues(alpha: 0.35)),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: _accent.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.star_rounded,
-                color: Color(0xFFD4A8FF),
-                size: 26,
-              ),
+      );
+    }
+    if (ranks == null || ranks.isEmpty) {
+      return _emptyNote(
+        'No ranks yet',
+        'Take a challenge and start farming aura ✦ — your Global, country, city and challenge ranks show up here.',
+      );
+    }
+    final regions = [
+      if (ranks.global != null) ('global', ranks.global!),
+      if (ranks.country != null) ('country', ranks.country!),
+      if (ranks.city != null) ('city', ranks.city!),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (regions.isNotEmpty) ...[
+          _sectionLabel('REGION'),
+          for (final (key, r) in regions)
+            _rankRow(
+              key: Key('rank-region-$key'),
+              rank: r.rank,
+              title: r.name,
+              subtitle: _regionLine(r),
+              onTap: _openAuraFarmers,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'ClashDisplay',
-                      wordSpacing: 3.5,
+        ],
+        const SizedBox(height: 6),
+        _sectionLabel('CHALLENGES'),
+        if (ranks.challenges.isEmpty)
+          _emptyNote(
+            'No challenge ranks yet',
+            'Post your first take and see where you land 👀',
+          )
+        else
+          for (final c in ranks.challenges)
+            _rankRow(
+              key: Key('rank-challenge-${c.challengeId}'),
+              rank: c.rank,
+              title: c.title,
+              subtitle: [
+                if (c.bestScore != null) 'best ${c.bestScore}',
+                if (c.total != null) 'of ${_fmtStatic(c.total!)}',
+                if (c.rank == 1) 'GOAT 🐐',
+              ].join(' · '),
+              onTap:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => ChallengeLeaderboardScreen(
+                            challengeId: c.challengeId,
+                            challengeTitle: c.title,
+                          ),
                     ),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    subtitle,
-                    style: TextStyle(color: subtitleColor, fontSize: 12),
-                  ),
-                ],
-              ),
             ),
-            Icon(trailing, color: Colors.white54, size: 15),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
@@ -869,7 +1375,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         (levelProgressData?['auraToNextLevel'] as num?)?.toInt();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
       clipBehavior: Clip.hardEdge,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -1117,113 +1622,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  // ── Rewards & vouchers row ───────────────────────────────────────────────────
-  // Teaser into RewardsScreen (coupons/bonuses from /profile/rewards +
-  // leaderboard vouchers from /profile/offer-vouchers). The badge counts only
-  // coupon_code rewards still `active` — the ones a tap can actually claim.
-  Widget _buildRewardsRow(BuildContext context) {
-    final claimable =
-        _rewards
-            .where(
-              (r) =>
-                  r['rewardType'] == 'coupon_code' && r['status'] == 'active',
-            )
-            .length;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const RewardsScreen()),
-            );
-            await _reloadRewards();
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.card_giftcard_rounded,
-                    color: _accent,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Rewards & Vouchers',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Coupons, bonuses & leaderboard prizes',
-                        style: TextStyle(
-                          color: AppColors.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (claimable > 0) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _accent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _accent.withValues(alpha: 0.4)),
-                    ),
-                    child: Text(
-                      '$claimable to claim',
-                      style: const TextStyle(
-                        color: AppColors.accentLight,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textFaint,
-                  size: 22,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // ── Referral card ─────────────────────────────────────────────────────────────
   Widget _buildReferralCard(BuildContext context) {
     // GET /referrals's live response names this field `code`, not the
@@ -1239,7 +1637,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final link = 'https://aura-app-efae1.web.app/ref/$referralCode';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _card,
@@ -1481,17 +1878,17 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   // ── My Videos grid ────────────────────────────────────────────────────────────
   Widget _buildMyVideosSection(BuildContext context) {
     final normalised = _videos.map(_normaliseSubmission).toList();
-    final preview = normalised.take(4).toList();
+    final preview = normalised.take(9).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Text('MY VIDEOS', style: AppTextStyles.sectionHeader),
-            const Spacer(),
-            if (_videos.length > 4)
-              SeeAllLink(
+        if (_videos.length > 9)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SeeAllLink(
                 onTap:
                     () => Navigator.push(
                       context,
@@ -1500,31 +1897,21 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       ),
                     ),
               ),
-          ],
-        ),
-        const SizedBox(height: 12),
+            ),
+          ),
         if (preview.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Center(
-              child: Text(
-                'No videos yet',
-                style: TextStyle(color: AppColors.textFaint, fontSize: 13),
-              ),
-            ),
+          _emptyNote(
+            'No videos yet',
+            'Take a challenge and post your first W ✦',
           )
         else
           GridView.count(
-            crossAxisCount: 2,
+            crossAxisCount: 3,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            childAspectRatio: 0.65,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+            childAspectRatio: 0.72,
             children: List.generate(preview.length, (i) {
               final data = preview[i];
               final videoUrl = data['videoUrl'] as String;
@@ -1565,7 +1952,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   if (result == 'deleted') _loadAll();
                 },
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -1722,6 +2109,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     final tierName = _profile['tier'] as String?;
     final levelProgressData =
         _profile['levelProgress'] as Map<String, dynamic>?;
+    final tier = auraTierForName(tierName, level: level);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -1731,106 +2119,110 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
           widget.embeddedInShell
               ? null
               : const AppBottomNav(activeTab: AppNavTab.profile),
-      appBar: AppBar(
-        backgroundColor: _bg,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leading:
-            widget.embeddedInShell
-                ? null
-                : IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                  onPressed: () => Navigator.pop(context),
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          color: _accent,
+          // Pull to refresh also re-checks the creator application (an admin may have decided).
+          onRefresh: () {
+            _refreshCreatorStatus();
+            return _loadAll();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (!widget.embeddedInShell)
+                      IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    Expanded(
+                      child: Text(
+                        _handle.isEmpty ? _displayName : '@$_handle',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'ClashDisplay',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 20,
+                          wordSpacing: 4.4,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('profile-settings'),
+                      icon: const Icon(
+                        Icons.settings_outlined,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      onPressed:
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          ),
+                    ),
+                  ],
                 ),
-        title: SizedBox(
-          height: 22,
-          child: Image.asset(
-            'assets/images/Aura arena.png',
-            fit: BoxFit.contain,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.settings_outlined,
-              color: Colors.white,
-              size: 22,
-            ),
-            onPressed:
-                () => Navigator.push(
+                const SizedBox(height: 8),
+                _buildHeader(context, totalRewards, tier),
+                const SizedBox(height: 14),
+                _buildHighlights(
                   context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  totalRewards,
+                  level,
+                  tierName,
+                  levelProgressData,
+                  tier,
                 ),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        color: _accent,
-        // Pull to refresh also re-checks the creator application (an admin may have decided).
-        onRefresh: () {
-          _refreshCreatorStatus();
-          return _loadAll();
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildProfileCard(context),
-              const SizedBox(height: 16),
-              if (_isCreator) ...[
-                _buildCreatorToolsCard(context),
-                const SizedBox(height: 16),
-              ] else ...[
-                _buildBecomeCreatorBanner(context),
+                const SizedBox(height: 4),
+                _buildTabBar(),
+                const SizedBox(height: 12),
+                if (_tab == 0) ...[
+                  _buildMyVideosSection(context),
+                  _SavedChallengesGrid(challenges: _savedChallenges),
+                ] else if (_tab == 1)
+                  _buildRanksTab(context)
+                else
+                  _buildCardsTab(),
+                const SizedBox(height: 24),
               ],
-              _buildAuraPointsCard(
-                totalRewards,
-                level,
-                tierName,
-                levelProgressData,
-              ),
-              // Streak card disabled for now — see _buildStreakCard.
-              // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
-              ValueListenableBuilder<bool>(
-                valueListenable: AppConfigService.instance.couponsEnabled,
-                builder:
-                    (context, on, _) =>
-                        on
-                            ? _buildRewardsRow(context)
-                            : const SizedBox.shrink(),
-              ),
-              const SizedBox(height: 8),
-              _buildReferralCard(context),
-              _AchievementCardsSection(
-                // One flex card per approved challenge completion, not the
-                // account-wide unlock badges from /profile/achievements
-                // (that endpoint's shape — type/title/auraEarned — doesn't
-                // even carry a challenge to share).
-                cards:
-                    _videos
-                        .map(_normaliseSubmission)
-                        .where((v) => v['status'] == 'approved')
-                        .toList(),
-                username:
-                    _profile['profileName'] as String? ??
-                    _profile['username'] as String? ??
-                    '',
-              ),
-              _buildMyVideosSection(context),
-              _SavedChallengesGrid(challenges: _savedChallenges),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildCardsTab() {
+    // One flex card per approved challenge completion, not the account-wide
+    // unlock badges from /profile/achievements (that endpoint's shape doesn't
+    // even carry a challenge to share).
+    final cards =
+        _videos
+            .map(_normaliseSubmission)
+            .where((v) => v['status'] == 'approved')
+            .toList();
+    if (cards.isEmpty) {
+      return _emptyNote(
+        'No cards yet',
+        'Score on a challenge to unlock your first flex card — then flex it everywhere 💅',
+      );
+    }
+    return _AchievementCardsSection(cards: cards, username: _handle);
   }
 }
 
