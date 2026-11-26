@@ -60,7 +60,8 @@ void main() {
                 'instructions': 'Do the move.',
                 'videoUrl': freshVideoUrl,
                 'thumbnailUrl': '',
-                'submissionsCount': 3,
+                'submissionsCount': 9, // retakes count here...
+                'participants': 3, // ...but Participants is distinct people
                 'sourceType': 'Brand',
                 'creatorId': 'brand-2', // just the id, like the live API
                 'status': 'approved',
@@ -821,6 +822,10 @@ void main() {
         ),
         findsOneWidget,
       );
+      // Client, 26 Nov 2026: "Participants" (distinct people), not "Taken it".
+      expect(inStats('Participants'), findsOneWidget);
+      expect(inStats('Taken it'), findsNothing);
+      expect(inStats('3'), findsOneWidget);
     },
   );
 

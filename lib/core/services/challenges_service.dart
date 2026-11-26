@@ -374,6 +374,8 @@ Map<String, dynamic> normaliseChallenge(Map<String, dynamic> c) {
     'videoId': _extractRefId(c['videoId']),
     'starsCount': (c['starsCount'] as num?)?.toInt() ?? 0,
     'submissionsCount': (c['submissionsCount'] as num?)?.toInt() ?? 0,
+    // Distinct people who took part (backend ADR 154); null from older servers.
+    'participants': (c['participants'] as num?)?.toInt(),
     'isActive': c['isActive'] as bool? ?? true,
     'status': c['status'] as String? ?? 'approved',
     'createdAt': c['createdAt'],
