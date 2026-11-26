@@ -1277,9 +1277,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     return '$n';
   }
 
-  void _openAuraFarmers() => Navigator.push(
+  /// Opens Aura Farmers on the board for that row (global / country / city).
+  void _openAuraFarmers([String scope = 'global']) => Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+    MaterialPageRoute(builder: (_) => LeaderboardScreen(initialScope: scope)),
   );
 
   Widget _buildRanksTab(BuildContext context) {
@@ -1318,7 +1319,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               rank: r.rank,
               title: r.name,
               subtitle: _regionLine(r),
-              onTap: _openAuraFarmers,
+              onTap: () => _openAuraFarmers(key),
             ),
         ],
         const SizedBox(height: 6),

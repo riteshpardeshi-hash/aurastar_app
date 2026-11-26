@@ -85,9 +85,11 @@ void main() {
     await open(tester);
     await tester.tap(find.byKey(const Key('profile-tab-ranks')));
     await settle(tester);
-    await tester.tap(find.byKey(const Key('rank-region-global')));
+    await tester.tap(find.byKey(const Key('rank-region-city')));
     await settle(tester);
     expect(find.byType(LeaderboardScreen), findsOneWidget);
+    // Opens on the board you tapped (your city's).
+    expect(tester.widget<LeaderboardScreen>(find.byType(LeaderboardScreen)).initialScope, 'city');
 
     Navigator.of(tester.element(find.byType(LeaderboardScreen))).pop();
     await settle(tester);

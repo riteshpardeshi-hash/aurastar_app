@@ -25,7 +25,15 @@ class LeaderboardScreen extends StatefulWidget {
   /// one shared bottom nav.
   final bool embeddedInShell;
 
-  const LeaderboardScreen({super.key, this.embeddedInShell = false});
+  /// Which Region board to open on: 'global', 'country' or 'city' (the
+  /// profile's Ranks tab opens the one you tapped).
+  final String initialScope;
+
+  const LeaderboardScreen({
+    super.key,
+    this.embeddedInShell = false,
+    this.initialScope = 'global',
+  });
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -112,7 +120,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabs,
-                children: const [_GlobalBoard(), _ChallengeCards()],
+                children: [
+                  _GlobalBoard(initialScope: widget.initialScope),
+                  const _ChallengeCards(),
+                ],
               ),
             ),
           ],
@@ -138,7 +149,9 @@ enum _GlobalSort {
 const _periods = [('all', 'All time'), ('month', 'Month'), ('week', 'Week')];
 
 class _GlobalBoard extends StatefulWidget {
-  const _GlobalBoard();
+  final String initialScope;
+
+  const _GlobalBoard({this.initialScope = 'global'});
 
   @override
   State<_GlobalBoard> createState() => _GlobalBoardState();
@@ -159,7 +172,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
   _GlobalSort _sort = _GlobalSort.auraDesc;
   // Region filter (client, 26 Nov 2026): Global, the viewer's country, the
   // viewer's city. Names come back with each page (backend ADR 155).
-  String _scope = 'global';
+  late String _scope = widget.initialScope;
   String? _countryName;
   String? _cityName;
 
