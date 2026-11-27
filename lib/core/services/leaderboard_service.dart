@@ -8,15 +8,16 @@ class LeaderboardService {
     int limit = 20,
   }) => _fetch('/leaderboard', page: page, limit: limit, auth: true);
 
-  /// The global board with search, period and sort, plus the viewer's own
-  /// standing (backend ADR 154). Throws on a network/server error so the
-  /// screen can keep what it shows.
+  /// The global board with search, period, sort and region scope, plus the
+  /// viewer's own standing (backend ADR 154 / 155). Throws on a
+  /// network/server error so the screen can keep what it shows.
   Future<GlobalBoardPage> fetchGlobalBoard({
     int page = 1,
     int limit = 20,
     String search = '',
     String period = 'all',
     String sort = 'aura_desc',
+    String scope = 'global',
   }) async {
     final q =
         Uri(
@@ -26,11 +27,13 @@ class LeaderboardService {
             if (search.trim().isNotEmpty) 'search': search.trim(),
             'period': period,
             'sort': sort,
+            'scope': scope,
           },
         ).query;
     final res = await _client.get('/leaderboard?$q', auth: true);
-    if (res['status'] != 'success')
+    if (res['status'] != 'success') {
       throw Exception(res['message'] ?? 'Leaderboard failed');
+    }
     final data = res['data'] as Map<String, dynamic>? ?? {};
     final list =
         (data['responses'] as List? ??
@@ -38,13 +41,38 @@ class LeaderboardService {
                 data['items'] as List? ??
                 [])
             .cast<Map<String, dynamic>>();
-    final me =
-        data['me'] is Map ? Map<String, dynamic>.from(data['me'] as Map) : null;
-    return GlobalBoardPage(
-      entries: list.map(normaliseLeaderboardEntry).toList(),
-      total: (data['totalCount'] as num?)?.toInt() ?? list.length,
-      me: me,
+    return GlobalBoardPage.fromData(data, list);
+  }
+
+  /// One challenge's board: each player's best score, ranked, optionally
+  /// within the viewer's country or city (`scope`), searchable (ADR 155).
+  Future<GlobalBoardPage> fetchChallengePlayers(
+    String challengeId, {
+    int page = 1,
+    int limit = 20,
+    String search = '',
+    String scope = 'global',
+  }) async {
+    final q =
+        Uri(
+          queryParameters: {
+            'page': '$page',
+            'limit': '$limit',
+            if (search.trim().isNotEmpty) 'search': search.trim(),
+            'scope': scope,
+          },
+        ).query;
+    final res = await _client.get(
+      '/leaderboard/challenges/$challengeId/players?$q',
+      auth: true,
     );
+    if (res['status'] != 'success') {
+      throw Exception(res['message'] ?? 'Challenge board failed');
+    }
+    final data = res['data'] as Map<String, dynamic>? ?? {};
+    final list =
+        (data['responses'] as List? ?? []).cast<Map<String, dynamic>>();
+    return GlobalBoardPage.fromData(data, list);
   }
 
   /// The Challenge tab's cards: each joinable challenge with its participants,
@@ -67,8 +95,9 @@ class LeaderboardService {
           },
         ).query;
     final res = await _client.get('/leaderboard/challenges?$q', auth: true);
-    if (res['status'] != 'success')
+    if (res['status'] != 'success') {
       throw Exception(res['message'] ?? 'Challenge boards failed');
+    }
     final data = res['data'] as Map<String, dynamic>? ?? {};
     return (data['responses'] as List? ?? []).cast<Map<String, dynamic>>();
   }
@@ -152,5 +181,32 @@ class GlobalBoardPage {
   /// gapToFirst, gapToNext. Null when signed out.
   final Map<String, dynamic>? me;
 
-  const GlobalBoardPage({required this.entries, required this.total, this.me});
+  /// The viewer's own country and city ({_id, name}; either may be null),
+  /// for labelling the region filters.
+  final Map<String, dynamic>? country;
+  final Map<String, dynamic>? city;
+
+  const GlobalBoardPage({
+    required this.entries,
+    required this.total,
+    this.me,
+    this.country,
+    this.city,
+  });
+
+  factory GlobalBoardPage.fromData(
+    Map<String, dynamic> data,
+    List<Map<String, dynamic>> list,
+  ) {
+    Map<String, dynamic>? map(dynamic v) =>
+        v is Map ? Map<String, dynamic>.from(v) : null;
+    final region = map(data['region']);
+    return GlobalBoardPage(
+      entries: list.map(normaliseLeaderboardEntry).toList(),
+      total: (data['totalCount'] as num?)?.toInt() ?? list.length,
+      me: map(data['me']),
+      country: map(region?['country']),
+      city: map(region?['city']),
+    );
+  }
 }

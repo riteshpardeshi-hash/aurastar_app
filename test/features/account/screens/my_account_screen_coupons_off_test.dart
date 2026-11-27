@@ -61,21 +61,23 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('shows the Rewards & Vouchers row while coupons are on', (tester) async {
+  // Profile redesign (26 Nov 2026): Rewards & Vouchers is a highlight bubble now.
+  const rewards = Key('highlight-rewards');
+
+  testWidgets('shows the Rewards highlight while coupons are on', (tester) async {
     AppConfigService.instance.couponsEnabled.value = true;
     await pumpAccount(tester);
-    await tester.scrollUntilVisible(find.text('Rewards & Vouchers'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Rewards & Vouchers'), findsOneWidget);
+    expect(find.byKey(rewards), findsOneWidget);
   });
 
   testWidgets('hides it while coupons are off, and shows it again when switched on', (tester) async {
     AppConfigService.instance.couponsEnabled.value = false;
     await pumpAccount(tester);
-    expect(find.text('Rewards & Vouchers', skipOffstage: false), findsNothing);
+    expect(find.byKey(rewards, skipOffstage: false), findsNothing);
 
     AppConfigService.instance.couponsEnabled.value = true;
     await tester.pump();
-    expect(find.text('Rewards & Vouchers', skipOffstage: false), findsOneWidget);
+    expect(find.byKey(rewards, skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('switching coupons back on re-fetches the rewards (so the claim badge is current)', (tester) async {

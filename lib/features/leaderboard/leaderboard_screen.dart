@@ -25,7 +25,15 @@ class LeaderboardScreen extends StatefulWidget {
   /// one shared bottom nav.
   final bool embeddedInShell;
 
-  const LeaderboardScreen({super.key, this.embeddedInShell = false});
+  /// Which Region board to open on: 'global', 'country' or 'city' (the
+  /// profile's Ranks tab opens the one you tapped).
+  final String initialScope;
+
+  const LeaderboardScreen({
+    super.key,
+    this.embeddedInShell = false,
+    this.initialScope = 'global',
+  });
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -86,7 +94,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
             const Padding(
               padding: EdgeInsets.fromLTRB(18, 12, 18, 12),
               child: Text(
-                'Leaderboard',
+                'Aura Farmers',
                 style: TextStyle(
                   fontFamily: 'ClashDisplay',
                   fontSize: 26,
@@ -105,14 +113,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
                 border: Border.all(color: lbLine),
               ),
               child: Row(
-                children: [_segment('Global', 0), _segment('Challenge', 1)],
+                children: [_segment('Region', 0), _segment('Challenges', 1)],
               ),
             ),
             const SizedBox(height: 10),
             Expanded(
               child: TabBarView(
                 controller: _tabs,
-                children: const [_GlobalBoard(), _ChallengeCards()],
+                children: [
+                  _GlobalBoard(initialScope: widget.initialScope),
+                  const _ChallengeCards(),
+                ],
               ),
             ),
           ],
@@ -124,21 +135,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
 // ── Global ───────────────────────────────────────────────────────────────────
 
-enum _GlobalSort {
-  auraDesc('aura_desc', 'Most Aura'),
-  auraAsc('aura_asc', 'Least Aura'),
-  nameAz('name_asc', 'Name A–Z'),
-  nameZa('name_desc', 'Name Z–A');
-
-  const _GlobalSort(this.api, this.label);
-  final String api;
-  final String label;
-}
-
-const _periods = [('all', 'All time'), ('month', 'Month'), ('week', 'Week')];
+const _periods = [
+  ('all', 'All time', '👑', 'The legends, since day one'),
+  ('month', 'This month', '📅', 'Last 30 days of farming'),
+  ('week', 'This week', '⚡', 'Fresh W’s from the last 7 days'),
+];
 
 class _GlobalBoard extends StatefulWidget {
-  const _GlobalBoard();
+  final String initialScope;
+
+  const _GlobalBoard({this.initialScope = 'global'});
 
   @override
   State<_GlobalBoard> createState() => _GlobalBoardState();
@@ -156,7 +162,13 @@ class _GlobalBoardState extends State<_GlobalBoard>
 
   String _search = '';
   String _period = 'all';
-  _GlobalSort _sort = _GlobalSort.auraDesc;
+  // No sorting (client, 26 Nov 2026): Aura Farmers is always ranked by Aura,
+  // highest first; only filters change what's shown.
+  // Region filter (client, 26 Nov 2026): Global, the viewer's country, the
+  // viewer's city. Names come back with each page (backend ADR 155).
+  late String _scope = widget.initialScope;
+  String? _countryName;
+  String? _cityName;
 
   final List<Map<String, dynamic>> _entries = [];
   Map<String, dynamic>? _me;
@@ -171,7 +183,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
   String _myAvatar = '';
 
   bool get _isDefaultView =>
-      _search.isEmpty && _period == 'all' && _sort == _GlobalSort.auraDesc;
+      _search.isEmpty && _period == 'all' && _scope == 'global';
 
   @override
   bool get wantKeepAlive => true;
@@ -194,12 +206,15 @@ class _GlobalBoardState extends State<_GlobalBoard>
     if (cached != null) {
       _entries.addAll(cached.entries);
       _me = cached.me;
+      _countryName = cached.country?['name'] as String?;
+      _cityName = cached.city?['name'] as String?;
       _initialLoading = false;
     }
     _reload();
     _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300)
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
         _loadMore();
+      }
     });
     // Blocking / unblocking someone elsewhere reloads the board at once.
     _safetySub = SafetyService.changes.listen((_) => _reload());
@@ -223,7 +238,8 @@ class _GlobalBoardState extends State<_GlobalBoard>
         limit: _pageSize,
         search: _search,
         period: _period,
-        sort: _sort.api,
+        sort: 'aura_desc',
+        scope: _scope,
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -231,6 +247,8 @@ class _GlobalBoardState extends State<_GlobalBoard>
           ..clear()
           ..addAll(page.entries);
         _me = page.me;
+        _countryName = page.country?['name'] as String? ?? _countryName;
+        _cityName = page.city?['name'] as String? ?? _cityName;
         _page = 2;
         _hasMore = page.entries.length == _pageSize;
         _loading = false;
@@ -258,7 +276,8 @@ class _GlobalBoardState extends State<_GlobalBoard>
         limit: _pageSize,
         search: _search,
         period: _period,
-        sort: _sort.api,
+        sort: 'aura_desc',
+        scope: _scope,
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -289,18 +308,6 @@ class _GlobalBoardState extends State<_GlobalBoard>
     _reload();
   }
 
-  Future<void> _pickSort() async {
-    final picked = await showLbSortSheet<_GlobalSort>(
-      context,
-      options: [for (final s in _GlobalSort.values) (s, s.label)],
-      current: _sort,
-    );
-    if (picked != null && picked != _sort) {
-      setState(() => _sort = picked);
-      _reload();
-    }
-  }
-
   void _openSafety(Map<String, dynamic> e) {
     final username = e['username'] as String? ?? '';
     showPlayerSafetyMenu(
@@ -317,6 +324,32 @@ class _GlobalBoardState extends State<_GlobalBoard>
     _ => '',
   };
 
+  Future<void> _pickRegion() async {
+    final picked = await showLbOptionSheet<String>(
+      context,
+      title: 'Pick your arena 🌍',
+      options: lbRegionOptions(_countryName, _cityName),
+      current: _scope,
+    );
+    if (picked != null && picked != _scope) {
+      setState(() => _scope = picked);
+      _reload();
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showLbOptionSheet<String>(
+      context,
+      title: 'Pick your era ⏳',
+      options: [for (final p in _periods) LbOption(p.$1, p.$3, p.$2, p.$4)],
+      current: _period,
+    );
+    if (picked != null && picked != _period) {
+      setState(() => _period = picked);
+      _reload();
+    }
+  }
+
   Widget _controls() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -330,24 +363,28 @@ class _GlobalBoardState extends State<_GlobalBoard>
             onClear: _clearSearch,
           ),
           const SizedBox(height: 10),
+          // Client, 26 Nov 2026: pick the region and the time window — no
+          // sorting; the board is always ranked by Aura, highest first.
           Row(
             children: [
-              for (final (value, label) in _periods)
-                LbChip(
-                  key: Key('leaderboard-period-$value'),
-                  label: label,
-                  selected: _period == value,
-                  onTap: () {
-                    if (_period == value) return;
-                    setState(() => _period = value);
-                    _reload();
-                  },
+              Expanded(
+                flex: 6,
+                child: LbSelectorPill(
+                  key: const Key('leaderboard-region'),
+                  emoji: lbRegionEmoji(_scope),
+                  label: lbRegionLabel(_scope, _countryName, _cityName),
+                  onTap: _pickRegion,
                 ),
-              const Spacer(),
-              LbSortButton(
-                key: const Key('leaderboard-sort'),
-                label: _sort.label,
-                onTap: _pickSort,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 5,
+                child: LbSelectorPill(
+                  key: const Key('leaderboard-time'),
+                  emoji: '⏳',
+                  label: _periods.firstWhere((p) => p.$1 == _period).$2,
+                  onTap: _pickTime,
+                ),
               ),
             ],
           ),
@@ -359,8 +396,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final showPodium =
-        _search.isEmpty && _sort == _GlobalSort.auraDesc && _entries.isNotEmpty;
+    final showPodium = _search.isEmpty && _entries.isNotEmpty;
     final podium =
         showPodium ? _entries.take(3).toList() : <Map<String, dynamic>>[];
     final rows = showPodium ? _entries.skip(3).toList() : _entries;
@@ -383,14 +419,26 @@ class _GlobalBoardState extends State<_GlobalBoard>
                       'Try another name or @handle.',
                       icon: Icons.search_off_rounded,
                     )
+                    : _scope == 'city' && _cityName == null
+                    ? lbEmpty(
+                      'Add your city to see who runs it',
+                      'Set your city in your profile, then come back 📍',
+                      icon: Icons.location_on_outlined,
+                    )
+                    : _scope == 'country' && _countryName == null
+                    ? lbEmpty(
+                      'Add your country to see your national board',
+                      'Set it in your profile, then come back 🗺️',
+                      icon: Icons.public_rounded,
+                    )
                     : _period != 'all'
                     ? lbEmpty(
-                      'No one has earned Aura $_periodWord',
-                      'Take a challenge and be first.',
+                      'No one farmed aura $_periodWord yet',
+                      'Take a challenge and be the first W 🔥',
                     )
                     : lbEmpty(
-                      'No players yet',
-                      'Complete challenges to appear here',
+                      'No farmers here yet',
+                      'Take a challenge and claim #1 — no cap 🐐',
                     ),
           ),
         ],
@@ -406,8 +454,9 @@ class _GlobalBoardState extends State<_GlobalBoard>
             (_loading && !_initialLoading ? 1 : 0),
         itemBuilder: (_, i) {
           if (showPodium) {
-            if (i == 0)
+            if (i == 0) {
               return LbPodium(top: podium, myId: _myId, onTap: _openSafety);
+            }
             i -= 1;
           }
           if (i >= rows.length) {
@@ -474,18 +523,6 @@ class _GlobalBoardState extends State<_GlobalBoard>
 
 // ── Challenge ────────────────────────────────────────────────────────────────
 
-enum _ChallengeSort {
-  participants('participants_desc', 'Most participants'),
-  newest('newest', 'Newest'),
-  endingSoon('ending_soon', 'Ending soon'),
-  nameAz('name_asc', 'Name A–Z'),
-  nameZa('name_desc', 'Name Z–A');
-
-  const _ChallengeSort(this.api, this.label);
-  final String api;
-  final String label;
-}
-
 const _filters = [('all', 'All'), ('joined', 'Joined'), ('brand', 'Brand')];
 
 class _ChallengeCards extends StatefulWidget {
@@ -505,7 +542,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
 
   String _search = '';
   String _filter = 'all';
-  _ChallengeSort _sort = _ChallengeSort.participants;
 
   final List<Map<String, dynamic>> _cards = [];
   int _page = 1;
@@ -522,8 +558,9 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     super.initState();
     _reload();
     _scroll.addListener(() {
-      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300)
+      if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 300) {
         _loadMore();
+      }
     });
   }
 
@@ -544,7 +581,7 @@ class _ChallengeCardsState extends State<_ChallengeCards>
         limit: _pageSize,
         search: _search,
         filter: _filter,
-        sort: _sort.api,
+        sort: 'participants_desc',
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -576,7 +613,7 @@ class _ChallengeCardsState extends State<_ChallengeCards>
         limit: _pageSize,
         search: _search,
         filter: _filter,
-        sort: _sort.api,
+        sort: 'participants_desc',
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -607,18 +644,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     _reload();
   }
 
-  Future<void> _pickSort() async {
-    final picked = await showLbSortSheet<_ChallengeSort>(
-      context,
-      options: [for (final s in _ChallengeSort.values) (s, s.label)],
-      current: _sort,
-    );
-    if (picked != null && picked != _sort) {
-      setState(() => _sort = picked);
-      _reload();
-    }
-  }
-
   Widget _empty() {
     if (_search.isNotEmpty) {
       return lbEmpty(
@@ -629,14 +654,17 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     }
     if (_filter == 'joined') {
       return lbEmpty(
-        "You haven't taken part yet",
-        'Take a challenge to see your rank here.',
+        "You haven't joined any yet 👀",
+        'Take a challenge and your rank shows up here.',
       );
     }
     if (_filter == 'brand') {
-      return lbEmpty('No brand challenges yet', 'Check back soon.');
+      return lbEmpty(
+        'No brand challenges yet',
+        'New drops soon — stay tuned ✦',
+      );
     }
-    return lbEmpty('No challenges yet', 'Check back soon.');
+    return lbEmpty('No challenges yet', 'New drops soon — stay tuned ✦');
   }
 
   @override
@@ -709,12 +737,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
                         _reload();
                       },
                     ),
-                  const Spacer(),
-                  LbSortButton(
-                    key: const Key('challenge-boards-sort'),
-                    label: _sort.label,
-                    onTap: _pickSort,
-                  ),
                 ],
               ),
             ],

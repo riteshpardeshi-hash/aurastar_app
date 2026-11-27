@@ -117,6 +117,29 @@ Two Firestore `onDocumentCreated` triggers, both using **Gemini 2.5 Flash** with
 
 Uses `firebase_core`, `firebase_auth`, `cloud_firestore`, `firebase_storage`. Client config is generated in `lib/firebase_options.dart`; iOS config in `ios/GoogleService-Info.plist`. There is no `google-services.json` in the Android tree — Android Firebase setup may be incomplete. Hosting/functions config is in `firebase.json`.
 
+## Audience: Gen Z (a rule)
+
+Aura Arena's core audience is **Gen Z**. Every screen, label, empty state,
+toast, notification and push copy must feel made for them — not like a
+corporate or banking app:
+
+- **Voice:** short, playful, confident, a little cheeky. Use Gen Z words
+  where they fit naturally: *aura, farm(ing) aura, lock in, GOAT, W / L,
+  slay, cooking / let him cook, no cap, lowkey / highkey, main character,
+  vibe, it's giving, fr, bet, era*. One or two per screen, never a pile-up
+  (cringe is worse than plain). Emojis are welcome in moderation (🔥 🐐 ✦ 😤 👀).
+- **Examples:** "Aura Farmers" (not "Leaderboard"), "No scores yet — be the
+  first to farm aura here" (not "No data available"), "1,495 Aura to #1 —
+  lock in", "#1 GOAT 🐐", "You're cooking 🔥".
+- **Look:** bold Clash Display headings, glow, gradients in the logo's purple
+  → blue, sticker/badge accents, everything rounded. Avoid plain grey forms,
+  tables and stock "trophy" iconography where something with more personality
+  fits.
+- **Still clear:** errors, payments, safety, consent and legal text stay plain
+  and unambiguous; slang never replaces information the user needs.
+- Brand-portal/admin screens (separate repo) are for brands and staff — this
+  rule is for the player app.
+
 ## Design conventions
 
 - Primary accent: `Color(0xFF7B2CBF)` (purple); dark background `Color(0xFF080810)`.
@@ -142,6 +165,10 @@ These apply to every change, not just ones Claude Code makes:
   Search and sort on the server when the list is paginated or can exceed one page;
   in the app only when the whole list is already loaded. Cover search, sort and
   their combination with widget tests. Reference: `AiCampaignsScreen`.
+  **Exception — Aura Farmers (the leaderboard), client's call, 26 Nov 2026:**
+  no sort control at all. Boards are always ranked by Aura (or a challenge's
+  score), highest first; users only pick the region (Global / country / city),
+  the time window (All time / month / week) and search.
 
 - **Root cause over symptom patch.** A retry/try-catch that silences a
   failure is not a fix until you can state *why* the failure happens. If you

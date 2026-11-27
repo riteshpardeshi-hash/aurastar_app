@@ -15,9 +15,14 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     backend = FakeAiAdsBackend();
     backend.on('GET /profile', {'user': {'_id': 'me', 'displayName': 'Me'}});
-    backend.on('GET /challenges/ch1/submissions', {
-      'submissions': [
-        {'_id': 's1', 'userId': {'_id': 'p7', 'displayName': 'Kabir', 'username': 'kabir'}, 'aiScore': 88, 'starsCount': 3},
+    // The challenge board (backend ADR 155); Kabir is 4th, so he's a row
+    // under the podium.
+    backend.on('GET /leaderboard/challenges/ch1/players', {
+      'responses': [
+        {'_id': 'p1', 'displayName': 'One', 'score': 99, 'rank': 1},
+        {'_id': 'p2', 'displayName': 'Two', 'score': 95, 'rank': 2},
+        {'_id': 'p3', 'displayName': 'Three', 'score': 90, 'rank': 3},
+        {'_id': 'p7', 'displayName': 'Kabir', 'username': 'kabir', 'score': 88, 'rank': 4},
       ],
     });
   });
@@ -58,12 +63,12 @@ void main() {
     await tester.tap(find.byKey(const Key('safety-block-account')));
     await settle(tester);
     // The board the API returns after the block no longer has them.
-    backend.on('GET /challenges/ch1/submissions', {'submissions': []});
+    backend.on('GET /leaderboard/challenges/ch1/players', {'responses': []});
     await tester.tap(find.byKey(const Key('safety-block-confirm')));
     await settle(tester);
 
     expect(backend.calls('POST', '/users/p7/block'), hasLength(1));
-    expect(backend.calls('GET', '/challenges/ch1/submissions'), hasLength(2));
+    expect(backend.calls('GET', '/leaderboard/challenges/ch1/players'), hasLength(2));
     expect(find.text('@kabir'), findsNothing);
   });
 }

@@ -314,7 +314,52 @@ String lbDisplayName(Map<String, dynamic> e) {
   return n.isEmpty ? 'User' : n;
 }
 
-/// The top three on a podium: 2nd on the left, 1st (crowned) in the middle, 3rd right.
+/// Gen Z rank sticker (client's pick P2, 26 Nov 2026): tilted "#1 GOAT 🐐",
+/// "#2 SLAY", "#3 W" instead of a crown.
+class LbSticker extends StatelessWidget {
+  final int place;
+
+  const LbSticker({super.key, required this.place});
+
+  static const _labels = {1: '#1 GOAT 🐐', 2: '#2 SLAY', 3: '#3 W'};
+  static const _colors = {1: lbGold, 2: lbSilver, 3: lbBronze};
+  static const _tilt = {1: -0.08, 2: -0.1, 3: 0.08};
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _colors[place] ?? lbSilver;
+    return Transform.rotate(
+      angle: _tilt[place] ?? 0,
+      child: Container(
+        key: Key('podium-sticker-$place'),
+        padding: EdgeInsets.symmetric(
+          horizontal: place == 1 ? 10 : 8,
+          vertical: 4,
+        ),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: [
+            BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 12),
+          ],
+        ),
+        child: Text(
+          _labels[place] ?? '#$place',
+          style: TextStyle(
+            fontFamily: 'ClashDisplay',
+            fontWeight: FontWeight.w600,
+            fontSize: place == 1 ? 13 : 11.5,
+            wordSpacing: 2.5,
+            color: const Color(0xFF15100A),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The top three on a podium: 2nd on the left, 1st in the middle, 3rd right,
+/// each with its sticker.
 class LbPodium extends StatelessWidget {
   final List<Map<String, dynamic>> top;
   final String? myId;
@@ -335,12 +380,13 @@ class LbPodium extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (index == 0) const Text('👑', style: TextStyle(fontSize: 18)),
+              LbSticker(place: index + 1),
+              const SizedBox(height: 6),
               LbAvatar(
                 name: lbDisplayName(e),
                 avatarUrl: e['avatar'] as String? ?? '',
                 size: index == 0 ? 56 : 46,
-                ring: index == 0 ? lbGold : null,
+                ring: [lbGold, lbSilver, lbBronze][index],
                 background:
                     index == 0
                         ? const Color(0xFF553A12)
@@ -420,12 +466,16 @@ class LbPlayerRow extends StatelessWidget {
   final bool isMe;
   final VoidCallback? onTap;
 
+  /// The unit under the number: "Aura" on region boards, "score" on a challenge's.
+  final String scoreLabel;
+
   const LbPlayerRow({
     super.key,
     required this.entry,
     required this.rank,
     required this.isMe,
     this.onTap,
+    this.scoreLabel = 'Aura',
   });
 
   @override
@@ -507,9 +557,12 @@ class LbPlayerRow extends StatelessWidget {
                   color: medal ?? Colors.white,
                 ),
               ),
-              const Text(
-                'Aura',
-                style: TextStyle(color: AppColors.textFaint, fontSize: 10),
+              Text(
+                scoreLabel,
+                style: const TextStyle(
+                  color: AppColors.textFaint,
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
@@ -527,6 +580,7 @@ class LbYouBar extends StatelessWidget {
   final String name;
   final String avatarUrl;
   final String periodLabel;
+  final String scoreLabel;
 
   const LbYouBar({
     super.key,
@@ -534,6 +588,7 @@ class LbYouBar extends StatelessWidget {
     required this.name,
     this.avatarUrl = '',
     required this.periodLabel,
+    this.scoreLabel = 'Aura',
   });
 
   @override
@@ -543,11 +598,14 @@ class LbYouBar extends StatelessWidget {
     final gapToFirst = (me['gapToFirst'] as num?)?.toInt() ?? 0;
     final String line;
     if (rank == null) {
-      line = 'Earn Aura $periodLabel to get ranked';
+      line = 'Farm some aura $periodLabel to get ranked ✦';
     } else if (rank == 1) {
-      line = "You're on top";
+      line = "#1 — you're the GOAT 🐐";
     } else {
-      line = '${lbThousands(gapToFirst)} Aura behind #1';
+      line =
+          scoreLabel == 'Aura'
+              ? '${lbThousands(gapToFirst)} Aura to #1 — lock in'
+              : '${lbThousands(gapToFirst)} pts to #1 — lock in';
     }
     return Container(
       key: const Key('leaderboard-you-bar'),
@@ -622,9 +680,9 @@ class LbYouBar extends StatelessWidget {
                   color: Colors.white,
                 ),
               ),
-              const Text(
-                'Aura',
-                style: TextStyle(color: Color(0xFFD9CCF5), fontSize: 10),
+              Text(
+                scoreLabel,
+                style: const TextStyle(color: Color(0xFFD9CCF5), fontSize: 10),
               ),
             ],
           ),
@@ -657,7 +715,7 @@ class LbChallengeCard extends StatelessWidget {
     final line =
         leader == null
             ? (participants == 0 ? 'No scores yet · be first' : people)
-            : '👑 ${leaderName.isEmpty ? 'User' : leaderName} · ${leader['score']} · $people';
+            : '🐐 ${leaderName.isEmpty ? 'User' : leaderName} · ${leader['score']} · $people';
 
     return GestureDetector(
       key: Key('challenge-board-${challenge['_id']}'),
@@ -778,3 +836,241 @@ Widget lbEmpty(
     ),
   );
 }
+
+/// One choice in a region / time picker sheet.
+class LbOption<T> {
+  final T value;
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+
+  const LbOption(
+    this.value,
+    this.emoji,
+    this.title,
+    this.subtitle, {
+    this.enabled = true,
+  });
+}
+
+/// A glass pill showing the current choice ("🌍 Global ▾"); tap to pick
+/// another (client, 26 Nov 2026: choose region and time, no sorting).
+class LbSelectorPill extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final VoidCallback onTap;
+
+  const LbSelectorPill({
+    super.key,
+    required this.emoji,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            colors: [
+              lbAccent.withValues(alpha: 0.30),
+              const Color(0xFF2F7BFF).withValues(alpha: 0.12),
+            ],
+          ),
+          border: Border.all(
+            color: const Color(0xFFC4A6FF).withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFFC4A6FF),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet of option cards; returns the picked value.
+Future<T?> showLbOptionSheet<T>(
+  BuildContext context, {
+  required String title,
+  required List<LbOption<T>> options,
+  required T current,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: const Color(0xFF110F1C),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder:
+        (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontFamily: 'ClashDisplay',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    wordSpacing: 4.5,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final o in options)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GestureDetector(
+                      key: Key('lb-option-${o.value}'),
+                      onTap:
+                          o.enabled ? () => Navigator.pop(ctx, o.value) : null,
+                      child: Opacity(
+                        opacity: o.enabled ? 1 : 0.45,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color:
+                                o.value == current
+                                    ? lbAccent.withValues(alpha: 0.22)
+                                    : lbCard,
+                            border: Border.all(
+                              color:
+                                  o.value == current
+                                      ? const Color(
+                                        0xFFC4A6FF,
+                                      ).withValues(alpha: 0.6)
+                                      : lbLine,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  o.emoji,
+                                  style: const TextStyle(fontSize: 19),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      o.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      o.subtitle,
+                                      style: const TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (o.value == current)
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFFC4A6FF),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+  );
+}
+
+/// Region choices: Global, the viewer's country, the viewer's city.
+List<LbOption<String>> lbRegionOptions(String? country, String? city) => [
+  const LbOption('global', '🌍', 'Global', 'Every farmer, everywhere'),
+  LbOption(
+    'country',
+    '🗺️',
+    country ?? 'Your country',
+    country == null
+        ? 'Add your country in your profile first'
+        : 'Who runs $country',
+    enabled: country != null,
+  ),
+  LbOption(
+    'city',
+    '📍',
+    city ?? 'Your city',
+    city == null ? 'Add your city in your profile first' : 'The GOATs of $city',
+    enabled: city != null,
+  ),
+];
+
+String lbRegionEmoji(String scope) => switch (scope) {
+  'country' => '🗺️',
+  'city' => '📍',
+  _ => '🌍',
+};
+
+String lbRegionLabel(String scope, String? country, String? city) =>
+    switch (scope) {
+      'country' => country ?? 'Your country',
+      'city' => city ?? 'Your city',
+      _ => 'Global',
+    };

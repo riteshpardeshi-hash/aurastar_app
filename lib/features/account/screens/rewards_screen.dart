@@ -131,7 +131,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                   _SectionHeader(
                     title: 'LEADERBOARD VOUCHERS',
                     subtitle:
-                        'Won by finishing near the top of a challenge leaderboard',
+                        "Won by finishing near the top of a challenge's Aura Farmers",
                     count: _leaderboardVouchers.length,
                   ),
                   const SizedBox(height: 12),

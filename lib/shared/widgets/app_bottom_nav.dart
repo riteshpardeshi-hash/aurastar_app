@@ -4,7 +4,6 @@ import '../../core/services/auth_api_service.dart';
 import '../../core/utils/nav_diag.dart';
 import '../../features/challenges/screens/challenge_reels_screen.dart';
 import '../../features/shell/main_shell_controller.dart';
-import '../theme/app_colors.dart';
 import '../../core/services/profile_avatar_notifier.dart';
 import 'avatar_widget.dart';
 
@@ -17,11 +16,11 @@ extension AppNavTabIndex on AppNavTab {
   /// Position in [MainShell]'s `IndexedStack` — must match the order the
   /// shell builds its pages in.
   int get shellIndex => switch (this) {
-        AppNavTab.home => 0,
-        AppNavTab.search => 1,
-        AppNavTab.leaderboard => 2,
-        AppNavTab.profile => 3,
-      };
+    AppNavTab.home => 0,
+    AppNavTab.search => 1,
+    AppNavTab.leaderboard => 2,
+    AppNavTab.profile => 3,
+  };
 }
 
 /// The single pill-shaped bottom nav + floating center action button used
@@ -78,15 +77,18 @@ class _AppBottomNavState extends State<AppBottomNav> {
               : (profile['profileName'] as String? ??
                   profile['username'] as String? ??
                   '');
-      _photoUrl = (profile['avatar'] as String? ?? '').isNotEmpty
-          ? profile['avatar'] as String
-          : profile['profileImageUrl'] as String? ?? '';
+      _photoUrl =
+          (profile['avatar'] as String? ?? '').isNotEmpty
+              ? profile['avatar'] as String
+              : profile['profileImageUrl'] as String? ?? '';
     });
   }
 
   void _switchTab(BuildContext context, AppNavTab tab) {
-    navDiag('AppBottomNav._switchTab: tap tab=$tab activeTab=${widget.activeTab} '
-        'shellIndex=${tab.shellIndex}');
+    navDiag(
+      'AppBottomNav._switchTab: tap tab=$tab activeTab=${widget.activeTab} '
+      'shellIndex=${tab.shellIndex}',
+    );
     if (widget.activeTab == tab) {
       navDiag('  -> early return (already on this tab)');
       return;
@@ -97,8 +99,10 @@ class _AppBottomNavState extends State<AppBottomNav> {
       predicateCalls++;
       return route.isFirst;
     });
-    navDiag('  -> popUntil(isFirst): $predicateCalls predicate call(s), '
-        '${predicateCalls - 1} pop(s); canPop now=${nav.canPop()}');
+    navDiag(
+      '  -> popUntil(isFirst): $predicateCalls predicate call(s), '
+      '${predicateCalls - 1} pop(s); canPop now=${nav.canPop()}',
+    );
     MainShellController.instance.select(tab.shellIndex);
     navDiag('  -> MainShellController.select(${tab.shellIndex}) returned');
   }
@@ -110,9 +114,11 @@ class _AppBottomNavState extends State<AppBottomNav> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    navDiag('AppBottomNav.build: activeTab=${widget.activeTab} '
-        'size=${mq.size} padding.bottom=${mq.padding.bottom} '
-        'viewInsets.bottom=${mq.viewInsets.bottom} textScaler=${mq.textScaler}');
+    navDiag(
+      'AppBottomNav.build: activeTab=${widget.activeTab} '
+      'size=${mq.size} padding.bottom=${mq.padding.bottom} '
+      'viewInsets.bottom=${mq.viewInsets.bottom} textScaler=${mq.textScaler}',
+    );
     return MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.2,
       child: SafeArea(
@@ -169,10 +175,11 @@ class _AppBottomNavState extends State<AppBottomNav> {
                         Expanded(
                           child: _navItem(
                             icon: Icons.leaderboard_rounded,
-                            label: 'Leaderboard',
+                            label: 'Aura Farmers',
                             active: widget.activeTab == AppNavTab.leaderboard,
-                            onTap: () =>
-                                _switchTab(context, AppNavTab.leaderboard),
+                            onTap:
+                                () =>
+                                    _switchTab(context, AppNavTab.leaderboard),
                           ),
                         ),
                         Expanded(child: _profileNavItem(context)),
@@ -189,11 +196,14 @@ class _AppBottomNavState extends State<AppBottomNav> {
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
                         AnalyticsService().logCenterFabClick();
-                        navDiag('AppBottomNav: centre FAB tapped -> push reels');
+                        navDiag(
+                          'AppBottomNav: centre FAB tapped -> push reels',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                              builder: (_) => const ChallengeReelsScreen()),
+                            builder: (_) => const ChallengeReelsScreen(),
+                          ),
                         );
                       },
                       child: Container(
@@ -237,43 +247,36 @@ class _AppBottomNavState extends State<AppBottomNav> {
     final active = widget.activeTab == AppNavTab.profile;
     final initial =
         _displayName.isNotEmpty ? _displayName[0].toUpperCase() : 'U';
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _switchTab(context, AppNavTab.profile),
-      child: SizedBox(
-        height: _pillHeight,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AvatarWidget(
-              photoUrl: _photoUrl,
-              fallbackText: initial,
-              radius: 13,
-              backgroundColor: active
-                  ? _accent.withValues(alpha: 0.30)
-                  : Colors.white24,
-              textStyle: const TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+    // Client, 26 Nov 2026: icons only, no names under them. The name stays
+    // as the tooltip / screen-reader label.
+    return Tooltip(
+      message: 'Profile',
+      child: GestureDetector(
+        key: const Key('nav-profile'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _switchTab(context, AppNavTab.profile),
+        child: SizedBox(
+          height: _pillHeight,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AvatarWidget(
+                photoUrl: _photoUrl,
+                fallbackText: initial,
+                radius: 14,
+                backgroundColor:
+                    active ? _accent.withValues(alpha: 0.30) : Colors.white24,
+                textStyle: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              'Profile',
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: active ? _accent : AppColors.textFaint,
-                fontSize: 9,
-                fontFamily: 'SpaceGrotesk',
-                height: 1.2,
-              ),
-            ),
-          ],
+              const SizedBox(height: 5),
+              _activeDot(active),
+            ],
+          ),
         ),
       ),
     );
@@ -285,33 +288,39 @@ class _AppBottomNavState extends State<AppBottomNav> {
     required VoidCallback onTap,
     bool active = false,
   }) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: _pillHeight,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: active ? _accent : Colors.white54, size: 22),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: active ? _accent : AppColors.textFaint,
-                fontSize: 9,
-                fontFamily: 'SpaceGrotesk',
-                height: 1.2,
-              ),
-            ),
-          ],
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        key: Key('nav-${label.toLowerCase().replaceAll(' ', '-')}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: _pillHeight,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: active ? _accent : Colors.white54, size: 25),
+              const SizedBox(height: 5),
+              _activeDot(active),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  // A small glowing dot under the active icon, since there are no labels.
+  Widget _activeDot(bool active) => AnimatedContainer(
+    duration: const Duration(milliseconds: 180),
+    width: active ? 5 : 0,
+    height: 5,
+    decoration: BoxDecoration(
+      color: _accent,
+      shape: BoxShape.circle,
+      boxShadow: [
+        BoxShadow(color: _accent.withValues(alpha: 0.8), blurRadius: 6),
+      ],
+    ),
+  );
 }
