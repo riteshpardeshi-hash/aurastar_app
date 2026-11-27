@@ -56,7 +56,7 @@ void main() {
     });
     await tester.pump();
     // Profile redesign (26 Nov 2026): the level card opens from the Level highlight.
-    await tester.tap(find.byKey(const Key('highlight-level')));
+    await tester.tap(find.byKey(const Key('profile-count-level')));
     await tester.pumpAndSettle();
   }
 

@@ -836,3 +836,241 @@ Widget lbEmpty(
     ),
   );
 }
+
+/// One choice in a region / time picker sheet.
+class LbOption<T> {
+  final T value;
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final bool enabled;
+
+  const LbOption(
+    this.value,
+    this.emoji,
+    this.title,
+    this.subtitle, {
+    this.enabled = true,
+  });
+}
+
+/// A glass pill showing the current choice ("🌍 Global ▾"); tap to pick
+/// another (client, 26 Nov 2026: choose region and time, no sorting).
+class LbSelectorPill extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final VoidCallback onTap;
+
+  const LbSelectorPill({
+    super.key,
+    required this.emoji,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            colors: [
+              lbAccent.withValues(alpha: 0.30),
+              const Color(0xFF2F7BFF).withValues(alpha: 0.12),
+            ],
+          ),
+          border: Border.all(
+            color: const Color(0xFFC4A6FF).withValues(alpha: 0.35),
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Color(0xFFC4A6FF),
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet of option cards; returns the picked value.
+Future<T?> showLbOptionSheet<T>(
+  BuildContext context, {
+  required String title,
+  required List<LbOption<T>> options,
+  required T current,
+}) {
+  return showModalBottomSheet<T>(
+    context: context,
+    backgroundColor: const Color(0xFF110F1C),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder:
+        (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontFamily: 'ClashDisplay',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    wordSpacing: 4.5,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final o in options)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GestureDetector(
+                      key: Key('lb-option-${o.value}'),
+                      onTap:
+                          o.enabled ? () => Navigator.pop(ctx, o.value) : null,
+                      child: Opacity(
+                        opacity: o.enabled ? 1 : 0.45,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(18),
+                            color:
+                                o.value == current
+                                    ? lbAccent.withValues(alpha: 0.22)
+                                    : lbCard,
+                            border: Border.all(
+                              color:
+                                  o.value == current
+                                      ? const Color(
+                                        0xFFC4A6FF,
+                                      ).withValues(alpha: 0.6)
+                                      : lbLine,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  o.emoji,
+                                  style: const TextStyle(fontSize: 19),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      o.title,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      o.subtitle,
+                                      style: const TextStyle(
+                                        color: AppColors.textMuted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (o.value == current)
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFFC4A6FF),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+  );
+}
+
+/// Region choices: Global, the viewer's country, the viewer's city.
+List<LbOption<String>> lbRegionOptions(String? country, String? city) => [
+  const LbOption('global', '🌍', 'Global', 'Every farmer, everywhere'),
+  LbOption(
+    'country',
+    '🗺️',
+    country ?? 'Your country',
+    country == null
+        ? 'Add your country in your profile first'
+        : 'Who runs $country',
+    enabled: country != null,
+  ),
+  LbOption(
+    'city',
+    '📍',
+    city ?? 'Your city',
+    city == null ? 'Add your city in your profile first' : 'The GOATs of $city',
+    enabled: city != null,
+  ),
+];
+
+String lbRegionEmoji(String scope) => switch (scope) {
+  'country' => '🗺️',
+  'city' => '📍',
+  _ => '🌍',
+};
+
+String lbRegionLabel(String scope, String? country, String? city) =>
+    switch (scope) {
+      'country' => country ?? 'Your country',
+      'city' => city ?? 'Your city',
+      _ => 'Global',
+    };

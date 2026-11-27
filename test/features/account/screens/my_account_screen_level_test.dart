@@ -70,8 +70,8 @@ void main() {
             'whenever an unlocked tier has a reward to show (true for every '
             'user, since Rookie is always unlocked and always has one)');
 
-    // Profile redesign (26 Nov 2026): the level shows on the Level highlight.
-    expect(find.text('Level 42'), findsOneWidget,
+    // Profile redesign (27 Nov 2026): the level shows in the header counts.
+    expect(find.text('L42'), findsOneWidget,
         reason: 'level must come from the profile API field (42), not '
             'auraPoints ~/ 1300 + 1 (which would give 1 for 500 points)');
     // _RewardsSection's ladder legitimately lists every tier name

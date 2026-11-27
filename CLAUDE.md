@@ -165,6 +165,10 @@ These apply to every change, not just ones Claude Code makes:
   Search and sort on the server when the list is paginated or can exceed one page;
   in the app only when the whole list is already loaded. Cover search, sort and
   their combination with widget tests. Reference: `AiCampaignsScreen`.
+  **Exception — Aura Farmers (the leaderboard), client's call, 26 Nov 2026:**
+  no sort control at all. Boards are always ranked by Aura (or a challenge's
+  score), highest first; users only pick the region (Global / country / city),
+  the time window (All time / month / week) and search.
 
 - **Root cause over symptom patch.** A retry/try-catch that silences a
   failure is not a fix until you can state *why* the failure happens. If you

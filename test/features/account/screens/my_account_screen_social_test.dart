@@ -9,9 +9,9 @@ import 'package:aura_app/features/leaderboard/screens/challenge_leaderboard_scre
 
 import '../../ai_ads/ai_ads_fake_backend.dart';
 
-// Client, 26 Nov 2026: the profile is "social style" (option B) — @handle,
-// avatar with Videos / Aura / Global rank beside it, highlight bubbles, and
-// Videos | Ranks | Cards tabs — with every rank on the Ranks tab (B3).
+// Client, 26–27 Nov 2026: the profile is "social style" (option B) with
+// your ranks as a card row under your name (B2) — @handle, avatar with
+// Videos / Aura / Level beside it, highlight bubbles, Videos | Cards tabs.
 
 Map<String, dynamic> get _ranks => {
       'global': {'rank': 2, 'total': 1240, 'score': 550},
@@ -50,70 +50,98 @@ void main() {
     await pumpAiScreen(tester, const MyAccountScreen());
   }
 
-  testWidgets('header shows @handle, Videos / Aura / Global rank, name, tier and city', (tester) async {
+  testWidgets('header shows @handle, Videos / Aura / Level, name, tier and city', (tester) async {
     await open(tester);
     expect(find.text('@yash'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('profile-count-aura')), matching: find.text('550')),
         findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('profile-count-rank')), matching: find.text('#2')),
+    expect(find.descendant(of: find.byKey(const Key('profile-count-level')), matching: find.text('L6')),
         findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('profile-tier-chip')), matching: find.text('Rising')),
         findsOneWidget);
     expect(find.text('Amravati'), findsOneWidget);
     expect(find.byKey(const Key('profile-edit')), findsOneWidget);
     expect(find.byKey(const Key('profile-share')), findsOneWidget);
+    expect(find.byKey(const Key('profile-tab-ranks')), findsNothing, reason: 'ranks live in the row now');
   });
 
-  testWidgets('tapping the rank opens the Ranks tab with region and challenge ranks', (tester) async {
+  // Client, 27 Nov 2026 (option B2): your ranks as a row of cards under your
+  // name — best region rank first, then challenges most recently played first.
+  testWidgets('the rank row shows the best region rank first, then challenges in server order',
+      (tester) async {
+    backend.on('GET /leaderboard/me/ranks', {
+      ..._ranks,
+      'challenges': [
+        {'challengeId': 'recent', 'title': 'Played Today', 'rank': 5, 'total': 9, 'bestScore': 40},
+        {'challengeId': 'ch1', 'title': 'FitNest Jump Rope', 'rank': 2, 'total': 12, 'bestScore': 88},
+      ],
+    });
     await open(tester);
-    expect(find.text('REGION'), findsNothing);
-    await tester.tap(find.byKey(const Key('profile-count-rank')));
-    await settle(tester);
-
-    expect(find.text('REGION'), findsOneWidget);
-    expect(find.text('CHALLENGES'), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('rank-region-country')), matching: find.text('India')),
-        findsOneWidget);
-    final city = find.byKey(const Key('rank-region-city'));
+    final keys = tester
+        .widgetList(find.descendant(
+            of: find.byKey(const Key('profile-rank-cards')),
+            matching: find.byWidgetPredicate(
+                (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('rank-card-'))))
+        .map((w) => (w.key as ValueKey<String>).value)
+        .toList();
+    expect(keys, [
+      'rank-card-region-city', // #1
+      'rank-card-region-global', // #2
+      'rank-card-region-country', // #2 (ties keep Global first)
+      'rank-card-challenge-recent', // most recent
+      'rank-card-challenge-ch1',
+    ]);
+    final city = find.byKey(const Key('rank-card-region-city'));
     expect(find.descendant(of: city, matching: find.text('#1')), findsOneWidget);
-    expect(find.descendant(of: city, matching: find.textContaining('GOAT')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('rank-challenge-ch1')), matching: find.text('best 88 · of 12')),
+    expect(find.descendant(of: city, matching: find.text('GOAT 🐐')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('rank-card-region-global')), matching: find.text('top 1% 🔥')),
         findsOneWidget);
+    expect(find.text('See All 5 >'), findsOneWidget);
   });
 
-  testWidgets('a region row opens Aura Farmers, a challenge row opens its board', (tester) async {
+  testWidgets('a region card opens Aura Farmers on that board, a challenge card its board',
+      (tester) async {
     await open(tester);
-    await tester.tap(find.byKey(const Key('profile-tab-ranks')));
+    await tester.tap(find.byKey(const Key('rank-card-region-city')));
     await settle(tester);
-    await tester.tap(find.byKey(const Key('rank-region-city')));
-    await settle(tester);
-    expect(find.byType(LeaderboardScreen), findsOneWidget);
-    // Opens on the board you tapped (your city's).
     expect(tester.widget<LeaderboardScreen>(find.byType(LeaderboardScreen)).initialScope, 'city');
 
     Navigator.of(tester.element(find.byType(LeaderboardScreen))).pop();
     await settle(tester);
-    await tester.tap(find.byKey(const Key('rank-challenge-ch1')));
+    await tester.dragUntilVisible(find.byKey(const Key('rank-card-challenge-ch1')),
+        find.byKey(const Key('profile-rank-cards')), const Offset(-200, 0));
+    await tester.tap(find.byKey(const Key('rank-card-challenge-ch1')));
     await settle(tester);
     final board = tester.widget<ChallengeLeaderboardScreen>(find.byType(ChallengeLeaderboardScreen));
     expect(board.challengeId, 'ch1');
     expect(board.challengeTitle, 'FitNest Jump Rope');
   });
 
-  testWidgets('Ranks tab has a Gen Z empty state when there are no ranks (or no endpoint)', (tester) async {
+  testWidgets('See All lists every rank, best region first', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const Key('profile-ranks-see-all')));
+    await settle(tester);
+    expect(find.text('Your ranks 🏆'), findsOneWidget);
+    expect(find.text('REGION'), findsOneWidget);
+    expect(find.text('CHALLENGES'), findsOneWidget);
+    final cityY = tester.getTopLeft(find.byKey(const Key('rank-region-city'))).dy;
+    final globalY = tester.getTopLeft(find.byKey(const Key('rank-region-global'))).dy;
+    expect(cityY, lessThan(globalY), reason: 'your #1 (city) comes before #2 (global)');
+    expect(find.descendant(of: find.byKey(const Key('rank-challenge-ch1')), matching: find.text('best 88 · of 12')),
+        findsOneWidget);
+  });
+
+  testWidgets('no ranks (or no endpoint) shows a Gen Z note instead of the row', (tester) async {
     backend.routes.remove('GET /leaderboard/me/ranks');
     await open(tester);
-    expect(find.descendant(of: find.byKey(const Key('profile-count-rank')), matching: find.text('–')),
-        findsOneWidget);
-    await tester.tap(find.byKey(const Key('profile-tab-ranks')));
-    await settle(tester);
-    expect(find.text('No ranks yet'), findsOneWidget);
+    expect(find.byKey(const Key('profile-rank-cards')), findsNothing);
+    expect(find.byKey(const Key('profile-ranks-empty')), findsOneWidget);
     expect(find.textContaining('start farming aura'), findsOneWidget);
   });
 
-  testWidgets('Level highlight opens the level card', (tester) async {
+  testWidgets('the Level count opens the level card', (tester) async {
     await open(tester);
-    await tester.tap(find.byKey(const Key('highlight-level')));
+    await tester.tap(find.byKey(const Key('profile-count-level')));
     await settle(tester);
     expect(find.byKey(const Key('levelProgressRing')), findsOneWidget);
     expect(find.text('YOUR AURA POINTS'), findsOneWidget);

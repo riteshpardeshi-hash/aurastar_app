@@ -156,6 +156,19 @@ class _ChallengeLeaderboardScreenState
     _reload();
   }
 
+  Future<void> _pickRegion() async {
+    final picked = await showLbOptionSheet<String>(
+      context,
+      title: 'Pick your arena 🌍',
+      options: lbRegionOptions(_countryName, _cityName),
+      current: _scope,
+    );
+    if (picked != null && picked != _scope) {
+      setState(() => _scope = picked);
+      _reload();
+    }
+  }
+
   void _openSafety(Map<String, dynamic> e) {
     final username = e['username'] as String? ?? '';
     showPlayerSafetyMenu(
@@ -297,28 +310,11 @@ class _ChallengeLeaderboardScreenState
                   onClear: _clearSearch,
                 ),
                 const SizedBox(height: 10),
-                SizedBox(
-                  height: 32,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      for (final (value, label) in [
-                        ('global', '🌍 Global'),
-                        ('country', '🗺️ ${_countryName ?? 'Country'}'),
-                        ('city', '📍 ${_cityName ?? 'City'}'),
-                      ])
-                        LbChip(
-                          key: Key('challenge-players-scope-$value'),
-                          label: label,
-                          selected: _scope == value,
-                          onTap: () {
-                            if (_scope == value) return;
-                            setState(() => _scope = value);
-                            _reload();
-                          },
-                        ),
-                    ],
-                  ),
+                LbSelectorPill(
+                  key: const Key('challenge-players-region'),
+                  emoji: lbRegionEmoji(_scope),
+                  label: lbRegionLabel(_scope, _countryName, _cityName),
+                  onTap: _pickRegion,
                 ),
               ],
             ),

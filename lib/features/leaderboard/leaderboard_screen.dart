@@ -135,18 +135,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen>
 
 // ── Global ───────────────────────────────────────────────────────────────────
 
-enum _GlobalSort {
-  auraDesc('aura_desc', 'Most Aura'),
-  auraAsc('aura_asc', 'Least Aura'),
-  nameAz('name_asc', 'Name A–Z'),
-  nameZa('name_desc', 'Name Z–A');
-
-  const _GlobalSort(this.api, this.label);
-  final String api;
-  final String label;
-}
-
-const _periods = [('all', 'All time'), ('month', 'Month'), ('week', 'Week')];
+const _periods = [
+  ('all', 'All time', '👑', 'The legends, since day one'),
+  ('month', 'This month', '📅', 'Last 30 days of farming'),
+  ('week', 'This week', '⚡', 'Fresh W’s from the last 7 days'),
+];
 
 class _GlobalBoard extends StatefulWidget {
   final String initialScope;
@@ -169,7 +162,8 @@ class _GlobalBoardState extends State<_GlobalBoard>
 
   String _search = '';
   String _period = 'all';
-  _GlobalSort _sort = _GlobalSort.auraDesc;
+  // No sorting (client, 26 Nov 2026): Aura Farmers is always ranked by Aura,
+  // highest first; only filters change what's shown.
   // Region filter (client, 26 Nov 2026): Global, the viewer's country, the
   // viewer's city. Names come back with each page (backend ADR 155).
   late String _scope = widget.initialScope;
@@ -189,10 +183,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
   String _myAvatar = '';
 
   bool get _isDefaultView =>
-      _search.isEmpty &&
-      _period == 'all' &&
-      _sort == _GlobalSort.auraDesc &&
-      _scope == 'global';
+      _search.isEmpty && _period == 'all' && _scope == 'global';
 
   @override
   bool get wantKeepAlive => true;
@@ -247,7 +238,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
         limit: _pageSize,
         search: _search,
         period: _period,
-        sort: _sort.api,
+        sort: 'aura_desc',
         scope: _scope,
       );
       if (!mounted || request != _request) return;
@@ -285,7 +276,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
         limit: _pageSize,
         search: _search,
         period: _period,
-        sort: _sort.api,
+        sort: 'aura_desc',
         scope: _scope,
       );
       if (!mounted || request != _request) return;
@@ -317,18 +308,6 @@ class _GlobalBoardState extends State<_GlobalBoard>
     _reload();
   }
 
-  Future<void> _pickSort() async {
-    final picked = await showLbSortSheet<_GlobalSort>(
-      context,
-      options: [for (final s in _GlobalSort.values) (s, s.label)],
-      current: _sort,
-    );
-    if (picked != null && picked != _sort) {
-      setState(() => _sort = picked);
-      _reload();
-    }
-  }
-
   void _openSafety(Map<String, dynamic> e) {
     final username = e['username'] as String? ?? '';
     showPlayerSafetyMenu(
@@ -345,6 +324,32 @@ class _GlobalBoardState extends State<_GlobalBoard>
     _ => '',
   };
 
+  Future<void> _pickRegion() async {
+    final picked = await showLbOptionSheet<String>(
+      context,
+      title: 'Pick your arena 🌍',
+      options: lbRegionOptions(_countryName, _cityName),
+      current: _scope,
+    );
+    if (picked != null && picked != _scope) {
+      setState(() => _scope = picked);
+      _reload();
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showLbOptionSheet<String>(
+      context,
+      title: 'Pick your era ⏳',
+      options: [for (final p in _periods) LbOption(p.$1, p.$3, p.$2, p.$4)],
+      current: _period,
+    );
+    if (picked != null && picked != _period) {
+      setState(() => _period = picked);
+      _reload();
+    }
+  }
+
   Widget _controls() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -358,48 +363,28 @@ class _GlobalBoardState extends State<_GlobalBoard>
             onClear: _clearSearch,
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 32,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final (value, label) in [
-                  ('global', '🌍 Global'),
-                  ('country', '🗺️ ${_countryName ?? 'Country'}'),
-                  ('city', '📍 ${_cityName ?? 'City'}'),
-                ])
-                  LbChip(
-                    key: Key('leaderboard-scope-$value'),
-                    label: label,
-                    selected: _scope == value,
-                    onTap: () {
-                      if (_scope == value) return;
-                      setState(() => _scope = value);
-                      _reload();
-                    },
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
+          // Client, 26 Nov 2026: pick the region and the time window — no
+          // sorting; the board is always ranked by Aura, highest first.
           Row(
             children: [
-              for (final (value, label) in _periods)
-                LbChip(
-                  key: Key('leaderboard-period-$value'),
-                  label: label,
-                  selected: _period == value,
-                  onTap: () {
-                    if (_period == value) return;
-                    setState(() => _period = value);
-                    _reload();
-                  },
+              Expanded(
+                flex: 6,
+                child: LbSelectorPill(
+                  key: const Key('leaderboard-region'),
+                  emoji: lbRegionEmoji(_scope),
+                  label: lbRegionLabel(_scope, _countryName, _cityName),
+                  onTap: _pickRegion,
                 ),
-              const Spacer(),
-              LbSortButton(
-                key: const Key('leaderboard-sort'),
-                label: _sort.label,
-                onTap: _pickSort,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 5,
+                child: LbSelectorPill(
+                  key: const Key('leaderboard-time'),
+                  emoji: '⏳',
+                  label: _periods.firstWhere((p) => p.$1 == _period).$2,
+                  onTap: _pickTime,
+                ),
               ),
             ],
           ),
@@ -411,8 +396,7 @@ class _GlobalBoardState extends State<_GlobalBoard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final showPodium =
-        _search.isEmpty && _sort == _GlobalSort.auraDesc && _entries.isNotEmpty;
+    final showPodium = _search.isEmpty && _entries.isNotEmpty;
     final podium =
         showPodium ? _entries.take(3).toList() : <Map<String, dynamic>>[];
     final rows = showPodium ? _entries.skip(3).toList() : _entries;
@@ -539,18 +523,6 @@ class _GlobalBoardState extends State<_GlobalBoard>
 
 // ── Challenge ────────────────────────────────────────────────────────────────
 
-enum _ChallengeSort {
-  participants('participants_desc', 'Most participants'),
-  newest('newest', 'Newest'),
-  endingSoon('ending_soon', 'Ending soon'),
-  nameAz('name_asc', 'Name A–Z'),
-  nameZa('name_desc', 'Name Z–A');
-
-  const _ChallengeSort(this.api, this.label);
-  final String api;
-  final String label;
-}
-
 const _filters = [('all', 'All'), ('joined', 'Joined'), ('brand', 'Brand')];
 
 class _ChallengeCards extends StatefulWidget {
@@ -570,7 +542,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
 
   String _search = '';
   String _filter = 'all';
-  _ChallengeSort _sort = _ChallengeSort.participants;
 
   final List<Map<String, dynamic>> _cards = [];
   int _page = 1;
@@ -610,7 +581,7 @@ class _ChallengeCardsState extends State<_ChallengeCards>
         limit: _pageSize,
         search: _search,
         filter: _filter,
-        sort: _sort.api,
+        sort: 'participants_desc',
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -642,7 +613,7 @@ class _ChallengeCardsState extends State<_ChallengeCards>
         limit: _pageSize,
         search: _search,
         filter: _filter,
-        sort: _sort.api,
+        sort: 'participants_desc',
       );
       if (!mounted || request != _request) return;
       setState(() {
@@ -671,18 +642,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
     if (_search.isEmpty) return;
     _search = '';
     _reload();
-  }
-
-  Future<void> _pickSort() async {
-    final picked = await showLbSortSheet<_ChallengeSort>(
-      context,
-      options: [for (final s in _ChallengeSort.values) (s, s.label)],
-      current: _sort,
-    );
-    if (picked != null && picked != _sort) {
-      setState(() => _sort = picked);
-      _reload();
-    }
   }
 
   Widget _empty() {
@@ -778,12 +737,6 @@ class _ChallengeCardsState extends State<_ChallengeCards>
                         _reload();
                       },
                     ),
-                  const Spacer(),
-                  LbSortButton(
-                    key: const Key('challenge-boards-sort'),
-                    label: _sort.label,
-                    onTap: _pickSort,
-                  ),
                 ],
               ),
             ],

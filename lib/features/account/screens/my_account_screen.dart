@@ -624,7 +624,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, int totalRewards, AuraTier tier) {
+  Widget _buildHeader(
+    BuildContext context,
+    int totalRewards,
+    AuraTier tier, {
+    required int level,
+    required VoidCallback onLevelTap,
+  }) {
     final photoUrl =
         (_profile['avatar'] as String? ?? '').isNotEmpty
             ? _profile['avatar'] as String
@@ -633,7 +639,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
         (_profile['city'] as Map<String, dynamic>?)?['name'] as String? ?? '';
     final gender = (_profile['gender'] as String? ?? '').trim();
     final place = [city, gender].where((s) => s.isNotEmpty).join(' · ');
-    final globalRank = _ranks?.global?.rank;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -714,11 +719,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                     label: 'Aura',
                   ),
                   _countCell(
-                    key: const Key('profile-count-rank'),
-                    value: globalRank == null ? '–' : '#$globalRank',
-                    label: 'Global ›',
-                    valueColor: globalRank == null ? Colors.white : _gold,
-                    onTap: () => setState(() => _tab = 1),
+                    key: const Key('profile-count-level'),
+                    value: 'L$level',
+                    label: 'Level',
+                    onTap: onLevelTap,
                   ),
                 ],
               ),
@@ -784,6 +788,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
             ],
           ),
         ],
+        // Client, 27 Nov 2026 (option B2): all your ranks right under your
+        // name — best region rank first, then challenges most recent first.
+        _buildRankCardsRow(context),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -994,30 +1001,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _highlight(
-            key: const Key('highlight-level'),
-            label: 'Level $level',
-            ring: tier.color == Colors.transparent ? _accent : tier.color,
-            child: Text(
-              'L$level',
-              style: const TextStyle(
-                fontFamily: 'ClashDisplay',
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-                wordSpacing: 3.3,
-                color: Colors.white,
-              ),
-            ),
-            onTap:
-                () => _showSheet(
-                  (_) => _buildAuraPointsCard(
-                    totalRewards,
-                    level,
-                    tierName,
-                    levelProgressData,
-                  ),
-                ),
-          ),
           // Coupons switched off by an admin (ADR 119): the coupon wallet is hidden.
           ValueListenableBuilder<bool>(
             valueListenable: AppConfigService.instance.couponsEnabled,
@@ -1082,7 +1065,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-  // ── Tabs: Videos | Ranks | Cards ────────────────────────────────────────────
+  // ── Tabs: Videos | Cards ────────────────────────────────────────────
   Widget _buildTabBar() {
     Widget tab(int i, IconData icon, String label) {
       final on = _tab == i;
@@ -1131,8 +1114,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     return Row(
       children: [
         tab(0, Icons.grid_view_rounded, 'Videos'),
-        tab(1, Icons.emoji_events_rounded, 'Ranks'),
-        tab(2, Icons.style_rounded, 'Cards'),
+        tab(1, Icons.style_rounded, 'Cards'),
       ],
     );
   }
@@ -1264,7 +1246,10 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   static String _regionLine(RankEntry r) {
     final rank = r.rank;
     final total = r.total;
-    final of = total == null ? '' : ' · of ${_fmtStatic(total)} farmers';
+    final of =
+        total == null
+            ? ''
+            : ' · of ${_fmtStatic(total)} farmer${total == 1 ? '' : 's'}';
     if (rank == null) return 'not ranked yet — go farm some aura ✦';
     if (rank == 1) return "you're the GOAT here 🐐$of";
     if (rank <= 3) return 'on the podium, no cap 🔥$of';
@@ -1282,6 +1267,224 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     context,
     MaterialPageRoute(builder: (_) => LeaderboardScreen(initialScope: scope)),
   );
+
+  /// "88 · #2": the video's score and your rank on that challenge, when known.
+  String _videoBadge(Map<String, dynamic> data, int auraPoints) {
+    final id = data['challengeId'] as String?;
+    final rank =
+        _ranks?.challenges
+            .where((c) => c.challengeId == id)
+            .map((c) => c.rank)
+            .firstOrNull;
+    final score = (data['aiScore'] as num?)?.toInt() ?? auraPoints;
+    return rank == null ? '+$auraPoints' : '$score · #$rank';
+  }
+
+  /// Region ranks best first (unranked last), then challenges in the server's
+  /// order: most recently played first, then best rank.
+  List<_RankCardData> get _rankCards {
+    final ranks = _ranks;
+    if (ranks == null) return const [];
+    final regions = [
+      if (ranks.global != null) ('global', ranks.global!),
+      if (ranks.country != null) ('country', ranks.country!),
+      if (ranks.city != null) ('city', ranks.city!),
+    ].._sortRegionsBestFirst();
+    return [
+      for (final (scope, r) in regions)
+        _RankCardData(
+          key: 'region-$scope',
+          label: r.name,
+          rank: r.rank,
+          total: r.total,
+          onTap: () => _openAuraFarmers(scope),
+        ),
+      for (final c in ranks.challenges)
+        _RankCardData(
+          key: 'challenge-${c.challengeId}',
+          label: c.title,
+          rank: c.rank,
+          total: c.total,
+          onTap:
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder:
+                      (_) => ChallengeLeaderboardScreen(
+                        challengeId: c.challengeId,
+                        challengeTitle: c.title,
+                      ),
+                ),
+              ),
+        ),
+    ];
+  }
+
+  static String _rankCardLine(int? rank, int? total) {
+    if (rank == null) return 'not ranked yet';
+    if (rank == 1) return 'GOAT 🐐';
+    if (total != null && total > 0) {
+      final pct = (rank / total * 100).ceil();
+      if (pct <= 10) return 'top $pct% 🔥';
+      return 'of ${_fmtStatic(total)}';
+    }
+    return 'keep farming ✦';
+  }
+
+  Widget _buildRankCardsRow(BuildContext context) {
+    final cards = _rankCards;
+    if (cards.isEmpty) {
+      if (_ranksLoading) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(
+          'No ranks yet — take a challenge and start farming aura ✦',
+          key: const Key('profile-ranks-empty'),
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Your ranks',
+                style: TextStyle(
+                  fontFamily: 'ClashDisplay',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  wordSpacing: 3.5,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            SeeAllLink(
+              key: const Key('profile-ranks-see-all'),
+              count: cards.length,
+              onTap: () => _openAllRanks(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            key: const Key('profile-rank-cards'),
+            scrollDirection: Axis.horizontal,
+            itemCount: cards.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => _rankCard(cards[i]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _rankCard(_RankCardData c) {
+    final tint = switch (c.rank) {
+      1 => const Color(0xFF4ADE80),
+      2 || 3 => _gold,
+      _ => null,
+    };
+    return GestureDetector(
+      key: Key('rank-card-${c.key}'),
+      onTap: c.onTap,
+      child: Container(
+        width: 112,
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: (tint ?? Colors.white).withValues(
+              alpha: tint == null ? 0.08 : 0.45,
+            ),
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              (tint ?? Colors.white).withValues(
+                alpha: tint == null ? 0.03 : 0.16,
+              ),
+              _card,
+            ],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              c.label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textMuted,
+                fontSize: 9.5,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              c.rank == null ? '–' : '#${c.rank}',
+              style: const TextStyle(
+                fontFamily: 'ClashDisplay',
+                fontWeight: FontWeight.w600,
+                fontSize: 24,
+                wordSpacing: 5,
+                color: Colors.white,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _rankCardLine(c.rank, c.total),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: tint ?? AppColors.textMuted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "See All": every rank on its own page.
+  void _openAllRanks(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => Scaffold(
+              backgroundColor: _bg,
+              appBar: AppBar(
+                backgroundColor: _bg,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                title: const Text(
+                  'Your ranks 🏆',
+                  style: TextStyle(
+                    fontFamily: 'ClashDisplay',
+                    fontWeight: FontWeight.w600,
+                    fontSize: 20,
+                    wordSpacing: 4.4,
+                  ),
+                ),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                children: [_buildRanksTab(context)],
+              ),
+            ),
+      ),
+    );
+  }
 
   Widget _buildRanksTab(BuildContext context) {
     final ranks = _ranks;
@@ -1307,7 +1510,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
       if (ranks.global != null) ('global', ranks.global!),
       if (ranks.country != null) ('country', ranks.country!),
       if (ranks.city != null) ('city', ranks.city!),
-    ];
+    ].._sortRegionsBestFirst();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2009,7 +2212,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  '+$auraPoints',
+                                  _videoBadge(data, auraPoints),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 9,
@@ -2179,7 +2382,21 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _buildHeader(context, totalRewards, tier),
+                _buildHeader(
+                  context,
+                  totalRewards,
+                  tier,
+                  level: level,
+                  onLevelTap:
+                      () => _showSheet(
+                        (_) => _buildAuraPointsCard(
+                          totalRewards,
+                          level,
+                          tierName,
+                          levelProgressData,
+                        ),
+                      ),
+                ),
                 const SizedBox(height: 14),
                 _buildHighlights(
                   context,
@@ -2195,9 +2412,7 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                 if (_tab == 0) ...[
                   _buildMyVideosSection(context),
                   _SavedChallengesGrid(challenges: _savedChallenges),
-                ] else if (_tab == 1)
-                  _buildRanksTab(context)
-                else
+                ] else
                   _buildCardsTab(),
                 const SizedBox(height: 24),
               ],
@@ -2537,5 +2752,32 @@ class _ReferralsSheetState extends State<_ReferralsSheet> {
             ],
           ),
     );
+  }
+}
+
+class _RankCardData {
+  final String key;
+  final String label;
+  final int? rank;
+  final int? total;
+  final VoidCallback onTap;
+
+  const _RankCardData({
+    required this.key,
+    required this.label,
+    required this.rank,
+    required this.total,
+    required this.onTap,
+  });
+}
+
+extension on List<(String, RankEntry)> {
+  /// Best rank first, unranked last; ties keep Global → country → city.
+  void _sortRegionsBestFirst() {
+    const order = {'global': 0, 'country': 1, 'city': 2};
+    sort((a, b) {
+      final byRank = (a.$2.rank ?? 1 << 30).compareTo(b.$2.rank ?? 1 << 30);
+      return byRank != 0 ? byRank : order[a.$1]!.compareTo(order[b.$1]!);
+    });
   }
 }
